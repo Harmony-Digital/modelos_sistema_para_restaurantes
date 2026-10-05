@@ -5,12 +5,16 @@
 project_id = "ia-atendimento"
 
 [api]
-enabled = true
+# Data API (PostgREST) desligada: o app não a usa. Com schemas = [] o PostgREST cai no padrão
+# "public", então só desligar o serviço garante que nada de public fique exposto localmente.
+enabled = false
 # Port to use for the API URL.
 port = 54321
 # Schemas to expose in your API. Tables, views and stored procedures in this schema will get API
-# endpoints. `public` and `graphql_public` schemas are included by default.
-schemas = ["public", "graphql_public"]
+# endpoints. Vazio: o app não usa a Data API (PostgREST/GraphQL); todo acesso a dados é via
+# Postgres (drizzle) com os roles web_app/worker_app. Auth e Storage não dependem desta lista.
+# Em produção/staging: Dashboard → Project Settings → Data API → Exposed schemas (remover public e graphql_public).
+schemas = []
 # Extra schemas to add to the search_path of every request.
 extra_search_path = ["public", "extensions"]
 # The maximum number of rows returns from a view, table, or stored procedure. Limits payload size
