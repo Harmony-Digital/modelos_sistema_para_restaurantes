@@ -6,11 +6,11 @@ export type SendResult =
 const RETRYABLE_CODES = new Set([4, 80007, 130429, 131016, 131048, 131056, 133016])
 const MAX_TEXT = 4096
 
-// Corta em MAX_TEXT unidades sem partir um par substituto (emoji)
-function truncate(text: string): string {
-  if (text.length <= MAX_TEXT) return text
-  const code = text.charCodeAt(MAX_TEXT - 1)
-  return text.slice(0, code >= 0xd800 && code <= 0xdbff ? MAX_TEXT - 1 : MAX_TEXT)
+// Corta em `max` unidades sem partir um par substituto (emoji)
+function truncate(text: string, max = MAX_TEXT): string {
+  if (text.length <= max) return text
+  const code = text.charCodeAt(max - 1)
+  return text.slice(0, code >= 0xd800 && code <= 0xdbff ? max - 1 : max)
 }
 
 export function createWhatsAppClient(cfg: {
@@ -49,6 +49,35 @@ export function createWhatsAppClient(cfg: {
   return {
     sendText(to: string, text: string) {
       return post({ to, type: 'text', text: { preview_url: false, body: truncate(text) } })
+    },
+    sendLocation(to: string, loc: { lat: number; lng: number; nome: string; endereco: string }) {
+      return post({
+        to,
+        type: 'location',
+        location: { latitude: loc.lat, longitude: loc.lng, name: truncate(loc.nome, 100), address: truncate(loc.endereco, 300) },
+      })
+    },
+    // Limites da Meta: corpo 1024, botão 20, título de linha 24, descrição 72, até 10 linhas no total
+    sendList(to: string, l: { corpo: string; botao: string; opcoes: { id: string; titulo: string; descricao: string }[] }) {
+      return post({
+        to,
+        type: 'interactive',
+        interactive: {
+          type: 'list',
+          body: { text: truncate(l.corpo, 1024) },
+          action: {
+            button: truncate(l.botao, 20),
+            sections: [{
+              title: 'Unidades',
+              rows: l.opcoes.slice(0, 10).map((o) => ({
+                id: o.id.slice(0, 200),
+                title: truncate(o.titulo, 24),
+                ...(o.descricao ? { description: truncate(o.descricao, 72) } : {}),
+              })),
+            }],
+          },
+        },
+      })
     },
   }
 }
