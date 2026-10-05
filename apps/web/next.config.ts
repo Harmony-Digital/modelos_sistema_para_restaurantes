@@ -12,6 +12,7 @@ const config: NextConfig = {
   transpilePackages: ['@atd/config', '@atd/core', '@atd/db', '@atd/whatsapp'],
   serverExternalPackages: ['pg-boss'],
   poweredByHeader: false,
+  agentRules: false,
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }]
   },

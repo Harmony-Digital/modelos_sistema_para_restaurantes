@@ -18,6 +18,10 @@ export default function MfaPage() {
       if (error) return setErro('Não foi possível carregar a verificação em duas etapas.')
       const verificado = data.totp.find((f) => f.status === 'verified')
       if (verificado) return setEstado({ tipo: 'verificar', factorId: verificado.id })
+      // Fator TOTP não verificado de tentativa anterior: remove para não acumular até o limite.
+      for (const f of data.all.filter((x) => x.factor_type === 'totp' && x.status === 'unverified')) {
+        await supabase.auth.mfa.unenroll({ factorId: f.id })
+      }
       const enroll = await supabase.auth.mfa.enroll({ factorType: 'totp', friendlyName: `painel-${Date.now()}` })
       if (enroll.error) return setErro('Não foi possível iniciar o cadastro do autenticador.')
       setEstado({ tipo: 'cadastrar', factorId: enroll.data.id, qr: enroll.data.totp.qr_code, secret: enroll.data.totp.secret })
