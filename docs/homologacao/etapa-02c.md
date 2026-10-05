@@ -7,7 +7,7 @@ Roteiro para o dono. Tudo roda no banco local; o simulador **nunca** envia nada 
 pnpm db:migrate
 pnpm --filter @atd/db demo:s1          # 4 unidades, horários, exceções e informações de demonstração
 pnpm dev                                # painel em http://127.0.0.1:3000
-pnpm --filter @atd/worker dev           # outro terminal: o worker que responde o simulador
+WHATSAPP_ACCESS_TOKEN=local-sem-meta pnpm --filter @atd/worker dev   # outro terminal: o worker que responde o simulador (token provisório: o simulador nunca chama a Meta)
 ```
 Se o `demo:s1` disser "Esperado exatamente 1 restaurante; encontrado 0" (o banco foi apagado pelo `pnpm check`), crie o restaurante antes: `pnpm --filter @atd/db bootstrap --restaurante "Restaurante Demo" --dono dono@restaurante.local --nome-dono "Dono"` (com `SUPABASE_SERVICE_ROLE_KEY` exportada só no shell).
 
