@@ -6,6 +6,7 @@ import { createBoss, createDb, ensureQueues, QUEUES, type ProcessJob } from '@at
 import { createWhatsAppClient } from '@atd/whatsapp'
 import { processConversation, type ProcessDeps } from './jobs/process-conversation.ts'
 import { startHeartbeat } from './heartbeat.ts'
+import { sanitizeJobError } from './job-error.ts'
 import { createLogger } from './logger.ts'
 import { initSentry, Sentry } from './sentry.ts'
 
@@ -14,8 +15,10 @@ const env = loadEnv(workerEnvSchema)
 const log = createLogger(env.LOG_LEVEL)
 initSentry(env.SENTRY_DSN, VERSION)
 
-// Conexão de sessão/direta: o pg-boss usa LISTEN/NOTIFY.
-const { db, sql } = createDb(env.DATABASE_URL, { max: 10 })
+// Session pooler (IPv4) ou conexão direta: processo de longa duração com prepared statements (o modo
+// transaction não os suporta). O pg-boss 12 não usa LISTEN/NOTIFY por padrão (só polling + advisory
+// xact locks), então isso não exige sessão. Pools: drizzle 6 + pg-boss 3 = 9 conexões no máximo.
+const { db, sql } = createDb(env.DATABASE_URL, { max: 6 })
 const boss = createBoss(env.DATABASE_URL, 'worker', (err) => {
   log.error({ err }, 'pg-boss erro')
   Sentry.captureException(err)
@@ -49,7 +52,9 @@ try {
       } catch (err) {
         log.error({ err, conversationId: job.data.conversationId }, 'falha ao processar conversa')
         Sentry.captureException(err, { extra: { conversationId: job.data.conversationId } })
-        throw err // pg-boss retenta (retryLimit 3, backoff) e depois manda para a DLQ
+        // pg-boss retenta (retryLimit 3, backoff) e depois manda para a DLQ; o erro lançado vai para
+        // pgboss.job.output, então nunca o erro bruto (params do drizzle com dados do cliente).
+        throw sanitizeJobError(err)
       }
     }
   })

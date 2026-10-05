@@ -19,7 +19,7 @@ export function createBoss(
           connectionString, schema: 'pgboss', max: 1,
           migrate: false, supervise: false, schedule: false, useListenNotify: false, registerInstance: false,
         })
-      : new PgBoss({ connectionString, schema: 'pgboss', max: 5, createSchema: false }) // schema criado na migration 0004
+      : new PgBoss({ connectionString, schema: 'pgboss', max: 3, createSchema: false }) // schema criado na migration 0004
   // Sem listener, 'error' derruba o processo. Nunca logar payloads.
   boss.on('error', onError ?? ((e) => process.emitWarning(`pg-boss: ${e.message}`)))
   return boss
