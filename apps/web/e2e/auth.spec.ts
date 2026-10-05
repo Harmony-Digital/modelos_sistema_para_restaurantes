@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test'
-import { criarMembro, entrar, sql } from './helpers'
+import { closeSql, criarMembro, entrar, getSql } from './helpers'
 
 test.afterAll(async () => {
-  await sql`delete from auth.users where email like '%@teste.local'`
+  await getSql()`delete from auth.users where email like '%@teste.local'`
+  await closeSql()
 })
 
 test('anônimo é levado ao login', async ({ page }) => {
