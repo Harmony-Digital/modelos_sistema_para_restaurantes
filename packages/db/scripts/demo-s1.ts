@@ -1,10 +1,10 @@
 /** Dados de demonstração de S1 no restaurante local (idempotente). Só para desenvolvimento/homologação local. */
 import { and, eq, inArray } from 'drizzle-orm'
-import { createDb, getSingleRestaurantId, schema } from '../src/index.ts'
+import { createDb, ehBancoLocal, getSingleRestaurantId, schema } from '../src/index.ts'
 
 const url = process.env.DATABASE_URL
 if (!url) throw new Error('Defina DATABASE_URL')
-if (!/127\.0\.0\.1|localhost/.test(url)) throw new Error('demo:s1 só roda no banco local')
+if (!ehBancoLocal(url)) throw new Error('demo:s1 só roda no banco local')
 
 type T = { abre: string; fecha: string }
 const almoco = { abre: '11:30', fecha: '15:00' }
