@@ -16,6 +16,8 @@ export type IngestInput = {
   timestamp: Date
   /** id da linha/botão escolhido numa mensagem interativa */
   interativoId?: string | null
+  /** Mensagem do simulador do painel: cliente e conversa nascem marcados (nunca saem pela Meta). */
+  simulado?: boolean
 }
 
 /** Transação única do webhook: cliente → conversa → mensagem idempotente → job (I7). */
@@ -28,6 +30,7 @@ export function ingestInbound(db: Db, input: IngestInput, enqueue: Enqueue) {
         waIdHash: input.waIdHash,
         telefoneCifrado: input.telefoneCifrado,
         nomePerfil: input.profileName,
+        simulado: input.simulado ?? false,
       })
       .onConflictDoUpdate({
         target: [customers.restaurantId, customers.waIdHash],
@@ -51,6 +54,7 @@ export function ingestInbound(db: Db, input: IngestInput, enqueue: Enqueue) {
       .values({
         restaurantId: input.restaurantId,
         customerId: customer!.id,
+        simulada: input.simulado ?? false,
         windowExpiresAt: sql`${ts} + interval '24 hours'`,
         lastMessageAt: ts,
       })

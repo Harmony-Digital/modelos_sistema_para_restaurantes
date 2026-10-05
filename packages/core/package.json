@@ -3,6 +3,6 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts", "./scrub": "./src/scrub.ts" },
+  "exports": { ".": "./src/index.ts", "./scrub": "./src/scrub.ts", "./s1": "./src/s1/index.ts" },
   "scripts": { "typecheck": "tsc -p tsconfig.json" }
 }

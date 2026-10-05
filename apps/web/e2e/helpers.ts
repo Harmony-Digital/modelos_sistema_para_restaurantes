@@ -1,6 +1,7 @@
-import type { Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
 import postgres from 'postgres'
+import { codigoTotp } from './totp'
 
 let _admin: ReturnType<typeof createClient> | undefined
 let _sql: ReturnType<typeof postgres> | undefined
@@ -29,7 +30,7 @@ export async function closeSql() {
   await s?.end()
 }
 
-export async function criarMembro(papel: 'dono' | 'atendente') {
+export async function criarMembro(papel: 'dono' | 'gerente' | 'atendente') {
   const email = `${papel}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@teste.local`
   const senha = 'Senha-Forte-123!'
   const { data, error } = await getAdmin().auth.admin.createUser({ email, password: senha, email_confirm: true })
@@ -44,4 +45,29 @@ export async function entrar(page: Page, email: string, senha: string) {
   await page.getByLabel(/^E-mail/).fill(email)
   await page.getByLabel(/^Senha/).fill(senha)
   await page.getByRole('button', { name: 'Entrar' }).click()
+}
+
+/** Dono/gerente novo: entra, cadastra o autenticador lendo a chave da tela e confirma com o código TOTP. */
+export async function entrarComoGestor(page: Page, papel: 'dono' | 'gerente' = 'dono') {
+  const membro = await criarMembro(papel)
+  await entrar(page, membro.email, membro.senha)
+  await page.waitForURL('**/mfa')
+  // em dev o StrictMode roda o efeito duas vezes e a tela pode trocar de chave logo após aparecer:
+  // só usa a chave depois que ela fica igual em duas leituras seguidas
+  const chave = page.locator('p.font-mono')
+  let segredo = ''
+  await expect
+    .poll(async () => {
+      const anterior = segredo
+      segredo = (await chave.textContent())?.trim() ?? ''
+      return segredo !== '' && segredo === anterior
+    }, { intervals: [1_000] })
+    .toBe(true)
+  // código perto de virar: espera o próximo período para não falhar na fronteira
+  const restante = 30_000 - (Date.now() % 30_000)
+  if (restante < 3_000) await page.waitForTimeout(restante + 200)
+  await page.getByLabel(/^Código de 6 dígitos/).fill(codigoTotp(segredo))
+  await page.getByRole('button', { name: 'Confirmar' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Início' })).toBeVisible()
+  return membro
 }

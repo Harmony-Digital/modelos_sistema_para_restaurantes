@@ -19,14 +19,14 @@ const UNIDADES = [
   {
     slug: 'asa-sul', nome: 'Asa Sul', ordem: 1, apelidos: ['204 sul'],
     endereco: 'SCLS 404 Bloco C', bairro: 'Asa Sul', cidade: 'Brasília', uf: 'DF', lat: -15.8136, lng: -47.896,
-    mapsUrl: 'https://maps.app.goo.gl/asasul',
+    mapsUrl: 'https://www.google.com/maps/@-15.8136,-47.896,17z',
     semanal: [[{ abre: '11:30', fecha: '16:00' }], [], [almoco, jantar], [almoco, jantar], [almoco, jantar], [almoco, jantarTarde], [almoco, jantarTarde]],
     excecoes: [{ data: '2026-12-25', fechado: true, turnos: [] as T[], motivo: 'Natal' }],
   },
   {
     slug: 'asa-norte', nome: 'Asa Norte', ordem: 2, apelidos: [],
     endereco: 'SCLN 302 Bloco B', bairro: 'Asa Norte', cidade: 'Brasília', uf: 'DF', lat: -15.7801, lng: -47.8829,
-    mapsUrl: 'https://maps.app.goo.gl/asanorte',
+    mapsUrl: 'https://www.google.com/maps/@-15.7801,-47.8829,17z',
     semanal: todoDia({ abre: '11:00', fecha: '23:00' }),
     excecoes: [{ data: '2026-12-24', fechado: false, turnos: [{ abre: '11:00', fecha: '18:00' }], motivo: 'Véspera de Natal' }],
   },

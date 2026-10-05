@@ -92,4 +92,12 @@ describe('OpenRouter completeJson', () => {
     expect(await call(async () => json(429, {}))).toMatchObject({ retryable: true, status: 429 })
     expect(await call(async () => json(401, {}))).toMatchObject({ retryable: false, status: 401 })
   })
+  it('baseUrl troca o servidor (e2e com OpenRouter falso), sem barra duplicada', async () => {
+    const f = vi.fn(async () => json(200, okBody('{"a":1}')))
+    await createOpenRouterClient({ apiKey: 'KEY', appTitle: 'A', fetch: f, baseUrl: 'http://127.0.0.1:9999/' }).completeJson({
+      models: ['m'], system: 's', user: 'u', schemaName: 'x',
+      jsonSchema: { type: 'object' }, parse: (raw) => raw, maxTokens: 5,
+    })
+    expect((f.mock.calls[0]! as unknown as [string])[0]).toBe('http://127.0.0.1:9999/chat/completions')
+  })
 })

@@ -50,6 +50,8 @@ TypeScript strict · pnpm + Turborepo · Next.js 16 (Vercel gru1) · Node 24 wor
 
 ## Onde paramos
 
+- **05/10/2026** — Plano 02-C (painel de S1 e simulador ligado ao pipeline real) implementado; revisão final e leva de correções aplicadas (`f008e26..5e809ed`; `pnpm check` com 782 testes; e2e 19/19). Pendentes externos: crédito no OpenRouter e escolha do modelo de triagem. Próximo: homologação do dono (`docs/homologacao/etapa-02c.md`) e fechamento da Etapa 02.
+- **05/10/2026** — Plano 02-C implementado (painel de S1, simulador ligado ao pipeline real, e2e). Homologação em docs/homologacao/etapa-02c.md. Pendentes externos: crédito no OpenRouter e escolha do modelo de triagem; Postgres 17 no Supabase hospedado. Próximo: homologação do dono e fechamento da Etapa 02.
 - **05/10/2026** — Plano 02-B (dados por unidade, feriados, resolução/composição, triage-v2, lacunas, localização/lista, evals; camada 2 com 101 casos) implementado. Pendente: chave do OpenRouter para escolher o modelo de triagem (`docs/homologacao/etapa-02b.md`). Leva final de correções aplicada (`pnpm check` com 661 testes). Próximo: plano 02-C.
 - **05/10/2026** — Homologação local do 02-A aprovada pelo dono, com dois ajustes: cartões da Início sem vazar no celular e quadro **Gastos** (IA e WhatsApp, hoje e no mês). Repositório publicado em `Harmony-Digital/modelos_sistema_para_restaurantes` (branches `main`, `etapa-01-fundacao`, `etapa-02-s1`); PRs abertos para a `main` — mesclar primeiro o da Etapa 01. Próximo: plano 02-B.
 - **05/10/2026** — Plano 02-A (design system, navegação, formulários, definir senha, Devolver à IA, casca do simulador) implementado; e2e `celular` 15/15; revisão final sem críticos e leva de correção aplicada (`d10cfff..9ec0da2`, 427 testes). Próximo: plano 02-B.

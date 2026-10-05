@@ -133,6 +133,28 @@ describe('comportamento dos formulários', () => {
     expect(botao).toHaveAttribute('aria-disabled', 'true')
   })
 
+  it('clicar em SubmitButton não tira o foco do campo antes do envio; teclado continua enviando', async () => {
+    const user = userEvent.setup()
+    let envios = 0
+    let blurs = 0
+    render(
+      <form onSubmit={(e) => { e.preventDefault(); envios++ }}>
+        <input aria-label="Nome" onBlur={() => blurs++} />
+        <SubmitButton>Salvar</SubmitButton>
+      </form>,
+    )
+    const campo = screen.getByRole('textbox', { name: 'Nome' })
+    await user.click(campo)
+    await user.click(screen.getByRole('button', { name: 'Salvar' }))
+    expect(envios).toBe(1)
+    expect(blurs).toBe(0)
+    expect(campo).toHaveFocus()
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'Salvar' })).toHaveFocus()
+    await user.keyboard('{Enter}')
+    expect(envios).toBe(2)
+  })
+
   it('actionErrorFromZod separa campo e erro do objeto', () => {
     const sch = z.object({ a: z.string(), b: z.string() }).refine((v) => v.a === v.b, 'Os campos precisam ser iguais')
     const r = sch.safeParse({ a: 'x', b: 'y' })

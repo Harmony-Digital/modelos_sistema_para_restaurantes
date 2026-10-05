@@ -76,4 +76,12 @@ describe('devolver à IA', () => {
     expect(await returnToAi(db, claims(dono, 'aal1'), id)).toBe('nao_encontrada')
     expect(await returnToAi(db, claims(dono, 'aal2'), id)).toBe('devolvida')
   })
+  it('conversa simulada pedindo atendente não aparece na fila nem pode ser devolvida', async () => {
+    const { restaurantId } = await seedRestaurant(db)
+    const atendente = await seedStaff(db, sql, { restaurantId, papel: 'atendente' })
+    const [c] = await db.insert(customers).values({ restaurantId, waIdHash: 'sim:x:1', telefoneCifrado: 'simulado', simulado: true }).returning()
+    const [conv] = await db.insert(conversations).values({ restaurantId, customerId: c!.id, estado: 'aguardando_humano', simulada: true }).returning()
+    expect(await listAwaitingHuman(db, claims(atendente))).toEqual([])
+    expect(await returnToAi(db, claims(atendente), conv!.id)).toBe('nao_encontrada')
+  })
 })

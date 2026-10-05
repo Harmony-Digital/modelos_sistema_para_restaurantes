@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { closeSql, criarMembro, entrar, getSql } from './helpers'
+import { closeSql, criarMembro, entrar, entrarComoGestor, getSql } from './helpers'
 
 test.afterAll(async () => {
   await getSql()`delete from auth.users where email like '%@teste.local'`
@@ -44,17 +44,11 @@ test('devolver à IA tira a conversa da fila', async ({ page }) => {
   expect(conv!.estado).toBe('ia')
 })
 
-test('simulador abre em tela cheia no celular e mostra a mensagem enviada', async ({ page }) => {
+test('atendente não vê o simulador (ele gasta IA real)', async ({ page }) => {
   const { email, senha } = await criarMembro('atendente')
   await entrar(page, email, senha)
-  await page.getByRole('button', { name: 'Abrir simulador de WhatsApp' }).click()
-  const dialog = page.getByRole('dialog', { name: 'Simulador de WhatsApp' })
-  await expect(dialog).toBeVisible()
-  await page.getByRole('textbox', { name: 'Mensagem' }).fill('abre domingo?')
-  await page.keyboard.press('Enter')
-  await expect(dialog.getByText('abre domingo?')).toBeVisible()
-  await page.keyboard.press('Escape')
-  await expect(dialog).toBeHidden()
+  await expect(page.getByRole('heading', { level: 1, name: 'Início' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Abrir simulador de WhatsApp' })).toHaveCount(0)
 })
 
 test('formulário: erro no campo certo e olho da senha', async ({ page }) => {
@@ -81,9 +75,9 @@ test('Início sem rolagem horizontal no Pixel 7 e em 320px', async ({ page }) =>
 
 for (const largura of [412, 320]) {
   test(`botão do simulador não cobre a navegação inferior (${largura}px)`, async ({ page }) => {
-    const { email, senha } = await criarMembro('atendente')
+    // o simulador só aparece para dono/gerente (Task 13)
     await page.setViewportSize({ width: largura, height: 640 })
-    await entrar(page, email, senha)
+    await entrarComoGestor(page)
     const fab = page.getByRole('button', { name: 'Abrir simulador de WhatsApp' })
     const nav = page.getByRole('navigation', { name: 'Navegação principal' })
     await expect(fab).toBeVisible()

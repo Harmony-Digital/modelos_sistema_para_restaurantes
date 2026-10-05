@@ -88,6 +88,11 @@ type Ctx = {
   restaurant: typeof restaurants.$inferSelect
 }
 
+/** Relógio da conversa: só o simulador pode deslocá-lo; conversa real usa sempre o relógio real. */
+export function agoraDaConversa(real: Date, conv: { simulada: boolean; relogioOffsetSegundos: number | null }): Date {
+  return conv.simulada && conv.relogioOffsetSegundos != null ? new Date(real.getTime() + conv.relogioOffsetSegundos * 1000) : real
+}
+
 export async function processConversation(deps: ProcessDeps, conversationId: string): Promise<Outcome> {
   const outcome = await decide(deps, conversationId)
   await deliver(deps, conversationId)
@@ -156,7 +161,8 @@ async function decide(deps: ProcessDeps, conversationId: string): Promise<Outcom
     return 'flood'
   }
 
-  const decision = await classify(deps, ctx, pending, now)
+  // relógio simulado vale para S1 e pendente; bloqueio, aviso de privacidade e orçamento seguem o real
+  const decision = await classify(deps, ctx, pending, agoraDaConversa(now, ctx.conv))
   try {
     const lastNotice = ctx.customer.privacyNoticeSentAt?.getTime() ?? 0
     const [noticePending] = await db
@@ -222,9 +228,10 @@ async function respostaDaLista(deps: ProcessDeps, ctx: Ctx, pending: Pending[], 
   if (!p || new Date(p.expiraEm) <= now) {
     // toque numa lista que já não vale: avisa sem gastar o modelo
     if (!idLista) return null
+    const { modelos } = await carregarContextoS1(deps.db, ctx.restaurant.id, now)
     const run: AiRunRow = { etapa: 'resposta', modelo: 'deterministico', promptVersion: 's1-lista', costUsd: '0', intent: 'lista_expirada', resultado: 'ok' }
     return {
-      replies: [], saidas: [{ tipo: 'texto', texto: renderModelo('lista_expirada', {}) }],
+      replies: [], saidas: [{ tipo: 'texto', texto: renderModelo('lista_expirada', {}, modelos) }],
       autor: 'ia', falhas: 'zerar', pendente: null, runs: [run],
     }
   }
@@ -451,6 +458,7 @@ async function deliver(deps: ProcessDeps, conversationId: string) {
       telefoneCifrado: customers.telefoneCifrado,
       customerId: customers.id,
       estado: conversations.estado,
+      simulada: conversations.simulada,
     })
     .from(messages)
     .innerJoin(conversations, eq(conversations.id, messages.conversationId))
@@ -459,7 +467,9 @@ async function deliver(deps: ProcessDeps, conversationId: string) {
     .orderBy(asc(messages.id))
   if (pendingOut.length === 0) return
 
-  const to = decryptPhone(pendingOut[0]!.telefoneCifrado, deps.phoneKey)
+  // canal simulador: conversa do painel nunca chama a Meta nem decifra telefone
+  const simulada = pendingOut[0]!.simulada
+  const to = simulada ? null : decryptPhone(pendingOut[0]!.telefoneCifrado, deps.phoneKey)
   for (const m of pendingOut) {
     // I5: com humano no controle, respostas da IA ainda pendentes são canceladas; as do sistema seguem
     if (m.autor === 'ia') {
@@ -469,6 +479,11 @@ async function deliver(deps: ProcessDeps, conversationId: string) {
         continue
       }
     }
+    if (to === null) {
+      await db.update(messages).set({ statusEnvio: 'simulado' }).where(eq(messages.id, m.id))
+      await marcarAvisoEnviado(deps, m)
+      continue
+    }
     const r = await enviar(deps, to, m)
     if (r === 'payload_invalido') {
       await db.update(messages).set({ statusEnvio: 'falhou:payload_invalido' }).where(eq(messages.id, m.id))
@@ -477,9 +492,7 @@ async function deliver(deps: ProcessDeps, conversationId: string) {
     }
     if (r.ok) {
       await db.update(messages).set({ wamid: r.wamid, statusEnvio: 'enviado' }).where(eq(messages.id, m.id))
-      if (m.replyKey === 'avisoPrivacidade') {
-        await db.update(customers).set({ privacyNoticeSentAt: deps.now?.() ?? new Date() }).where(eq(customers.id, m.customerId))
-      }
+      await marcarAvisoEnviado(deps, m)
     } else if (!r.retryable) {
       await db.update(messages).set({ statusEnvio: `falhou:${r.code ?? 'desconhecido'}` }).where(eq(messages.id, m.id))
       deps.log.warn({ conversationId, code: r.code }, 'envio recusado permanentemente pela Meta')
@@ -487,6 +500,11 @@ async function deliver(deps: ProcessDeps, conversationId: string) {
       throw new Error(`Falha temporária ao enviar pelo WhatsApp (código ${r.code ?? 'rede'})`)
     }
   }
+}
+
+async function marcarAvisoEnviado(deps: ProcessDeps, m: { replyKey: string | null; customerId: string }) {
+  if (m.replyKey !== 'avisoPrivacidade') return
+  await deps.db.update(customers).set({ privacyNoticeSentAt: deps.now?.() ?? new Date() }).where(eq(customers.id, m.customerId))
 }
 
 function enviar(deps: ProcessDeps, to: string, m: { tipo: string; texto: string | null; payload: unknown }) {

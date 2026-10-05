@@ -87,6 +87,7 @@ export const knowledgeFacts = pgTable(
     uniqueIndex('knowledge_facts_id_restaurant_uq').on(t.id, t.restaurantId),
     index('knowledge_facts_search_idx').using('gin', t.search),
     index('knowledge_facts_restaurant_ativo_idx').on(t.restaurantId).where(sql`${t.ativo}`),
+    index('knowledge_facts_unit_idx').on(t.unitId),
     check('knowledge_facts_tema_len', sql`char_length(${t.tema}) between 1 and 120`),
     check('knowledge_facts_texto_len', sql`char_length(${t.texto}) between 1 and 1000`),
   ],
@@ -130,6 +131,7 @@ export const knowledgeGaps = pgTable(
       .onDelete('cascade'),
     // único "aberta" por (restaurante, chave, unidade) com NULLS NOT DISTINCT: migration 0012 (custom)
     index('knowledge_gaps_fila_idx').on(t.restaurantId, t.status, t.ultimaVez.desc()),
+    index('knowledge_gaps_unit_idx').on(t.unitId),
     check('knowledge_gaps_ocorrencias_pos', sql`${t.ocorrencias} >= 1`),
   ],
 )

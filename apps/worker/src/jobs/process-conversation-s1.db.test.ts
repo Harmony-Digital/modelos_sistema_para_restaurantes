@@ -195,6 +195,17 @@ describe('S1 no worker', () => {
     expect(runs.at(-1)).toMatchObject({ etapa: 'resposta', modelo: 'deterministico', promptVersion: 's1-lista', costUsd: '0.000000', itensValidos: null })
   })
 
+  it('lista expirada usa o texto personalizado pelo restaurante', async () => {
+    const { restaurantId, ids } = await setup(4)
+    await db.insert(schema.replyTemplates).values({ restaurantId, chave: 'lista_expirada', texto: 'Ops, essa lista venceu. Pergunte de novo, por favor.' })
+    const conv = await receive(restaurantId, 'Selecionado', ids['Asa Norte']!)
+    const { llm, calls } = fakeLlm([])
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    expect(calls).toHaveLength(0)
+    expect(wa.enviados.at(-1)!.corpo).toBe('Ops, essa lista venceu. Pergunte de novo, por favor.')
+  })
+
   it('toque na lista sem nenhum pendente: avisa sem chamar o LLM', async () => {
     const { restaurantId, ids } = await setup(4)
     const conv = await receive(restaurantId, 'Selecionado', ids['Asa Norte']!)

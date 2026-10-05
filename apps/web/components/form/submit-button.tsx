@@ -8,6 +8,8 @@ export function SubmitButton(props: { pending?: boolean; pendingText?: string; c
       type='submit'
       aria-disabled={props.pending || undefined}
       aria-busy={props.pending || undefined}
+      // não tira o foco do campo no mousedown: o erro do blur empurrava o botão e o clique se perdia
+      onMouseDown={(e) => e.preventDefault()}
       onClick={(e) => { if (props.pending) e.preventDefault() }}
       className={cn(props.pending && 'cursor-wait opacity-50', props.className)}
     >

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { feriadosNacionais, mapaFeriados } from './feriados.ts'
-import { estadoAgora, horarioDoDia, temHorarioCadastrado, validarTurnos, type AgendaUnidade } from './horarios.ts'
+import { estadoAgora, horarioDoDia, temHorarioCadastrado, validarSemana, validarTurnos, type AgendaUnidade, type Turno } from './horarios.ts'
 
 const almoco = { abre: '11:30', fecha: '15:00' }
 const jantar = { abre: '18:00', fecha: '23:00' }
@@ -73,5 +73,29 @@ describe('validarTurnos', () => {
     expect(validarTurnos([{ abre: '11:00', fecha: '11:00' }])).toBe('Turno 1: a abertura e o fechamento não podem ser iguais.')
     expect(validarTurnos([almoco, { abre: '14:00', fecha: '18:00' }])).toBe('Os turnos se sobrepõem. Ajuste os horários para não haver conflito.')
     expect(validarTurnos([jantarTarde, { abre: '20:00', fecha: '23:00' }])).toBe('Os turnos se sobrepõem. Ajuste os horários para não haver conflito.')
+  })
+})
+
+describe('validarSemana', () => {
+  const vazio = (): Turno[][] => [[], [], [], [], [], [], []]
+  it('semana válida, inclusive com madrugada que não encosta no dia seguinte', () => {
+    const s = vazio()
+    s[5] = [{ abre: '18:00', fecha: '02:00' }]
+    s[6] = [{ abre: '11:30', fecha: '15:00' }]
+    expect(validarSemana(s)).toBeNull()
+  })
+  it('erro do dia (formato/sobreposição) aponta o dia', () => {
+    const s = vazio()
+    s[2] = [{ abre: '11:00', fecha: '11:00' }]
+    expect(validarSemana(s)).toEqual({ dia: 2, erro: 'Turno 1: a abertura e o fechamento não podem ser iguais.' })
+  })
+  it('madrugada de sábado invade o turno de domingo', () => {
+    const s = vazio()
+    s[6] = [{ abre: '18:00', fecha: '03:00' }]
+    s[0] = [{ abre: '02:00', fecha: '10:00' }]
+    expect(validarSemana(s)).toEqual({
+      dia: 6,
+      erro: 'O turno de sábado vai até 03:00 do dia seguinte e encosta no turno de domingo que abre às 02:00. Ajuste um dos dois.',
+    })
   })
 })

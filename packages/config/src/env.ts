@@ -39,6 +39,12 @@ export const whatsappEnvSchema = whatsappWebhookEnvSchema.extend({
 export const openrouterEnvSchema = z.object({
   OPENROUTER_API_KEY: z.string().min(1),
   AI_TRIAGE_MODELS: csvList,
+  /** Só para teste (e2e com OpenRouter falso). Em produção fica vazio. */
+  // só para teste (OpenRouter falso do e2e): nunca aponta para fora da máquina
+  OPENROUTER_BASE_URL: z.preprocess(
+    (v) => (v === '' ? undefined : v),
+    z.url({ protocol: /^https?$/, hostname: /^(127\.0\.0\.1|localhost)$/ }).optional(),
+  ),
 })
 
 const common = z.object({

@@ -35,7 +35,7 @@ Candidatos a avaliar (lista pública do OpenRouter, 05/10/2026): mistralai/mistr
 Depois de obter a chave: `pnpm --filter @atd/ai eval:s1 --modelos <a>,<b>,<c>,<d> --teto 1.00`; critério: maior acerto (>= 95%), menor custo, menor latência p95; o segundo colocado vira fallback. Confirmar ZDR do endpoint antes de adotar.
 
 ## 6. Ainda não dá para ver
-Telas de Unidades/Respostas e o simulador ligado ao pipeline real (plano 02-C).
+Telas de Unidades/Respostas e o simulador ligado ao pipeline real: ver docs/homologacao/etapa-02c.md.
 
 ## Se a triagem falhar (erro do OpenRouter)
 

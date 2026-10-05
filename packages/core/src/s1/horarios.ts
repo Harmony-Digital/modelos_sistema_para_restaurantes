@@ -87,3 +87,28 @@ export function validarTurnos(turnos: readonly Turno[]): string | null {
   }
   return null
 }
+
+const NOMES_DIA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'] as const
+
+/** Semana inteira (formulário do painel): cada dia válido e nenhuma madrugada invadindo o dia seguinte. */
+export function validarSemana(semanal: readonly (readonly Turno[])[]): { dia: number; erro: string } | null {
+  for (let d = 0; d < 7; d++) {
+    const erro = validarTurnos(semanal[d] ?? [])
+    if (erro) return { dia: d, erro }
+  }
+  for (let d = 0; d < 7; d++) {
+    const proximo = (d + 1) % 7
+    for (const t of semanal[d] ?? []) {
+      if (!cruzaMeiaNoite(t)) continue
+      const fim = minutosDe(t.fecha)
+      const conflito = (semanal[proximo] ?? []).find((n) => minutosDe(n.abre) < fim)
+      if (conflito) {
+        return {
+          dia: d,
+          erro: `O turno de ${NOMES_DIA[d]} vai até ${t.fecha} do dia seguinte e encosta no turno de ${NOMES_DIA[proximo]} que abre às ${conflito.abre}. Ajuste um dos dois.`,
+        }
+      }
+    }
+  }
+  return null
+}

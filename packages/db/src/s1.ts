@@ -14,6 +14,32 @@ const FUSO_PADRAO = 'America/Sao_Paulo'
 const hhmm = (t: string) => t.slice(0, 5) // time do Postgres vem como HH:MM:SS
 const ehChaveModelo = (c: string): c is ChaveModelo => Object.hasOwn(MODELOS_S1, c)
 
+type LinhaUnidade = typeof units.$inferSelect
+type LinhaHorario = { unitId: string; weekday: number; abre: string; fecha: string }
+type LinhaExcecao = { unitId: string; data: string; fechado: boolean; turnos: { abre: string; fecha: string }[]; motivo: string | null }
+
+/** Monta as unidades com agenda (turnos HH:MM) na ordem de `us`. Compartilhado com o painel. */
+export function montarUnidades(us: readonly LinhaUnidade[], hs: readonly LinhaHorario[], exs: readonly LinhaExcecao[]): UnidadeS1[] {
+  const porId = new Map<string, UnidadeS1>()
+  const unidades = us.map((u) => {
+    const x: UnidadeS1 = {
+      id: u.id, nome: u.nome, apelidos: u.apelidos, ordem: u.ordem,
+      endereco: u.endereco, bairro: u.bairro, cidade: u.cidade, uf: u.uf,
+      lat: u.lat, lng: u.lng, mapsUrl: u.mapsUrl,
+      semanal: Array.from({ length: 7 }, () => [] as Turno[]),
+      excecoes: {},
+    }
+    porId.set(u.id, x)
+    return x
+  })
+  for (const h of hs) porId.get(h.unitId)?.semanal[h.weekday]?.push({ abre: hhmm(h.abre), fecha: hhmm(h.fecha) })
+  for (const e of exs) {
+    const u = porId.get(e.unitId)
+    if (u) u.excecoes[e.data] = { fechado: e.fechado, turnos: e.turnos.map((t) => ({ abre: hhmm(t.abre), fecha: hhmm(t.fecha) })), motivo: e.motivo }
+  }
+  return unidades
+}
+
 /** Contexto da resolução de S1. Roda como worker_app (RLS ampla): filtra restaurant_id em toda consulta. */
 export async function carregarContextoS1(db: Db | Tx, restaurantId: string, agora: Date = new Date()): Promise<ContextoS1> {
   const [r] = await db
@@ -52,23 +78,7 @@ export async function carregarContextoS1(db: Db | Tx, restaurantId: string, agor
     .from(replyTemplates)
     .where(eq(replyTemplates.restaurantId, restaurantId))
 
-  const porId = new Map<string, UnidadeS1>()
-  const unidades = us.map((u) => {
-    const x: UnidadeS1 = {
-      id: u.id, nome: u.nome, apelidos: u.apelidos, ordem: u.ordem,
-      endereco: u.endereco, bairro: u.bairro, cidade: u.cidade, uf: u.uf,
-      lat: u.lat, lng: u.lng, mapsUrl: u.mapsUrl,
-      semanal: Array.from({ length: 7 }, () => [] as Turno[]),
-      excecoes: {},
-    }
-    porId.set(u.id, x)
-    return x
-  })
-  for (const h of hs) porId.get(h.unitId)?.semanal[h.weekday]?.push({ abre: hhmm(h.abre), fecha: hhmm(h.fecha) })
-  for (const e of exs) {
-    const u = porId.get(e.unitId)
-    if (u) u.excecoes[e.data] = { fechado: e.fechado, turnos: e.turnos.map((t) => ({ abre: hhmm(t.abre), fecha: hhmm(t.fecha) })), motivo: e.motivo }
-  }
+  const unidades = montarUnidades(us, hs, exs)
   const personalizados: Partial<Record<ChaveModelo, string>> = {}
   for (const m of modelos) {
     // modelo inválido (variável removida, por exemplo) cai no padrão em vez de quebrar a resposta

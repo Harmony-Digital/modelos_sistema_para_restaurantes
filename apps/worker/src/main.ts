@@ -31,7 +31,11 @@ try {
 
   const deps: ProcessDeps = {
     db,
-    llm: createOpenRouterClient({ apiKey: env.OPENROUTER_API_KEY, appTitle: 'ia-atendimento' }),
+    llm: createOpenRouterClient({
+      apiKey: env.OPENROUTER_API_KEY,
+      appTitle: 'ia-atendimento',
+      ...(env.OPENROUTER_BASE_URL ? { baseUrl: env.OPENROUTER_BASE_URL } : {}),
+    }),
     wa: createWhatsAppClient({
       accessToken: env.WHATSAPP_ACCESS_TOKEN,
       phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID,

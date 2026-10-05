@@ -19,3 +19,14 @@ export function actionErrorFromZod(err: z.ZodError): { ok: false; fieldErrors: R
   const formError = err.issues.find((i) => i.path.length === 0)?.message
   return { ok: false, fieldErrors: fieldErrorsFromZod(err), ...(formError ? { formError } : {}) }
 }
+
+export const ERRO_AO_SALVAR = 'Não foi possível salvar. Tente de novo.'
+
+/** Chama a Server Action; exceção (rede, servidor fora) vira erro geral do formulário em vez de sumir. */
+export async function chamarAcao<T>(acao: () => Promise<ActionResult<T>>): Promise<ActionResult<T>> {
+  try {
+    return await acao()
+  } catch {
+    return { ok: false, formError: ERRO_AO_SALVAR }
+  }
+}

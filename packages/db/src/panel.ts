@@ -9,8 +9,9 @@ import { restaurants } from './schema/restaurant.ts'
 export function getPanelStatus(db: Db, claims: JwtClaims) {
   return withUserContext(db, claims, async (tx) => {
     const [hb] = await tx.select({ last: max(workerHeartbeats.lastSeenAt) }).from(workerHeartbeats)
-    const [abertas] = await tx.select({ n: count() }).from(conversations).where(ne(conversations.estado, 'encerrada'))
-    const [aguardando] = await tx.select({ n: count() }).from(conversations).where(inArray(conversations.estado, ['aguardando_humano', 'humano']))
+    const real = eq(conversations.simulada, false)
+    const [abertas] = await tx.select({ n: count() }).from(conversations).where(and(real, ne(conversations.estado, 'encerrada')))
+    const [aguardando] = await tx.select({ n: count() }).from(conversations).where(and(real, inArray(conversations.estado, ['aguardando_humano', 'humano'])))
     const [r] = await tx.select({ tz: restaurants.timezone }).from(restaurants).limit(1)
     const { dia, mes } = periodStarts(new Date(), r?.tz ?? 'America/Sao_Paulo')
     // RLS: só dono/gerente com MFA enxergam budget_counters; para os demais volta vazio.
