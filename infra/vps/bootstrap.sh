@@ -1,10 +1,22 @@
 #!/usr/bin/env bash
 # Hardening da VPS do worker (Ubuntu). Rodar UMA vez, como root:
-#   bash bootstrap.sh <usuario-deploy> "<chave-publica-ssh-do-deploy>"
+#   bash bootstrap.sh <usuario-deploy> "<chave-publica-ssh-do-deploy>" "<chave-publica-ssh-do-admin>"
+# A chave do admin (humano) garante o acesso root por chave; a chave do deploy é a do CI.
 # ANTES de fechar a sessão, abrir outra e confirmar que o acesso por chave funciona.
 set -euo pipefail
 DEPLOY_USER="${1:?informe o usuário de deploy}"
-PUBKEY="${2:?informe a chave pública SSH}"
+PUBKEY="${2:?informe a chave pública SSH do deploy (CI)}"
+ADMIN_PUBKEY="${3:?informe a chave pública SSH do admin (humano)}"
+export DEBIAN_FRONTEND=noninteractive
+
+# Anti-lockout: garante a chave do admin no root ANTES de mexer no sshd
+install -d -m 700 /root/.ssh
+touch /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys
+grep -qxF "$ADMIN_PUBKEY" /root/.ssh/authorized_keys || printf '%s\n' "$ADMIN_PUBKEY" >> /root/.ssh/authorized_keys
+if ! grep -qE '^(ssh-|ecdsa-|sk-)' /root/.ssh/authorized_keys; then
+  echo "ERRO: root sem chave autorizada; abortando antes de alterar o sshd." >&2
+  exit 1
+fi
 
 apt-get update && apt-get -y upgrade
 apt-get install -y ufw fail2ban unattended-upgrades ca-certificates curl
@@ -20,13 +32,20 @@ apt-get update && apt-get install -y docker-ce docker-ce-cli containerd.io docke
 id "$DEPLOY_USER" >/dev/null 2>&1 || adduser --disabled-password --gecos "" "$DEPLOY_USER"
 usermod -aG docker "$DEPLOY_USER"
 install -d -m 700 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "/home/$DEPLOY_USER/.ssh"
-printf '%s\n' "$PUBKEY" > "/home/$DEPLOY_USER/.ssh/authorized_keys"
+touch "/home/$DEPLOY_USER/.ssh/authorized_keys"
+grep -qxF "$PUBKEY" "/home/$DEPLOY_USER/.ssh/authorized_keys" || printf '%s\n' "$PUBKEY" >> "/home/$DEPLOY_USER/.ssh/authorized_keys"
 chown "$DEPLOY_USER:$DEPLOY_USER" "/home/$DEPLOY_USER/.ssh/authorized_keys"
 chmod 600 "/home/$DEPLOY_USER/.ssh/authorized_keys"
 install -d -m 750 -o "$DEPLOY_USER" -g "$DEPLOY_USER" /opt/atendimento
 
 # SSH só por chave
-sed -i -E 's/^#?PasswordAuthentication .*/PasswordAuthentication no/; s/^#?PermitRootLogin .*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
+install -d -m 755 /etc/ssh/sshd_config.d
+cat > /etc/ssh/sshd_config.d/00-hardening.conf <<'CONF'
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin prohibit-password
+CONF
+sshd -t
 systemctl reload ssh
 
 # Firewall: entrada só SSH. (O worker não publica portas; Docker não abre nada.)

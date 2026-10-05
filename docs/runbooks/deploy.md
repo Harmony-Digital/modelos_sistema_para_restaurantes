@@ -47,13 +47,20 @@ O worker usa o pooler de sessão (IPv4) porque o `LISTEN` do pg-boss exige sess�
 
 ## 5. Bootstrap
 
-Da máquina do dono, com o env de produção carregado (`DATABASE_URL` com credencial que consiga inserir; chaves `PHONE_ENC_KEY`/`WA_ID_PEPPER` de produção). No pnpm 11 **não há `--`**:
+Da máquina do dono, use um arquivo de env **dedicado à produção** (`.env.production-bootstrap`, fora do git, `chmod 600`) contendo exatamente:
+
+- `SUPABASE_URL` (URL do projeto de produção)
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `DATABASE_URL` (conexão direta de **administrador**)
+
+Não use `pnpm --filter @atd/db bootstrap` em produção: o script do pacote carrega o `.env` local de desenvolvimento. Rode o script diretamente com o env de produção (variáveis já exportadas no shell têm precedência sobre o arquivo, então abra um shell limpo, sem variáveis do `.env` local):
 
 ```bash
-pnpm --filter @atd/db bootstrap --restaurante "<Nome>" --dono <email> --nome-dono "<Nome>" --politica https://<domínio>/privacidade
+cd packages/db
+node --env-file=../../.env.production-bootstrap scripts/bootstrap.ts --restaurante "<Nome>" --dono <email> --nome-dono "<Nome>" --politica https://<domínio>/privacidade
 ```
 
-O comando imprime o id do restaurante (usado em `RESTAURANT_ID`). É idempotente: rodar de novo é seguro e reaproveita o dono existente.
+Confira que a saída aponta para o projeto de produção. O comando imprime o id do restaurante (usado em `RESTAURANT_ID`). É idempotente: rodar de novo é seguro e reaproveita o dono existente.
 
 ## 6. Vercel
 
@@ -87,13 +94,17 @@ App → WhatsApp → Configuration:
 Como root na VPS nova (Ubuntu), a partir de uma cópia do repositório:
 
 ```bash
-bash infra/vps/bootstrap.sh deploy "<chave pública>"
+bash infra/vps/bootstrap.sh deploy "<chave pública do deploy (CI)>" "<chave pública do admin (humano)>"
 ```
 
-Antes de fechar a sessão, abra outra e confirme o acesso por chave. Depois, copie para `/opt/atendimento`:
+Há duas chaves distintas: a **chave de admin** (sua, humana; vai para o `root` e garante que você não fique trancado) e a **chave de deploy** (par usado só pelo GitHub Actions; a privada vai no secret `VPS_SSH_KEY`). O script aborta antes de alterar o sshd se o root não tiver chave autorizada, e grava `/etc/ssh/sshd_config.d/00-hardening.conf` validado com `sshd -t`. Antes de fechar a sessão, abra outra e confirme o acesso por chave (root e deploy).
+
+Copie para `/opt/atendimento`:
 
 - `apps/worker/docker-compose.prod.yml` como `docker-compose.prod.yml`
-- `.env` com `chmod 600`, com as variáveis de `workerEnvSchema`: `DATABASE_URL` (role `worker_app`, **pooler session, porta 5432**), `OPENROUTER_API_KEY`, `AI_TRIAGE_MODELS`, `WHATSAPP_*`, `PHONE_ENC_KEY`, `WA_ID_PEPPER`, `LOG_LEVEL`, `SENTRY_DSN`.
+- `.env` (produção) com `chmod 600`, com as variáveis de `workerEnvSchema`: `DATABASE_URL` (role `worker_app`, **pooler session, porta 5432**), `OPENROUTER_API_KEY`, `AI_TRIAGE_MODELS`, `WHATSAPP_*`, `PHONE_ENC_KEY`, `WA_ID_PEPPER`, `LOG_LEVEL`, `SENTRY_DSN`.
+
+O compose exige `WORKER_IMAGE`, `IMAGE_TAG` e `ENV_FILE` (sem defaults, para nunca subir imagem ou segredos errados). O deploy de produção grava `/opt/atendimento/.deploy.env` (`WORKER_IMAGE`, `IMAGE_TAG`, `ENV_FILE=.env`) e usa `--env-file .deploy.env`.
 
 Login no registry com PAT **somente leitura** (`read:packages`):
 
@@ -101,28 +112,35 @@ Login no registry com PAT **somente leitura** (`read:packages`):
 docker login ghcr.io -u <usuário-github>
 ```
 
-Staging: mesmo diretório, com projeto e env próprios:
+**Staging** (isolamento obrigatório: projeto compose, arquivo de env e arquivo de deploy próprios; nunca o `.env` de produção):
 
 ```bash
-docker compose -p atendimento-staging --env-file .env.staging -f docker-compose.prod.yml up -d
+cd /opt/atendimento
+printf 'WORKER_IMAGE=ghcr.io/<owner>/ia-atendimento-worker\nIMAGE_TAG=<sha12>\nENV_FILE=.env.staging\n' > .deploy.staging.env
+docker compose -p atendimento-staging --env-file .deploy.staging.env -f docker-compose.prod.yml pull
+docker compose -p atendimento-staging --env-file .deploy.staging.env -f docker-compose.prod.yml up -d
 ```
 
-(Ajuste `env_file` se quiser isolar totalmente o arquivo de env do staging.)
+`.env.staging` (`chmod 600`) tem as credenciais do Supabase de staging, chaves próprias e `DATABASE_URL` de staging.
 
 ## 10. GitHub
 
-- Secrets do repositório: `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS` (saída de `ssh-keyscan <host>`).
-- Settings → Environments → criar `production` com **Required reviewers** (aprovação obrigatória). O job `deploy` só roda após a aprovação.
+- Settings → Environments → criar `production` com **Required reviewers** (aprovação obrigatória) e **Deployment branches = `main`** (somente).
+- Os quatro secrets **`VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS` devem ser Environment secrets do `production`**, não secrets do repositório. Assim só um deploy aprovado a partir da `main` os lê.
+- `VPS_KNOWN_HOSTS` = saída de `ssh-keyscan <host>`. **Compare a fingerprint** (`ssh-keygen -lf <(ssh-keyscan <host> 2>/dev/null)`) com a mostrada no console do provedor antes de salvar.
+- O workflow não publica `:latest`; cada deploy usa a tag `<sha12>`. Após o deploy, ele verifica via SSH que o container está `running` e que os logs dos últimos 60 s contêm `worker iniciado`; senão o job falha.
 
 ## 11. Rollback
 
-Na VPS, em `/opt/atendimento`:
+Na VPS, em `/opt/atendimento` (a tag antiga precisa ainda existir no GHCR):
 
 ```bash
-export WORKER_IMAGE=ghcr.io/<owner>/ia-atendimento-worker
-export IMAGE_TAG=<sha anterior>
-docker compose -f docker-compose.prod.yml up -d
+printf 'WORKER_IMAGE=ghcr.io/<owner>/ia-atendimento-worker\nIMAGE_TAG=<sha anterior>\nENV_FILE=.env\n' > .deploy.env
+docker compose --env-file .deploy.env -f docker-compose.prod.yml pull
+docker compose --env-file .deploy.env -f docker-compose.prod.yml up -d
 ```
+
+O próximo deploy normal sobrescreve `.deploy.env` com a nova tag.
 
 ## 12. Chaves de cifra
 
