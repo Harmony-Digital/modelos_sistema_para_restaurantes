@@ -93,7 +93,9 @@ export const auditLog = pgTable(
   'audit_log',
   {
     id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
-    restaurantId: restaurantFk(),
+    restaurantId: uuid('restaurant_id')
+      .notNull()
+      .references(() => restaurants.id, { onDelete: 'restrict' }),
     atorId: uuid('ator_id'),
     atorTipo: actorType('ator_tipo').notNull(),
     acao: text('acao').notNull(),

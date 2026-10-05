@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { sql as dsql } from 'drizzle-orm'
 import { getTestDb, resetDb, seedRestaurant, seedStaff } from './test-utils.ts'
 import { withRole, withUserContext, type JwtClaims } from './rls.ts'
-import { auditLog, budgetLimits, conversations, customers, messages, restaurants } from './schema/index.ts'
+import { aiRuns, auditLog, budgetLimits, conversations, customers, dataSubjectRequests, messages, restaurants, units } from './schema/index.ts'
 
 const { db, sql } = getTestDb()
 beforeEach(() => resetDb(sql))
@@ -15,7 +15,7 @@ describe('RLS', () => {
   it('toda tabela de public tem RLS habilitada', async () => {
     const rows = await sql<{ relname: string }[]>`
       select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
-       where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity`
+       where n.nspname = 'public' and c.relkind in ('r','p') and not c.relrowsecurity`
     expect(rows.map((r) => r.relname)).toEqual([])
   })
 
@@ -81,5 +81,82 @@ describe('RLS', () => {
         return tx.select().from(restaurants)
       }),
     ).rejects.toMatchObject(cause(/permission denied/))
+  })
+
+  it('authenticated não pode TRUNCATE (ignora RLS)', async () => {
+    const { restaurantId } = await seedRestaurant(db)
+    const dono = await seedStaff(db, sql, { restaurantId, papel: 'dono' })
+    await expect(
+      withUserContext(db, as(dono, 'aal2'), (tx) => tx.execute(dsql`truncate public.customers cascade`)),
+    ).rejects.toMatchObject(cause(/permission denied/))
+  })
+
+  it('service_role não altera nem apaga audit_log', async () => {
+    const { restaurantId } = await seedRestaurant(db)
+    await db.insert(auditLog).values({ restaurantId, atorTipo: 'sistema', acao: 'teste', entidade: 'x' })
+    await expect(
+      db.transaction(async (tx) => {
+        await tx.execute(dsql`set local role service_role`)
+        return tx.delete(auditLog)
+      }),
+    ).rejects.toMatchObject(cause(/permission denied/))
+  })
+
+  it('atendente não reaponta conversa para cliente de outro restaurante; muda estado', async () => {
+    const a = await seedRestaurant(db)
+    const b = await seedRestaurant(db)
+    const atendente = await seedStaff(db, sql, { restaurantId: a.restaurantId, papel: 'atendente' })
+    const [ca] = await db.insert(customers).values({ restaurantId: a.restaurantId, waIdHash: 'a', telefoneCifrado: 'x' }).returning()
+    const [cb] = await db.insert(customers).values({ restaurantId: b.restaurantId, waIdHash: 'b', telefoneCifrado: 'x' }).returning()
+    await db.insert(conversations).values({ restaurantId: a.restaurantId, customerId: ca!.id })
+    await expect(
+      withUserContext(db, as(atendente, 'aal1'), (tx) => tx.update(conversations).set({ customerId: cb!.id })),
+    ).rejects.toMatchObject(cause(/permission denied/))
+    const ok = await withUserContext(db, as(atendente, 'aal1'), (tx) =>
+      tx.update(conversations).set({ estado: 'humano' }).returning(),
+    )
+    expect(ok).toHaveLength(1)
+  })
+
+  it('dono não cria unidade em outro restaurante', async () => {
+    const a = await seedRestaurant(db)
+    const b = await seedRestaurant(db)
+    const dono = await seedStaff(db, sql, { restaurantId: a.restaurantId, papel: 'dono' })
+    await expect(
+      withUserContext(db, as(dono, 'aal2'), (tx) =>
+        tx.insert(units).values({ restaurantId: b.restaurantId, nome: 'X', slug: 'x' }),
+      ),
+    ).rejects.toMatchObject(cause(/row-level security/))
+  })
+
+  it('worker_app insere ai_runs com RETURNING e atualiza o resultado', async () => {
+    const { restaurantId } = await seedRestaurant(db)
+    await withRole(db, 'worker_app', async (tx) => {
+      const [run] = await tx.insert(aiRuns).values({ restaurantId, etapa: 'resposta', modelo: 'm', promptVersion: 'v1' }).returning({ id: aiRuns.id })
+      const upd = await tx.update(aiRuns).set({ resultado: 'ok' }).where(dsql`${aiRuns.id} = ${run!.id}`).returning({ id: aiRuns.id })
+      expect(upd).toHaveLength(1)
+    })
+  })
+
+  it('auditoria de staff exige ator_tipo staff e o próprio ator_id', async () => {
+    const { restaurantId } = await seedRestaurant(db)
+    const atendente = await seedStaff(db, sql, { restaurantId, papel: 'atendente' })
+    await expect(
+      withUserContext(db, as(atendente, 'aal1'), (tx) =>
+        tx.insert(auditLog).values({ restaurantId, atorId: atendente, atorTipo: 'sistema', acao: 'a', entidade: 'x' }),
+      ),
+    ).rejects.toMatchObject(cause(/row-level security/))
+    await withUserContext(db, as(atendente, 'aal1'), (tx) =>
+      tx.insert(auditLog).values({ restaurantId, atorId: atendente, atorTipo: 'staff', acao: 'a', entidade: 'x' }),
+    )
+  })
+
+  it('gerente não apaga data_subject_requests', async () => {
+    const { restaurantId } = await seedRestaurant(db)
+    const gerente = await seedStaff(db, sql, { restaurantId, papel: 'gerente' })
+    await db.insert(dataSubjectRequests).values({ restaurantId, tipo: 'acesso' })
+    const del = await withUserContext(db, as(gerente, 'aal2'), (tx) => tx.delete(dataSubjectRequests).returning())
+    expect(del).toHaveLength(0)
+    expect(await db.select().from(dataSubjectRequests)).toHaveLength(1)
   })
 })

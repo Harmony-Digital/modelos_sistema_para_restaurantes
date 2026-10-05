@@ -36,6 +36,20 @@
       "when": 1791203751950,
       "tag": "0004_security",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791203997339,
+      "tag": "0005_audit_restrict",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791204016159,
+      "tag": "0006_security_hardening",
+      "breakpoints": true
     }
   ]
 }
