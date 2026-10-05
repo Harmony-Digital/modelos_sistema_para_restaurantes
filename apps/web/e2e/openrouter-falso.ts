@@ -16,10 +16,16 @@ export async function iniciarOpenRouterFalso(responder: (mensagem: string) => Tr
       const responderJson = (status: number, body: unknown) =>
         res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(body))
       if (req.method !== 'POST' || req.url !== '/chat/completions') return responderJson(404, { error: { message: 'rota desconhecida' } })
-      const body = JSON.parse(corpo) as {
+      let body: {
         messages: { role: string; content: string }[]
         provider?: { data_collection?: string; zdr?: boolean }
       }
+      try {
+        body = JSON.parse(corpo) as typeof body
+      } catch {
+        return responderJson(400, { error: { message: 'corpo JSON inválido' } })
+      }
+      if (!Array.isArray(body?.messages)) return responderJson(400, { error: { message: 'messages ausente' } })
       // a política de dados da LGPD também é conferida aqui
       if (body.provider?.data_collection !== 'deny' || body.provider?.zdr !== true) {
         return responderJson(400, { error: { message: 'chamada sem data_collection deny + zdr' } })

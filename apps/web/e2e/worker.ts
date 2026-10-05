@@ -36,28 +36,45 @@ export async function iniciarWorkerE2e(openrouterUrl: string): Promise<ChildProc
   })
   // erros do worker aparecem na saída do e2e (e o pipe nunca enche e trava o processo)
   filho.stderr!.pipe(process.stderr)
-  await new Promise<void>((ok, falha) => {
-    const prazo = setTimeout(() => falha(new Error('worker do e2e não iniciou em 30 s')), 30_000)
-    filho.stdout!.on('data', (b: Buffer) => {
-      if (b.toString().includes('worker iniciado')) {
+  try {
+    await new Promise<void>((ok, falha) => {
+      const prazo = setTimeout(() => falha(new Error('worker do e2e não iniciou em 30 s')), 30_000)
+      filho.stdout!.on('data', (b: Buffer) => {
+        if (b.toString().includes('worker iniciado')) {
+          clearTimeout(prazo)
+          ok()
+        }
+      })
+      filho.once('error', (e) => {
         clearTimeout(prazo)
-        ok()
-      }
+        falha(e)
+      })
+      filho.on('exit', (codigo) => {
+        clearTimeout(prazo)
+        falha(new Error(`worker do e2e saiu com código ${codigo}`))
+      })
     })
-    filho.on('exit', (codigo) => {
-      clearTimeout(prazo)
-      falha(new Error(`worker do e2e saiu com código ${codigo}`))
-    })
-  })
+  } catch (erro) {
+    // o filho já existe: sem isso ele ficaria vivo (e com heartbeat) e bloquearia o próximo e2e
+    await pararWorkerE2e(filho)
+    throw erro
+  }
   return filho
 }
 
 export async function pararWorkerE2e(filho: ChildProcess | undefined) {
-  if (!filho || filho.exitCode !== null) return
-  await new Promise<void>((ok) => {
-    filho.once('exit', () => ok())
-    filho.kill('SIGTERM')
-  })
+  if (!filho) return
+  if (filho.exitCode === null && filho.signalCode === null) {
+    await new Promise<void>((ok) => {
+      // se o desligamento travar, força depois de 10 s
+      const forcar = setTimeout(() => filho.kill('SIGKILL'), 10_000)
+      filho.once('exit', () => {
+        clearTimeout(forcar)
+        ok()
+      })
+      filho.kill('SIGTERM')
+    })
+  }
   // o heartbeat dele ficaria "vivo" por 90 s e bloquearia o próximo e2e
   await getSql()`delete from worker_heartbeats where worker_id like ${'%-' + filho.pid}`
 }

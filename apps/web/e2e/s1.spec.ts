@@ -132,7 +132,7 @@ test('simulador com relógio no domingo 12h responde pelo horário de domingo', 
     values (${r!.id}, ${UNIDADE_RELOGIO}, ${'e2e-relogio-' + SUFIXO}, 'Rua do Relógio, 1') returning id`
   await getSql()`insert into unit_hours (restaurant_id, unit_id, weekday, turno, abre, fecha)
     values (${r!.id}, ${u!.id}, 0, 1, '11:30', '16:00')`
-  await entrarComoGestor(page)
+  const { email } = await entrarComoGestor(page)
   await abrirSimuladorLimpo(page)
   const s = simulador(page)
   await s.getByRole('button', { name: 'Simular data e hora' }).click()
@@ -142,8 +142,10 @@ test('simulador com relógio no domingo 12h responde pelo horário de domingo', 
   await perguntar(page, `está aberto agora na ${UNIDADE_RELOGIO}?`)
   await expect(s.getByText(`A unidade ${UNIDADE_RELOGIO} está aberta agora`, { exact: false })).toBeVisible({ timeout: 20_000 })
   // nada saiu pela Meta: toda saída da conversa simulada ficou "simulado"
-  const saidas = await getSql()`select m.status_envio from messages m join conversations c on c.id = m.conversation_id
-    where c.simulada and m.direcao = 'out' and m.created_at > now() - interval '5 minutes'`
+  const saidas = await getSql()`select m.status_envio from messages m
+    join conversations c on c.id = m.conversation_id join customers cu on cu.id = c.customer_id
+    where c.simulada and m.direcao = 'out'
+      and split_part(cu.wa_id_hash, ':', 2) = (select id::text from auth.users where email = ${email})`
   expect(saidas.length).toBeGreaterThan(0)
   expect(saidas.every((x) => x.status_envio === 'simulado')).toBe(true)
 })
