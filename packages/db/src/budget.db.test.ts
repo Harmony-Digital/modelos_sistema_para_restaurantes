@@ -52,8 +52,9 @@ describe('orçamento', () => {
       ),
     )
     expect(results.filter(Boolean)).toHaveLength(50)
-    const [dia] = await counters(restaurantId)
+    const [dia, mes] = await counters(restaurantId)
     expect(dia!.reservado).toBe('1.000000')
+    expect(mes!.reservado).toBe('1.000000')
   })
 
   it('liquidação troca reserva pelo custo real', async () => {
@@ -79,5 +80,50 @@ describe('orçamento', () => {
     const amanha = new Date('2026-10-06T15:00:00Z')
     expect(await reserveBudget(db, { restaurantId, scope: 'ia', amountUsd: '0.05', timeZone: TZ, now })).toBeNull()
     expect(await reserveBudget(db, { restaurantId, scope: 'ia', amountUsd: '0.05', timeZone: TZ, now: amanha })).not.toBeNull()
+  })
+
+  it('liquidar duas vezes é no-op', async () => {
+    const restaurantId = await setup('1', '10')
+    const r = await reserveBudget(db, { restaurantId, scope: 'ia', amountUsd: '0.05', timeZone: TZ, now })
+    await settleBudget(db, r!, '0.01')
+    await settleBudget(db, r!, '0.01')
+    const [dia] = await counters(restaurantId)
+    expect([dia!.reservado, dia!.gasto]).toEqual(['0.000000', '0.010000'])
+    const ledger = await db.select().from(spendLedger)
+    expect(ledger.filter((l) => l.tipo === 'liquidacao')).toHaveLength(1)
+  })
+
+  it('liquidar e depois estornar: estorno é no-op e não libera reserva alheia', async () => {
+    const restaurantId = await setup('1', '10')
+    const a = await reserveBudget(db, { restaurantId, scope: 'ia', amountUsd: '0.5', timeZone: TZ, now })
+    await reserveBudget(db, { restaurantId, scope: 'ia', amountUsd: '0.5', timeZone: TZ, now })
+    await settleBudget(db, a!, '0.1')
+    await releaseBudget(db, a!)
+    await releaseBudget(db, a!)
+    const [dia] = await counters(restaurantId)
+    expect([dia!.reservado, dia!.gasto]).toEqual(['0.500000', '0.100000'])
+    expect(await reserveBudget(db, { restaurantId, scope: 'ia', amountUsd: '0.5', timeZone: TZ, now })).toBeNull()
+  })
+
+  it('valores inválidos lançam sem escrever', async () => {
+    const restaurantId = await setup('1', '10')
+    for (const amountUsd of ['-1', '0', 'abc', '0.0000001']) {
+      await expect(reserveBudget(db, { restaurantId, scope: 'ia', amountUsd, timeZone: TZ, now })).rejects.toThrow(
+        'Valor em USD inválido',
+      )
+    }
+    const r = await reserveBudget(db, { restaurantId, scope: 'ia', amountUsd: '0.05', timeZone: TZ, now })
+    await expect(settleBudget(db, r!, '-0.01')).rejects.toThrow('Valor em USD inválido')
+    expect(await db.select().from(spendLedger)).toHaveLength(1)
+  })
+
+  it('linhas de liquidação carregam reserva_id', async () => {
+    const restaurantId = await setup('1', '10')
+    const r = await reserveBudget(db, { restaurantId, scope: 'ia', amountUsd: '0.05', timeZone: TZ, now })
+    await settleBudget(db, r!, '0.01')
+    const ledger = await db.select().from(spendLedger).orderBy(spendLedger.id)
+    expect(ledger[1]!.tipo).toBe('liquidacao')
+    expect(ledger[1]!.reservaId).toBe(r!.reservationId)
+    expect(ledger[0]!.id).toBe(r!.reservationId)
   })
 })

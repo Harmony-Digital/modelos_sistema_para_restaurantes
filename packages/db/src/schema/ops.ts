@@ -84,9 +84,16 @@ export const spendLedger = pgTable(
     tipo: ledgerKind('tipo').notNull(),
     valorUsd: usd('valor_usd').notNull(),
     ref: text('ref'),
+    reservaId: bigint('reserva_id', { mode: 'number' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('spend_ledger_created_brin').using('brin', t.createdAt)],
+  (t) => [
+    index('spend_ledger_created_brin').using('brin', t.createdAt),
+    uniqueIndex('spend_ledger_reserva_settled_uq')
+      .on(t.reservaId)
+      .where(sql`${t.tipo} in ('liquidacao','estorno')`),
+    check('spend_ledger_valor_non_negative', sql`${t.valorUsd} >= 0`),
+  ],
 )
 
 export const auditLog = pgTable(

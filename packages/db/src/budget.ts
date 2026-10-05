@@ -4,15 +4,23 @@ import type { Db } from './client.ts'
 import { budgetCounters, budgetLimits, spendLedger } from './schema/ops.ts'
 
 export type BudgetScope = 'ia' | 'whatsapp'
-export type Reservation = { restaurantId: string; scope: BudgetScope; amountUsd: string; counterIds: string[] }
+export type Reservation = { restaurantId: string; scope: BudgetScope; amountUsd: string; counterIds: string[]; reservationId: number }
 
 class NoBudget extends Error {}
+
+const USD_RE = /^\d+(\.\d{1,6})?$/
+
+/** Valida valor em USD (até 6 casas). `positive` exige > 0. Lança em valor inválido. */
+export function assertUsd(v: string, positive: boolean): void {
+  if (!USD_RE.test(v) || (positive && !/[1-9]/.test(v))) throw new Error('Valor em USD inválido')
+}
 
 /** Reserva atômica (invariante I6). Retorna null se não houver saldo ou limite configurado. */
 export async function reserveBudget(
   db: Db,
   p: { restaurantId: string; scope: BudgetScope; amountUsd: string; timeZone: string; now?: Date; ref?: string },
 ): Promise<Reservation | null> {
+  assertUsd(p.amountUsd, true)
   const starts = periodStarts(p.now ?? new Date(), p.timeZone)
   try {
     return await db.transaction(async (tx) => {
@@ -47,14 +55,23 @@ export async function reserveBudget(
         counterIds.push(rows[0]!.id)
       }
 
-      await tx.insert(spendLedger).values({
+      const [entry] = await tx
+        .insert(spendLedger)
+        .values({
+          restaurantId: p.restaurantId,
+          escopo: p.scope,
+          tipo: 'reserva',
+          valorUsd: p.amountUsd,
+          ref: p.ref ?? null,
+        })
+        .returning({ id: spendLedger.id })
+      return {
         restaurantId: p.restaurantId,
-        escopo: p.scope,
-        tipo: 'reserva',
-        valorUsd: p.amountUsd,
-        ref: p.ref ?? null,
-      })
-      return { restaurantId: p.restaurantId, scope: p.scope, amountUsd: p.amountUsd, counterIds }
+        scope: p.scope,
+        amountUsd: p.amountUsd,
+        counterIds,
+        reservationId: entry!.id,
+      }
     })
   } catch (e) {
     if (e instanceof NoBudget) return null
@@ -64,27 +81,39 @@ export async function reserveBudget(
 
 async function adjust(db: Db, r: Reservation, gastoUsd: string, tipo: 'liquidacao' | 'estorno', ref?: string) {
   await db.transaction(async (tx) => {
+    // idempotência: o índice único parcial garante uma única baixa por reserva
+    const inserted = await tx
+      .insert(spendLedger)
+      .values({
+        restaurantId: r.restaurantId,
+        escopo: r.scope,
+        tipo,
+        valorUsd: tipo === 'liquidacao' ? gastoUsd : r.amountUsd,
+        ref: ref ?? null,
+        reservaId: r.reservationId,
+      })
+      .onConflictDoNothing({
+        target: spendLedger.reservaId,
+        where: sql`tipo in ('liquidacao','estorno')`,
+      })
+      .returning({ id: spendLedger.id })
+    if (inserted.length === 0) return // já liquidada/estornada
+
     for (const id of r.counterIds) {
       // um UPDATE por linha, na ordem da reserva (dia → mes): mesma ordem de lock
       await tx
         .update(budgetCounters)
         .set({
-          reservado: sql`greatest(${budgetCounters.reservado} - ${r.amountUsd}::numeric, 0)`,
+          reservado: sql`${budgetCounters.reservado} - ${r.amountUsd}::numeric`,
           gasto: sql`${budgetCounters.gasto} + ${gastoUsd}::numeric`,
         })
         .where(eq(budgetCounters.id, id))
     }
-    await tx.insert(spendLedger).values({
-      restaurantId: r.restaurantId,
-      escopo: r.scope,
-      tipo,
-      valorUsd: tipo === 'liquidacao' ? gastoUsd : r.amountUsd,
-      ref: ref ?? null,
-    })
   })
 }
 
-export function settleBudget(db: Db, r: Reservation, actualUsd: string, ref?: string) {
+export async function settleBudget(db: Db, r: Reservation, actualUsd: string, ref?: string) {
+  assertUsd(actualUsd, false)
   return adjust(db, r, actualUsd, 'liquidacao', ref)
 }
 

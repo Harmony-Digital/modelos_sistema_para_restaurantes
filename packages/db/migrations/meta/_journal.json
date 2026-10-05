@@ -57,6 +57,13 @@
       "when": 1791204377880,
       "tag": "0007_sequences_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791205231367,
+      "tag": "0008_ledger_idempotency",
+      "breakpoints": true
     }
   ]
 }
