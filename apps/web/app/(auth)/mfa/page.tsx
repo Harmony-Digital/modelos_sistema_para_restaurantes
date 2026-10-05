@@ -1,6 +1,8 @@
 'use client'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { AuthCard } from '@/components/auth/auth-card'
+import { Field, SubmitButton, TextInput } from '@/components/form'
 import { createClient } from '@/lib/supabase/client'
 
 type Estado = { tipo: 'carregando' } | { tipo: 'cadastrar'; factorId: string; qr: string; secret: string } | { tipo: 'verificar'; factorId: string }
@@ -10,6 +12,9 @@ export default function MfaPage() {
   const [estado, setEstado] = useState<Estado>({ tipo: 'carregando' })
   const [codigo, setCodigo] = useState('')
   const [erro, setErro] = useState('')
+  const [erroCodigo, setErroCodigo] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const codigoRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const supabase = createClient()
@@ -30,38 +35,67 @@ export default function MfaPage() {
 
   async function verificar(e: React.FormEvent) {
     e.preventDefault()
-    if (estado.tipo === 'carregando') return
+    if (estado.tipo === 'carregando' || enviando) return
     setErro('')
+    setErroCodigo('')
+    if (codigo.length !== 6) {
+      setErroCodigo('Digite os 6 dígitos do código.')
+      codigoRef.current?.focus()
+      return
+    }
+    setEnviando(true)
     const supabase = createClient()
     const challenge = await supabase.auth.mfa.challenge({ factorId: estado.factorId })
-    if (challenge.error) return setErro('Falha ao gerar o desafio. Tente de novo.')
+    if (challenge.error) {
+      setEnviando(false)
+      return setErro('Falha ao gerar o desafio. Tente de novo.')
+    }
     const verify = await supabase.auth.mfa.verify({ factorId: estado.factorId, challengeId: challenge.data.id, code: codigo })
-    if (verify.error) return setErro('Código inválido ou expirado.')
+    if (verify.error) {
+      setEnviando(false)
+      setErroCodigo('Código inválido ou expirado. Confira o código atual no app.')
+      codigoRef.current?.focus()
+      return
+    }
     router.replace('/')
     router.refresh()
   }
 
   return (
-    <main className="mx-auto mt-24 max-w-sm px-4">
-      <h1 className="mb-2 text-xl font-semibold">Verificação em duas etapas</h1>
+    <AuthCard
+      title="Verificação em duas etapas"
+      description="Para proteger os dados do restaurante, donos e gerentes usam um app autenticador."
+    >
       {estado.tipo === 'cadastrar' && (
-        <div className="mb-4 text-sm">
-          <p className="mb-2">Escaneie com seu app autenticador (Google Authenticator, 1Password, Authy…):</p>
-          {/* qr_code é um data URL SVG gerado pelo Supabase */}
-          <img src={estado.qr} alt="QR code do autenticador" width={200} height={200} />
-          <p className="mt-2 break-all text-neutral-600">Ou digite a chave: {estado.secret}</p>
+        <div className="mb-6 text-sm">
+          <p className="mb-3 text-foreground">Escaneie com seu app autenticador (Google Authenticator, 1Password, Authy…):</p>
+          <div className="mx-auto w-fit rounded-md bg-white p-3">
+            {/* qr_code é um data URL SVG gerado pelo Supabase */}
+            <img src={estado.qr} alt="QR code do autenticador" width={200} height={200} />
+          </div>
+          <p className="mt-3 text-muted-foreground">Ou digite a chave:</p>
+          <p className="break-all font-mono text-foreground">{estado.secret}</p>
         </div>
       )}
       {estado.tipo !== 'carregando' && (
-        <form onSubmit={verificar} className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1 text-sm">
-            Código de 6 dígitos
-            <input value={codigo} onChange={(e) => setCodigo(e.target.value.trim())} inputMode="numeric" pattern="\d{6}" required autoComplete="one-time-code" className="rounded border px-3 py-2" />
-          </label>
-          <button className="rounded bg-neutral-900 px-3 py-2 text-white">Confirmar</button>
+        <form onSubmit={verificar} noValidate className="flex flex-col gap-5">
+          <Field id="codigo" label="Código de 6 dígitos" hint="Abra o app autenticador e digite o código atual" error={erroCodigo || undefined} required>
+            {(a) => (
+              <TextInput
+                {...a}
+                ref={codigoRef}
+                value={codigo}
+                onChange={(e) => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+              />
+            )}
+          </Field>
+          <SubmitButton pending={enviando} pendingText="Verificando…" className="w-full">Confirmar</SubmitButton>
         </form>
       )}
-      {erro && <p role="alert" className="mt-3 text-sm text-red-700">{erro}</p>}
-    </main>
+      {erro && <p role="alert" className="mt-4 text-sm font-medium text-destructive">{erro}</p>}
+    </AuthCard>
   )
 }

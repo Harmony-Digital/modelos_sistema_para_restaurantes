@@ -12,6 +12,7 @@ const config: NextConfig = {
   transpilePackages: ['@atd/config', '@atd/core', '@atd/db', '@atd/whatsapp'],
   serverExternalPackages: ['pg-boss'],
   poweredByHeader: false,
+  devIndicators: false, // o selo do dev cobre o 1º item da navegação inferior no celular (e intercepta cliques do E2E)
   agentRules: false,
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }]

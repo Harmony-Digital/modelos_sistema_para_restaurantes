@@ -23,7 +23,7 @@ Roteiro para o dono executar em **staging**, com o número de teste da Meta. Pre
 | 6 | Enviar um áudio | "Por enquanto só consigo ler mensagens de texto" | | |
 | 7 | Enviar "quero apagar meus dados" | Resposta de 15 dias; linha em `data_subject_requests` | | |
 | 8 | Baixar o limite diário de IA (**SQL B**) e perguntar algo. **Depois: restaurar o limite (SQL B) e rodar o SQL A** de novo (o modo econômico também transfere para atendente) | Resposta de modo econômico; nenhuma chamada ao OpenRouter | | |
-| 9 | Painel: entrar como dono (usuário do **C**) | Exige cadastro do autenticador; depois mostra IA Online e gasto do dia | | |
+| 9 | Painel: entrar como dono pelo **convite real** (e-mail de convite → `/auth/confirm` → "Crie sua senha"; plano B: usuário do **C**) | Exige cadastro do autenticador; depois mostra IA Online e gasto do dia | | |
 | 10 | Painel: entrar como atendente (usuário do **C**) | Entra sem MFA; não vê gasto | | |
 | 11 | Parar o worker (`docker compose stop`) | Painel mostra IA Offline em até 1 min; mensagens enviadas nesse intervalo são respondidas quando o worker volta | | |
 | 12 | Conferir Sentry e logs | Nenhum telefone ou texto de mensagem em claro | | |
@@ -60,7 +60,7 @@ update budget_limits set limite_usd = 0.000001 where escopo = 'ia' and periodo =
 update budget_limits set limite_usd = <valor anotado> where escopo = 'ia' and periodo = 'dia';
 ```
 
-**C. Usuários de teste** (passos 9 e 10). A Etapa 01 não tem tela para definir senha a partir do convite, então crie o usuário já com senha (mínimo 12 caracteres) pelo Admin API, com o env de staging (`.env.staging-bootstrap`: `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` do projeto de staging):
+**C. Usuários de teste e plano B do passo 9** (passos 9 e 10). O caminho principal do passo 9 é o **convite real**: o convidado abre o link do e-mail (`/auth/confirm`), cai em "Crie sua senha" e segue para o painel. Se o link falhar (ver observações abaixo) ou para criar atendentes de teste sem e-mail, crie o usuário já com senha (mínimo 12 caracteres) pelo Admin API, com o env de staging (`.env.staging-bootstrap`: `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` do projeto de staging):
 
 ```bash
 cd packages/db
@@ -74,7 +74,7 @@ console.log(data.user.id)
 " atendente.teste@<domínio> '<senha com 12+ caracteres>'
 ```
 
-O comando imprime o `user_id`. Para o **dono** já convidado pelo bootstrap, troque `createUser({ email, password, email_confirm: true })` por `updateUserById('<id de auth.users do dono>', { password })` para definir a senha. Em seguida, no SQL Editor de staging, vincule o usuário ao restaurante (`papel`: `atendente` ou `gerente`; o dono já foi vinculado pelo bootstrap):
+O comando imprime o `user_id`. Para o **dono** já convidado pelo bootstrap, troque `createUser({ email, password, email_confirm: true })` por `updateUserById('<id de auth.users do dono>', { password, email_confirm: true })` para definir a senha (sem `email_confirm: true` o dono convidado não entra no Supabase hospedado). Em seguida, no SQL Editor de staging, vincule o usuário ao restaurante (`papel`: `atendente` ou `gerente`; o dono já foi vinculado pelo bootstrap):
 
 ```sql
 insert into staff (user_id, restaurant_id, nome, papel)
@@ -90,3 +90,9 @@ values ('<user_id impresso>', (select id from restaurants limit 1), 'Atendente T
 ## Aprovação
 
 Aprovado por: ____________________ Data: ___/___/______
+
+## Observações sobre o convite por e-mail
+
+- Cole o conteúdo de `supabase/templates/invite.html` em Authentication → Email Templates → **Invite user**; Site URL e Redirect URLs devem apontar para o domínio do ambiente (incluindo `/auth/confirm`).
+- A validade do link/OTP configurada no painel do Supabase precisa coincidir com o "1 hora" escrito no e-mail de convite e em `/auth/erro`; senão, ajuste o painel ou o texto.
+- Scanners de link de e-mail corporativo (ex.: Outlook Safe Links) podem consumir o link de uso único ao fazer GET. Se o convidado cair em "Link inválido" logo ao clicar, reenvie o convite. Uma página intermediária de "clique para confirmar" é um acompanhamento conhecido.

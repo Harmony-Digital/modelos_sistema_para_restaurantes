@@ -415,3 +415,16 @@ Sentry (web + worker) com scrub de PII; logs JSON; `worker_heartbeats` (alerta s
 | P5 | Revisão jurídica: política, LIA, RIPD | Dono + jurídico | Antes do go-live (Etapa 09) |
 | P6 | Modelos de IA (triagem, resposta, STT, ingestão) | Decidido por evals | Etapas 01/02/06/07 |
 | P7 | Design system | Dono + Claude | Etapa 02 |
+
+---
+
+## Adendo — Etapa 02 (05/10/2026)
+
+Aprovado em [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-05-etapa-02-s1-design.md); prevalece sobre as seções citadas abaixo.
+- **§4.2–4.4 (S1):** sem geração livre. A triagem extrai uma **lista de itens** (até 5 por mensagem); resolução e composição são **determinísticas** a partir do banco, com modelos de resposta editáveis; endereço também como mensagem de localização; unidade ambígua com > 3 unidades ⇒ lista interativa + pergunta pendente. Ferramentas com LLM permanecem previstas para S4 e para um modo híbrido futuro.
+- **Lacunas:** item sem dado ⇒ resposta honesta + registro em `knowledge_gaps` (pergunta mascarada) ⇒ gerente responde no painel ⇒ vira fato. Indicador **% respondido pela IA**. Lacuna não transfere para humano.
+- **§3.1:** `units` completa (endereço, lat/lng, maps_url, telefone, apelidos, ordem); `unit_hour_exceptions.turnos jsonb`; `restaurants.politica_feriado` (`normal`/`fechado`/`como_domingo`); `knowledge_facts.exemplos`; tabelas `reply_templates` e `knowledge_gaps`; colunas `conversations.pendente`, `simulada`/`simulado`, `messages.payload`. Feriados nacionais por função pura (sem tabela). Permissão por unidade via `app.can_access_unit`.
+- **§2.1:** formulários com React Hook Form + Zod compartilhado; design system com tokens da Harmony Digital, **tema escuro padrão** e claro opcional, celular primeiro.
+- **Simulador de WhatsApp** no painel: roda o pipeline real com adaptador de canal `simulador`, relógio injetável e isolamento (`simulada`), sujeito ao teto de gasto.
+
+- **Painel — gastos (pedido do dono na homologação do 02-A, 05/10/2026):** a tela Início mostra a dono/gerente um quadro **Gastos** com **IA (OpenRouter)** e **WhatsApp (API oficial)** separados, **hoje** e **no mês**, e o total, lidos de `budget_counters` (escopos `ia` e `whatsapp`) no fuso do restaurante; atendente não vê custos. Valores em USD (4 casas abaixo de US$ 1). O gasto do WhatsApp só sobe com mensagens cobradas pela Meta (templates iniciados pela empresa); respostas dentro da janela de 24 h aberta pelo cliente são gratuitas. Telas de limites e relatórios continuam na Etapa 08.

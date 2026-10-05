@@ -7,6 +7,8 @@
 
 ## Onde paramos
 
+- **05/10/2026** — Homologação local do 02-A aprovada pelo dono, com dois ajustes: cartões da Início sem vazar no celular e quadro **Gastos** (IA e WhatsApp, hoje e no mês). Repositório publicado em `Harmony-Digital/modelos_sistema_para_restaurantes` (branches `main`, `etapa-01-fundacao`, `etapa-02-s1`); PRs abertos para a `main` — mesclar primeiro o da Etapa 01. Próximo: plano 02-B.
+- **05/10/2026** — Plano 02-A (design system, navegação, formulários, convite/definir senha, Devolver à IA, casca do simulador) implementado; projeto Playwright `celular` com 15 testes verdes e docs da Etapa 01 fechados. Revisão final da branch feita (sem críticos) e leva de correção aplicada (`d10cfff..9ec0da2`; `pnpm check` com 427 testes). Próximo: plano 02-B (dados por unidade, feriados, resolução, triage-v2, lacunas, evals).
 - **05/10/2026** — Revisão final da branch inteira feita (sem críticos) e uma leva de correção aplicada (até `d600d25`; `pnpm check` com 250 testes em 29 arquivos). Ficaram 2 correções de documentação (itens abaixo, na Etapa 01). **Repositório no GitHub ainda não existe** (sem permissão na organização) — procedimento em [docs/runbooks/publicar-repositorio.md](docs/runbooks/publicar-repositorio.md); backup em bundle local. Registro completo da execução em [docs/historico/etapa-01-ledger.md](docs/historico/etapa-01-ledger.md). Próximo: refinamento da Etapa 02 (em paralelo à publicação, staging e homologação).
 - **05/10/2026** — Etapa 01 **implementada e revisada tarefa a tarefa** (`etapa-01-fundacao`, 683bf9c..77dab37; `pnpm check` verde com 240 testes em 27 arquivos; e2e do web 4/4). Roteiro de homologação em [docs/homologacao/etapa-01.md](docs/homologacao/etapa-01.md). Próximo: deploy em staging (docs/runbooks/deploy.md) + homologação do dono; depois refinamento da Etapa 02, incluindo o design system.
 - **05/10/2026** — Etapa 01 (arquitetura e stack) **definida e aprovada**; PRD v1.0, PLAN e CLAUDE.md escritos; **plano detalhado da Etapa 01 escrito** em [docs/plans/etapa-01-fundacao.md](docs/plans/etapa-01-fundacao.md) (21 tarefas). Próximo passo: revisão do plano pelo dono e escolha do modo de execução; depois Task 1.
@@ -62,18 +64,19 @@ Ler CLAUDE.md → este arquivo → PRD.md → plano detalhado da etapa corrente.
 - [ ] Homologação do dono — pendente: roteiro em [docs/homologacao/etapa-01.md](docs/homologacao/etapa-01.md) pronto; depende de staging + número de teste Meta + key OpenRouter
 
 ### Pendências que fecham a Etapa 01
-- [ ] Doc: `docs/homologacao/etapa-01.md` passo 9 — usar `updateUserById(id, { password, email_confirm: true })` (sem isso o dono convidado não entra no Supabase hospedado)
-- [ ] Doc: `docs/runbooks/deploy.md` "Release regular" — desligar o deploy automático de produção da Vercel na `main` (produção só via promoção, depois da migration)
-- [ ] Publicar o repositório (`docs/runbooks/publicar-repositorio.md`) e abrir o PR `etapa-01-fundacao → main`
-- [ ] Página para o usuário convidado definir a senha (hoje contornado pela Admin API) — candidata à Etapa 02
+- [x] (05/10/2026, Task 13) Doc: `docs/homologacao/etapa-01.md` passo 9 — usar `updateUserById(id, { password, email_confirm: true })` (sem isso o dono convidado não entra no Supabase hospedado)
+- [x] (05/10/2026, Task 13) Doc: `docs/runbooks/deploy.md` "Release regular" — desligar o deploy automático de produção da Vercel na `main` (produção só via promoção, depois da migration)
+- [x] Publicar o repositório (`docs/runbooks/publicar-repositorio.md`) e abrir o PR `etapa-01-fundacao → main` — 05/10/2026, [Harmony-Digital/modelos_sistema_para_restaurantes](https://github.com/Harmony-Digital/modelos_sistema_para_restaurantes)
+- [x] Página para o usuário convidado definir a senha — 05/10/2026 (Task 10 do 02-A, `/definir-senha`; E2E em `apps/web/e2e/convite.spec.ts`)
 
-## Etapa 02 — Horários, funcionamento e unidades (S1)
-- [ ] Refinamento (inclui **definição do design system**)
-- [ ] Plano detalhado
-- [ ] CRUD unidades, horários, exceções, fatos (painel)
-- [ ] Tools `listar_unidades`, `horarios_unidade`, `buscar_info`; "aberto agora" com fuso/feriado/virada de dia
-- [ ] Prompt v1 + evals S1 + escolha de modelos por evals
-- [ ] Homologação
+## Etapa 02 — Horários, funcionamento e unidades (S1) + design system
+Spec aprovada: [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-05-etapa-02-s1-design.md)
+- [x] Refinamento (abordagem A: IA extrai lista de itens, código responde; lacunas; design system Harmony escuro; simulador de WhatsApp; formulários componentizados) — 05/10/2026
+- [x] Plano 02-A (05/10/2026; commits d10cfff..9ec0da2; `pnpm check` verde com 427 testes em 52 arquivos; e2e celular 15/15; revisão final sem críticos) — design system, layout/navegação, componentes de formulário, Definir senha, Devolver à IA, casca do simulador, docs pendentes da Etapa 01 — plano escrito em [docs/plans/etapa-02a-design-system.md](docs/plans/etapa-02a-design-system.md) (13 tarefas). Pendentes herdados: scanners de e-mail podem consumir o link de convite (página intermediária de confirmação é acompanhamento), validade do OTP no painel Supabase = 1 h
+- [x] Ajustes da homologação do 02-A: cartões da tela Início sem vazar no celular; quadro **Gastos** com IA e WhatsApp (API oficial), hoje e no mês — 05/10/2026 (ver commit "Mostra gastos de IA e do WhatsApp…")
+- [ ] Plano 02-B — dados + RLS por unidade, feriados, resolução/composição, triage-v2, lacunas, localização/lista, evals e escolha de modelo
+- [ ] Plano 02-C — telas Unidades/Respostas/Início, simulador ligado ao pipeline real, E2E
+- [ ] Homologação do dono (simulador + celular)
 
 ## Etapa 03 — Avisos de presença (S2)
 - [ ] Refinamento · Plano detalhado
