@@ -70,7 +70,7 @@ Ler CLAUDE.md → este arquivo → PRD.md → plano detalhado da etapa corrente.
 ## Etapa 02 — Horários, funcionamento e unidades (S1) + design system
 Spec aprovada: [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-05-etapa-02-s1-design.md)
 - [x] Refinamento (abordagem A: IA extrai lista de itens, código responde; lacunas; design system Harmony escuro; simulador de WhatsApp; formulários componentizados) — 05/10/2026
-- [ ] Plano 02-A — design system, layout/navegação, componentes de formulário, Definir senha, Devolver à IA, casca do simulador, docs pendentes da Etapa 01
+- [ ] Plano 02-A — design system, layout/navegação, componentes de formulário, Definir senha, Devolver à IA, casca do simulador, docs pendentes da Etapa 01 — plano escrito em [docs/plans/etapa-02a-design-system.md](docs/plans/etapa-02a-design-system.md) (13 tarefas)
 - [ ] Plano 02-B — dados + RLS por unidade, feriados, resolução/composição, triage-v2, lacunas, localização/lista, evals e escolha de modelo
 - [ ] Plano 02-C — telas Unidades/Respostas/Início, simulador ligado ao pipeline real, E2E
 - [ ] Homologação do dono (simulador + celular)
