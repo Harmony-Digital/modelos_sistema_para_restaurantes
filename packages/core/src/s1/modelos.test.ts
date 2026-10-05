@@ -61,6 +61,11 @@ describe('modelos', () => {
     expect(validarModelo('lacuna', '   ')).toBe('Escreva o texto do modelo.')
     expect(validarModelo('lacuna', 'x'.repeat(1001))).toBe('Use no máximo 1000 caracteres.')
   })
+  it('recusa variável com espaço e variável essencial ausente', () => {
+    expect(validarModelo('aberto_sim', 'A { unidade } fecha {fecha}')).toBe('Escreva as variáveis sem espaços, como {unidade}.')
+    expect(validarModelo('horario_dia', '{quando}, abrimos.')).toBe('Inclua {turnos} no texto: é ali que entra a informação.')
+    expect(validarModelo('horario_dia', '{quando}: {turnos}')).toBeNull() // {unidade} é opcional
+  })
 })
 
 describe('endereço', () => {

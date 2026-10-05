@@ -38,9 +38,12 @@ export function renderModelo(
   return base.replace(VARIAVEL, (todo, nome: string) => (Object.hasOwn(vars, nome) ? vars[nome]! : todo))
 }
 
+const VARIAVEL_COM_ESPACO = /\{\s+\w+\s*\}|\{\w+\s+\}/
+
 export function validarModelo(chave: ChaveModelo, texto: string): string | null {
   if (!texto.trim()) return 'Escreva o texto do modelo.'
   if (texto.length > 1000) return 'Use no máximo 1000 caracteres.'
+  if (VARIAVEL_COM_ESPACO.test(texto)) return 'Escreva as variáveis sem espaços, como {unidade}.'
   const permitidas: readonly string[] = MODELOS_S1[chave].variaveis
   for (const [, nome] of texto.matchAll(VARIAVEL)) {
     if (!permitidas.includes(nome!)) {
@@ -48,6 +51,9 @@ export function validarModelo(chave: ChaveModelo, texto: string): string | null 
       return `A variável {${nome}} não existe neste modelo. ${uso}`
     }
   }
+  // {unidade} pode sair (resposta de uma unidade só); as demais carregam a informação
+  const faltando = permitidas.find((v) => v !== 'unidade' && !texto.includes(`{${v}}`))
+  if (faltando) return `Inclua {${faltando}} no texto: é ali que entra a informação.`
   return null
 }
 
