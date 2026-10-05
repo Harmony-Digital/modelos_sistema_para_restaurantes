@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { copySessionTo } from './lib/session-copy.ts'
 
-const PUBLIC_PATHS = ['/login', '/privacidade']
+const PUBLIC_PATHS = ['/login', '/privacidade', '/auth/confirm', '/auth/erro']
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request })
