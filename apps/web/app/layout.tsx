@@ -1,12 +1,28 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
+import { cookies } from 'next/headers'
+import { DM_Sans, JetBrains_Mono, Sora } from 'next/font/google'
+import { dataThemeFor, parseTema, THEME_COOKIE } from '@/lib/theme'
 import './globals.css'
 
-export const metadata: Metadata = { title: 'Atendimento IA', robots: { index: false, follow: false } }
+const sora = Sora({ subsets: ['latin'], display: 'swap', variable: '--font-sora' })
+const dmSans = DM_Sans({ subsets: ['latin'], display: 'swap', variable: '--font-dm-sans' })
+const jetbrains = JetBrains_Mono({ subsets: ['latin'], display: 'swap', variable: '--font-jetbrains' })
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export const metadata: Metadata = { title: 'Atendimento IA', robots: { index: false, follow: false } }
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: [
+    { media: '(prefers-color-scheme: dark)', color: '#0F1322' },
+    { media: '(prefers-color-scheme: light)', color: '#FAF8F4' },
+  ],
+}
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const tema = parseTema((await cookies()).get(THEME_COOKIE)?.value)
   return (
-    <html lang="pt-BR">
-      <body className="min-h-dvh bg-neutral-50 text-neutral-900 antialiased">{children}</body>
+    <html lang="pt-BR" data-theme={dataThemeFor(tema)} className={`${sora.variable} ${dmSans.variable} ${jetbrains.variable}`}>
+      <body className="min-h-dvh">{children}</body>
     </html>
   )
 }

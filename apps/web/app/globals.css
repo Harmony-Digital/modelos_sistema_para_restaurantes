@@ -1,1 +1,107 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* Tema escuro (padrão) — paleta Harmony Digital, contraste medido em design/contrast.test.ts */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #0F1322;
+  --foreground: #C9CCD6;
+  --card: #1A2036;
+  --card-foreground: #C9CCD6;
+  --popover: #1A2036;
+  --popover-foreground: #C9CCD6;
+  --primary: #F28C1D;
+  --primary-foreground: #151A2D;
+  --secondary: #2B3040;
+  --secondary-foreground: #C9CCD6;
+  --muted: #151A2D;
+  --muted-foreground: #8E94A6;
+  --accent: #2B3040;
+  --accent-foreground: #C9CCD6;
+  --destructive: #F87171;
+  --destructive-foreground: #0F1322;
+  --border: #2B3040;
+  --input: #6B7186;
+  --ring: #F28C1D;
+  --link: #F7B265;
+  --success: #4ADE80;
+  --warning: #FBBF24;
+  --info: #7DB3F5;
+  --radius: 14px;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --background: #FAF8F4;
+  --foreground: #151A2D;
+  --card: #FFFEFB;
+  --card-foreground: #151A2D;
+  --popover: #FFFEFB;
+  --popover-foreground: #151A2D;
+  --primary: #F28C1D;
+  --primary-foreground: #151A2D;
+  --secondary: #F3F0EA;
+  --secondary-foreground: #151A2D;
+  --muted: #F3F0EA;
+  --muted-foreground: #4A5061;
+  --accent: #F3F0EA;
+  --accent-foreground: #151A2D;
+  --destructive: #B42318;
+  --destructive-foreground: #FFFFFF;
+  --border: #E7E2D9;
+  --input: #8A8377;
+  --ring: #9E5306;
+  --link: #9E5306;
+  --success: #1F7A4D;
+  --warning: #8A5A00;
+  --info: #1D4E89;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-link: var(--link);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --radius-sm: 8px;
+  --radius-md: var(--radius);
+  --radius-lg: 22px;
+  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+  --ease-out: cubic-bezier(.22, 1, .36, 1);
+}
+
+@layer base {
+  * { @apply border-border; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { @apply bg-background text-foreground font-sans antialiased; }
+  h1, h2, h3 { @apply font-display; }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  a { color: var(--link); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
