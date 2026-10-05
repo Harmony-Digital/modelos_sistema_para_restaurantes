@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { confirmEmailLink, isInviteSession, safeNext } from './auth-confirm.ts'
+import { confirmEmailLink, isInviteSession, podeDefinirSenha, safeNext } from './auth-confirm.ts'
 
 describe('safeNext', () => {
   it.each([
@@ -56,5 +56,19 @@ describe('isInviteSession', () => {
     expect(isInviteSession(null)).toBe(false)
     expect(isInviteSession({ amr: 'otp' })).toBe(false)
     expect(isInviteSession({ amr: [null, 'otp'] })).toBe(false)
+  })
+})
+
+describe('podeDefinirSenha', () => {
+  const otp = { amr: [{ method: 'otp' }] }
+  it.each([
+    ['aal1', 'aal1', true],
+    ['aal1', 'aal2', false],
+    ['aal2', 'aal2', true],
+  ])('otp com %s/%s → %s', (currentLevel, nextLevel, esperado) => {
+    expect(podeDefinirSenha(otp, { currentLevel, nextLevel })).toBe(esperado)
+  })
+  it('login por senha nunca pode', () => {
+    expect(podeDefinirSenha({ amr: [{ method: 'password' }] }, { currentLevel: 'aal1', nextLevel: 'aal1' })).toBe(false)
   })
 })

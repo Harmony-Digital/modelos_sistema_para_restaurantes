@@ -1,7 +1,7 @@
 'use server'
 import { redirect } from 'next/navigation'
 import { actionErrorFromZod, type ActionResult } from '@/lib/action-result'
-import { isInviteSession } from '@/lib/auth-confirm'
+import { isInviteSession, podeDefinirSenha } from '@/lib/auth-confirm'
 import { createClient } from '@/lib/supabase/server'
 import { definirSenhaSchema } from './schema'
 
@@ -23,6 +23,13 @@ export async function definirSenha(input: { senha: string; confirmacao: string }
   }
   if (!claims?.sub) redirect('/auth/erro?motivo=link')
   if (!isInviteSession(claims)) return { ok: false, formError: LINK_INVALIDO }
+  try {
+    const { data: aal, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+    if (error || !aal) return { ok: false, formError: GENERICO }
+    if (!podeDefinirSenha(claims, aal)) return { ok: false, formError: LINK_INVALIDO }
+  } catch {
+    return { ok: false, formError: GENERICO }
+  }
 
   const parsed = definirSenhaSchema.safeParse(input)
   if (!parsed.success) return actionErrorFromZod(parsed.error)
