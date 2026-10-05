@@ -48,4 +48,22 @@ describe('resolverData', () => {
     expect(r('semana retrasada')).toEqual({ ok: false })
     expect(r('ontem')).toEqual({ ok: false })
   })
+  it('ISO, números dentro de números e data por extenso com ano', () => {
+    expect(r('2026-10-12')).toEqual(ok('2026-10-12'))
+    expect(r('2026-02-30')).toEqual({ ok: false })
+    expect(r('12/10')).toEqual(ok('2026-10-12'))
+    expect(r('12 de outubro de 2027')).toEqual(ok('2027-10-12'))
+  })
+  it('dia da semana: nomes completos no texto, abreviação só sozinha', () => {
+    expect(r('vai ter música sábado')).toEqual(ok('2026-10-10'))
+    expect(r('dmg')).toEqual(ok('2026-10-11'))
+    expect(r('sab')).toEqual(ok('2026-10-10'))
+    expect(r('no sab')).toEqual(ok('2026-10-10'))
+    expect(r('ter')).toEqual({ ok: false })
+    expect(r('terça')).toEqual(ok('2026-10-06'))
+  })
+  it('fim de semana a partir de sábado ou domingo é hoje', () => {
+    expect(r('fim de semana', '2026-10-11')).toEqual(ok('2026-10-11'))
+    expect(r('fim de semana', '2026-10-10')).toEqual(ok('2026-10-10'))
+  })
 })

@@ -42,6 +42,7 @@ describe('encontrarUnidade', () => {
     expect(encontrarUnidade('asa', unidades)).toBeNull()
     expect(encontrarUnidade('sul', unidades)).toBeNull()
     expect(encontrarUnidade('centro', unidades)).toBeNull()
+    expect(encontrarUnidade('lago norte', unidades)).toBeNull()
     expect(encontrarUnidade(null, unidades)).toBeNull()
     expect(encontrarUnidade('   ', unidades)).toBeNull()
   })
@@ -65,6 +66,11 @@ describe('encontrarFato', () => {
     ]
     expect(id(encontrarFato('estacionamento', dois, 'as'))).toBe('da-as')
     expect(id(encontrarFato('estacionamento', dois, null))).toBe('geral')
+  })
+  it('palavras genéricas não casam por contenção', () => {
+    expect(encontrarFato('tem', fatos, null)).toBeNull()
+    expect(encontrarFato('pode', fatos, null)).toBeNull()
+    expect(id(encontrarFato('cachorro', fatos, null))).toBe('pet')
   })
   it('sem correspondência ⇒ null', () => {
     expect(encontrarFato('area kids', fatos, null)).toBeNull()

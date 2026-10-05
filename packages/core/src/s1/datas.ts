@@ -6,11 +6,15 @@ export type ResultadoData = { ok: true; data: DataIso } | { ok: false }
 
 const FALHA: ResultadoData = { ok: false }
 
-// inclui abreviações comuns no WhatsApp ("dmg", "sab", "qua")
-const DIAS_SEMANA: readonly [RegExp, number][] = [
-  [/\b(domingo|dom|dmg)\b/, 0], [/\b(segunda|seg)\b/, 1], [/\b(terca|ter)\b/, 2], [/\b(quarta|qua|qrt)\b/, 3],
-  [/\b(quinta|qui|qnt)\b/, 4], [/\b(sexta|sex)\b/, 5], [/\b(sabado|sab|sbd)\b/, 6],
+const DIAS_COMPLETOS: readonly [RegExp, number][] = [
+  [/\bdomingo\b/, 0], [/\bsegunda\b/, 1], [/\bterca\b/, 2], [/\bquarta\b/, 3],
+  [/\bquinta\b/, 4], [/\bsexta\b/, 5], [/\bsabado\b/, 6],
 ]
+
+// abreviações comuns no WhatsApp: só valem quando são a mensagem inteira ("ter" é verbo, fora)
+const DIAS_ABREVIADOS: Readonly<Record<string, number>> = {
+  dom: 0, dmg: 0, seg: 1, qua: 3, qrt: 3, qui: 4, qnt: 4, sex: 5, sab: 6, sbd: 6,
+}
 
 const MESES: Record<string, number> = {
   janeiro: 1, fevereiro: 2, marco: 3, abril: 4, maio: 5, junho: 6,
@@ -74,15 +78,18 @@ export function resolverData(texto: string | null, hoje: DataIso, feriados: read
   if (/\bferiados?\b/.test(t)) return proximoFeriado(feriados, hoje)
 
   // "/" e "-" somem na normalização: datas numéricas são lidas do texto bruto
-  const num = /(\d{1,2})\s*[/.-]\s*(\d{1,2})(?:\s*[/.-]\s*(\d{4}|\d{2}))?/.exec(bruto)
+  const iso = /(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)/.exec(bruto)
+  if (iso) return comAno(Number(iso[3]), Number(iso[2]), Number(iso[1]), hoje)
+  const num = /(?<!\d)(\d{1,2})\s*[/.-]\s*(\d{1,2})(?:\s*[/.-]\s*(\d{4}|\d{2}))?(?!\d)/.exec(bruto)
   if (num) return comAno(Number(num[1]), Number(num[2]), num[3] ? Number(num[3]) : null, hoje)
-  const extenso = /\b(\d{1,2}|primeiro)\s+de\s+(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/.exec(t)
-  if (extenso) return comAno(extenso[1] === 'primeiro' ? 1 : Number(extenso[1]), MESES[extenso[2]!]!, null, hoje)
+  const extenso = /\b(\d{1,2}|primeiro)\s+de\s+(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)(?:\s+de\s+(\d{4}))?\b/.exec(t)
+  if (extenso) return comAno(extenso[1] === 'primeiro' ? 1 : Number(extenso[1]), MESES[extenso[2]!]!, extenso[3] ? Number(extenso[3]) : null, hoje)
 
-  for (const [re, dia] of DIAS_SEMANA) {
-    if (re.test(t)) return { ok: true, data: somarDias(hoje, (dia - diaDaSemana(hoje) + 7) % 7) }
-  }
-  if (/\bfim de semana\b/.test(t)) return { ok: true, data: somarDias(hoje, (6 - diaDaSemana(hoje) + 7) % 7) }
+  const proximo = (dia: number): ResultadoData => ({ ok: true, data: somarDias(hoje, (dia - diaDaSemana(hoje) + 7) % 7) })
+  for (const [re, dia] of DIAS_COMPLETOS) if (re.test(t)) return proximo(dia)
+  const abrev = DIAS_ABREVIADOS[t.replace(/^((no|na|nesse|nessa|neste|nesta|proximo|proxima|dia)\s+)+/, '')]
+  if (abrev !== undefined) return proximo(abrev)
+  if (/\bfim de semana\b/.test(t)) return diaDaSemana(hoje) === 0 ? { ok: true, data: hoje } : proximo(6)
 
   const soDia = /^(?:dia\s+)?(\d{1,2})$/.exec(t) ?? /\bdia\s+(\d{1,2})\b/.exec(t)
   if (soDia) {

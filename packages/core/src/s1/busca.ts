@@ -28,9 +28,30 @@ const limpar = (s: string) => normalizeText(s).replace(PREFIXOS, '').trim()
 /** `alvo` aparece em `texto` como palavras inteiras */
 const contem = (texto: string, alvo: string) => alvo !== '' && ` ${texto} `.includes(` ${alvo} `)
 
+/** distância de edição (Levenshtein) entre duas palavras */
+function distancia(a: string, b: string): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j)
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i]
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(prev[j]! + 1, cur[j - 1]! + 1, prev[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1))
+    }
+    prev = cur
+  }
+  return prev[b.length]!
+}
+
+/** toda palavra (≥ 3 letras) do texto está a no máximo 1 edição de alguma palavra do nome */
+function palavrasProximas(texto: string, nome: string): boolean {
+  const doNome = nome.split(' ')
+  return texto.split(' ').filter((w) => w.length >= 3).every((w) => doNome.some((p) => distancia(w, p) <= 1))
+}
+
+const PALAVRAS_GENERICAS = new Set(['tem', 'pode', 'qual', 'quais', 'como', 'onde', 'voces', 'vcs', 'para', 'pra', 'com', 'uma', 'um', 'que', 'aqui', 'ai', 'ter', 'ha', 'sim', 'nao'])
+
 function pontuar(texto: string, rotulo: string): number {
   if (contem(texto, rotulo)) return 1
-  if (texto.length >= 3 && contem(rotulo, texto)) return 1
+  if (texto.length >= 3 && !PALAVRAS_GENERICAS.has(texto) && contem(rotulo, texto)) return 1
   return similaridade(texto, rotulo)
 }
 
@@ -45,7 +66,7 @@ export function encontrarUnidade<U extends { id: string; nome: string; apelidos:
   // "asa" está dentro de "asa sul" e de "asa norte": ambíguo
   if (unidades.filter((u) => nomes(u).some((n) => contem(n, t) && n !== t)).length >= 2) return null
   const ranking = unidades
-    .map((u) => ({ u, s: Math.max(...nomes(u).map((n) => (contem(t, n) ? 1 : similaridade(t, n)))) }))
+    .map((u) => ({ u, s: Math.max(...nomes(u).map((n) => (contem(t, n) ? 1 : t.includes(' ') && !palavrasProximas(t, n) ? 0 : similaridade(t, n)))) }))
     .sort((a, b) => b.s - a.s)
   const [p, q] = ranking
   if (!p || p.s < LIMIAR_UNIDADE) return null
