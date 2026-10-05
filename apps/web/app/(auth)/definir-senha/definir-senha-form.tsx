@@ -14,7 +14,7 @@ export function DefinirSenhaForm(props: { action: (input: { senha: string; confi
     <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5">
       <FormError form={form} />
       <Field id="senha" label="Nova senha" hint="Pelo menos 12 caracteres, misturando letras e números" error={errors.senha?.message} required>
-        {(a) => <PasswordInput {...a} autoComplete="new-password" placeholder="Ex.: Restaurante2026" {...form.register('senha')} />}
+        {(a) => <PasswordInput {...a} autoComplete="new-password" placeholder="Mínimo de 12 caracteres, com letras e números" {...form.register('senha')} />}
       </Field>
       <Field id="confirmacao" label="Confirme a senha" error={errors.confirmacao?.message} required>
         {(a) => <PasswordInput {...a} autoComplete="new-password" placeholder="Digite a mesma senha" {...form.register('confirmacao')} />}

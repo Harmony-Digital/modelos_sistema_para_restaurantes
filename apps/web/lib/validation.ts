@@ -12,6 +12,7 @@ export const senhaLogin = z.string().min(1, 'Informe a senha')
 export const senhaNova = z
   .string()
   .min(12, 'Use pelo menos 12 caracteres')
+  .max(72, 'Use no máximo 72 caracteres')
   .refine((v) => /[A-Za-zÀ-ÿ]/.test(v) && /\d/.test(v), 'Misture letras e números (ex.: Restaurante2026)')
 
 export const hora = z

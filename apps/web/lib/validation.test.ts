@@ -12,6 +12,12 @@ describe('validação compartilhada', () => {
     expect(senhaNova.safeParse('somenteletrasaqui').success).toBe(false)
     expect(senhaNova.safeParse('Restaurante2026').success).toBe(true)
   })
+  it('senha nova aceita no máximo 72 caracteres', () => {
+    expect(senhaNova.safeParse('a1'.repeat(36)).success).toBe(true)
+    const r = senhaNova.safeParse('a1'.repeat(36) + 'b')
+    expect(r.success).toBe(false)
+    expect(r.error!.issues[0]!.message).toBe('Use no máximo 72 caracteres')
+  })
   it.each([['11:30', true], ['23:59', true], ['24:00', false], ['9:00', false], ['11h30', false]])('hora %s', (v, ok) => {
     expect(hora.safeParse(v).success).toBe(ok)
   })
