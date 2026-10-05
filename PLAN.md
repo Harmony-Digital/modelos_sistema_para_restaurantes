@@ -74,7 +74,7 @@ Spec aprovada: [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-
 - [x] Refinamento (abordagem A: IA extrai lista de itens, código responde; lacunas; design system Harmony escuro; simulador de WhatsApp; formulários componentizados) — 05/10/2026
 - [x] Plano 02-A (05/10/2026; commits d10cfff..9ec0da2; `pnpm check` verde com 427 testes em 52 arquivos; e2e celular 15/15; revisão final sem críticos) — design system, layout/navegação, componentes de formulário, Definir senha, Devolver à IA, casca do simulador, docs pendentes da Etapa 01 — plano escrito em [docs/plans/etapa-02a-design-system.md](docs/plans/etapa-02a-design-system.md) (13 tarefas). Pendentes herdados: scanners de e-mail podem consumir o link de convite (página intermediária de confirmação é acompanhamento), validade do OTP no painel Supabase = 1 h
 - [x] Ajustes da homologação do 02-A: cartões da tela Início sem vazar no celular; quadro **Gastos** com IA e WhatsApp (API oficial), hoje e no mês — 05/10/2026 (ver commit "Mostra gastos de IA e do WhatsApp…")
-- [ ] Plano 02-B — dados + RLS por unidade, feriados, resolução/composição, triage-v2, lacunas, localização/lista, evals e escolha de modelo
+- [ ] Plano 02-B — dados + RLS por unidade, feriados, resolução/composição, triage-v2, lacunas, localização/lista, evals e escolha de modelo — plano escrito em [docs/plans/etapa-02b-s1-resolucao.md](docs/plans/etapa-02b-s1-resolucao.md) (14 tarefas; código puro validado antes: 166 testes, 101 casos de avaliação)
 - [ ] Plano 02-C — telas Unidades/Respostas/Início, simulador ligado ao pipeline real, E2E
 - [ ] Homologação do dono (simulador + celular)
 
