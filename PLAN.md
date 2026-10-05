@@ -67,13 +67,13 @@ Ler CLAUDE.md → este arquivo → PRD.md → plano detalhado da etapa corrente.
 - [ ] Publicar o repositório (`docs/runbooks/publicar-repositorio.md`) e abrir o PR `etapa-01-fundacao → main`
 - [ ] Página para o usuário convidado definir a senha (hoje contornado pela Admin API) — candidata à Etapa 02
 
-## Etapa 02 — Horários, funcionamento e unidades (S1)
-- [ ] Refinamento (inclui **definição do design system**)
-- [ ] Plano detalhado
-- [ ] CRUD unidades, horários, exceções, fatos (painel)
-- [ ] Tools `listar_unidades`, `horarios_unidade`, `buscar_info`; "aberto agora" com fuso/feriado/virada de dia
-- [ ] Prompt v1 + evals S1 + escolha de modelos por evals
-- [ ] Homologação
+## Etapa 02 — Horários, funcionamento e unidades (S1) + design system
+Spec aprovada: [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-05-etapa-02-s1-design.md)
+- [x] Refinamento (abordagem A: IA extrai lista de itens, código responde; lacunas; design system Harmony escuro; simulador de WhatsApp; formulários componentizados) — 05/10/2026
+- [ ] Plano 02-A — design system, layout/navegação, componentes de formulário, Definir senha, Devolver à IA, casca do simulador, docs pendentes da Etapa 01
+- [ ] Plano 02-B — dados + RLS por unidade, feriados, resolução/composição, triage-v2, lacunas, localização/lista, evals e escolha de modelo
+- [ ] Plano 02-C — telas Unidades/Respostas/Início, simulador ligado ao pipeline real, E2E
+- [ ] Homologação do dono (simulador + celular)
 
 ## Etapa 03 — Avisos de presença (S2)
 - [ ] Refinamento · Plano detalhado
