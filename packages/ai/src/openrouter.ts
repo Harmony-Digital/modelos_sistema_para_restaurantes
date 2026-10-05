@@ -94,15 +94,18 @@ export function createOpenRouterClient(cfg: {
   appTitle: string
   fetch?: typeof fetch
   timeoutMs?: number
+  /** Só para teste (OpenRouter falso do e2e). */
+  baseUrl?: string
 }): LlmClient {
   const doFetch = cfg.fetch ?? fetch
+  const endpoint = `${(cfg.baseUrl ?? 'https://openrouter.ai/api/v1').replace(/\/+$/, '')}/chat/completions`
   return {
     async completeJson(p) {
       const started = performance.now()
       const elapsed = () => Math.round(performance.now() - started)
       let res: Response
       try {
-        res = await doFetch('https://openrouter.ai/api/v1/chat/completions', {
+        res = await doFetch(endpoint, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${cfg.apiKey}`,

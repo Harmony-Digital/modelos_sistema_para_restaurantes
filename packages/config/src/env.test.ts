@@ -2,20 +2,21 @@ import { describe, expect, it } from 'vitest'
 import { loadEnv, secretsEnvSchema, workerEnvSchema, webEnvSchema } from './env.ts'
 
 const key32 = Buffer.alloc(32, 7).toString('base64')
+const valida = {
+  DATABASE_URL: 'postgresql://u:p@localhost:54322/postgres',
+  PHONE_ENC_KEY: key32,
+  WA_ID_PEPPER: key32,
+  WHATSAPP_APP_SECRET: 'segredo',
+  WHATSAPP_VERIFY_TOKEN: 'verifica',
+  WHATSAPP_ACCESS_TOKEN: 'token',
+  WHATSAPP_PHONE_NUMBER_ID: '123',
+  OPENROUTER_API_KEY: 'sk-or-x',
+  AI_TRIAGE_MODELS: 'a/modelo-1, b/modelo-2',
+}
 
 describe('loadEnv', () => {
   it('aceita env válida e aplica defaults', () => {
-    const env = loadEnv(workerEnvSchema, {
-      DATABASE_URL: 'postgresql://u:p@localhost:54322/postgres',
-      PHONE_ENC_KEY: key32,
-      WA_ID_PEPPER: key32,
-      WHATSAPP_APP_SECRET: 'segredo',
-      WHATSAPP_VERIFY_TOKEN: 'verifica',
-      WHATSAPP_ACCESS_TOKEN: 'token',
-      WHATSAPP_PHONE_NUMBER_ID: '123',
-      OPENROUTER_API_KEY: 'sk-or-x',
-      AI_TRIAGE_MODELS: 'a/modelo-1, b/modelo-2',
-    })
+    const env = loadEnv(workerEnvSchema, valida)
     expect(env.WHATSAPP_GRAPH_VERSION).toBe('v24.0')
     expect(env.AI_TRIAGE_MODELS).toEqual(['a/modelo-1', 'b/modelo-2'])
     expect(env.LOG_LEVEL).toBe('info')
@@ -82,5 +83,11 @@ describe('loadEnv', () => {
     expect(() =>
       loadEnv(workerEnvSchema, { ...web, OPENROUTER_API_KEY: 'sk-or-x', AI_TRIAGE_MODELS: 'a/m' }),
     ).toThrowError(/WHATSAPP_ACCESS_TOKEN/)
+  })
+
+  it('OPENROUTER_BASE_URL é opcional e precisa ser URL http(s)', () => {
+    expect(loadEnv(workerEnvSchema, valida).OPENROUTER_BASE_URL).toBeUndefined()
+    expect(loadEnv(workerEnvSchema, { ...valida, OPENROUTER_BASE_URL: 'http://127.0.0.1:4010' }).OPENROUTER_BASE_URL).toBe('http://127.0.0.1:4010')
+    expect(() => loadEnv(workerEnvSchema, { ...valida, OPENROUTER_BASE_URL: 'ftp://x' })).toThrow('OPENROUTER_BASE_URL')
   })
 })
