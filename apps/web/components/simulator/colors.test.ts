@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { contrastRatio } from '@/design/contrast'
-import { WA } from './whatsapp-chat'
+import { WA } from './colors'
 
 describe('cores do simulador (AA)', () => {
   it.each([

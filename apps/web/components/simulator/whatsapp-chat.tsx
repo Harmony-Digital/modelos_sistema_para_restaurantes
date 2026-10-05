@@ -1,10 +1,10 @@
 'use client'
 import { ArrowLeft, MoreVertical, Phone, SendHorizontal, Video } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Bubble, WA } from './bubbles'
+import { Bubble } from './bubbles'
+import { WA } from './colors'
 import type { SimMessage } from './types'
 
-export { WA }
 
 export function WhatsAppChat(props: {
   restaurante: string

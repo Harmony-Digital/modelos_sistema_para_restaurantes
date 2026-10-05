@@ -2,7 +2,7 @@
 import dynamic from 'next/dynamic'
 import { useRef, useState } from 'react'
 import { useLocalSimulator } from './use-local-simulator'
-import { WA } from './bubbles'
+import { WA } from './colors'
 import { WhatsAppIcon } from './whatsapp-icon'
 
 // o conteúdo do simulador só é baixado na primeira abertura; o botão flutuante é estático
