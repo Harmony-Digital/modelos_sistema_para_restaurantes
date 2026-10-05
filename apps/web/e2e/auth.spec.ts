@@ -17,8 +17,8 @@ async function criarMembro(papel: 'dono' | 'atendente') {
 
 async function entrar(page: Page, email: string, senha: string) {
   await page.goto('/login')
-  await page.getByLabel('E-mail').fill(email)
-  await page.getByLabel('Senha').fill(senha)
+  await page.getByLabel(/^E-mail/).fill(email)
+  await page.getByLabel(/^Senha/).fill(senha)
   await page.getByRole('button', { name: 'Entrar' }).click()
 }
 
