@@ -13,4 +13,10 @@ describe('StatCard', () => {
     expect(screen.getByText('Offline')).toBeInTheDocument()
     expect(screen.getByRole('group', { name: 'IA: Offline' }).querySelector('[data-tone="alerta"] svg')).not.toBeNull()
   })
+  it('valor longo quebra dentro do cartão em vez de vazar (celular)', () => {
+    render(<StatCard label="Conversas abertas" value="1234567890" />)
+    const valor = screen.getByText('1234567890')
+    expect(valor.className).toMatch(/break-all|break-words|wrap-anywhere/)
+    expect(screen.getByRole('group').className).toMatch(/min-w-0/)
+  })
 })
