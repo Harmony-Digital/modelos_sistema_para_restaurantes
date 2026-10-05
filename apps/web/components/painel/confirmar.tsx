@@ -9,6 +9,8 @@ export function Confirmar(props: {
   titulo: string
   descricao: string
   rotuloConfirmar: string
+  /** Texto do botão enquanto a ação roda. */
+  rotuloAndamento?: string
   onConfirmar: () => Promise<void> | void
 }) {
   const [executando, setExecutando] = useState(false)
@@ -30,7 +32,7 @@ export function Confirmar(props: {
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => props.onAbertoChange(false)}>Cancelar</Button>
           <Button variant="destructive" aria-busy={executando || undefined} disabled={executando} onClick={confirmar}>
-            {executando ? 'Apagando…' : props.rotuloConfirmar}
+            {executando ? (props.rotuloAndamento ?? 'Apagando…') : props.rotuloConfirmar}
           </Button>
         </DialogFooter>
       </DialogContent>

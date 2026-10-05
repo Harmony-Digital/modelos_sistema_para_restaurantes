@@ -109,6 +109,7 @@ export function SemResposta(props: { lacunas: LacunaTela[]; unidades: { id: stri
         titulo="Tirar esta pergunta da lista?"
         descricao="Se a pergunta voltar a aparecer, ela entra de novo na lista."
         rotuloConfirmar="Tirar da lista"
+        rotuloAndamento="Tirando da lista…"
         onConfirmar={async () => {
           if (!ignorando) return
           try {

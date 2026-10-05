@@ -100,6 +100,7 @@ export function Modelos(props: { personalizados: Partial<Record<ChaveModelo, str
         titulo="Voltar ao texto padrão?"
         descricao="O texto personalizado será apagado."
         rotuloConfirmar="Restaurar"
+        rotuloAndamento="Restaurando…"
         onConfirmar={async () => {
           if (!restaurando) return
           try {

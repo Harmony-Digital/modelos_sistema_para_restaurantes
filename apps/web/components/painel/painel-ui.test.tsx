@@ -46,4 +46,14 @@ describe('Confirmar', () => {
     await user.click(screen.getByRole('button', { name: 'Apagar' }))
     expect(onConfirmar).toHaveBeenCalledOnce()
   })
+  it('mostra o rótulo de andamento escolhido enquanto executa', async () => {
+    const user = userEvent.setup()
+    let liberar!: () => void
+    const onConfirmar = vi.fn(() => new Promise<void>((r) => { liberar = r }))
+    render(<Confirmar aberto onAbertoChange={vi.fn()} titulo="Voltar ao padrão?" descricao="x" rotuloConfirmar="Restaurar" rotuloAndamento="Restaurando…" onConfirmar={onConfirmar} />)
+    await user.click(screen.getByRole('button', { name: 'Restaurar' }))
+    expect(screen.getByRole('button', { name: 'Restaurando…' })).toBeDisabled()
+    liberar()
+    expect(await screen.findByRole('button', { name: 'Restaurar' })).toBeEnabled()
+  })
 })
