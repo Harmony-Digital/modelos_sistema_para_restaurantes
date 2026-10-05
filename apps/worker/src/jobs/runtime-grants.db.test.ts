@@ -5,7 +5,7 @@ import type { PgBoss } from 'pg-boss'
 import { encryptPhone, keyFromBase64 } from '@atd/core'
 import { applyStatus, createBoss, createDb, enqueueProcess, ingestInbound, schema } from '@atd/db'
 import { getTestBoss, getTestDb, resetDb, seedRestaurant, setupPgbossRoles, WEB_URL, WORKER_URL } from '@atd/db/test-utils'
-import type { LlmClient } from '@atd/ai'
+import type { LlmClient, TriageV2 } from '@atd/ai'
 import type { SendResult } from '@atd/whatsapp'
 import { createLogger } from '../logger.ts'
 import { processConversation, type ProcessDeps } from './process-conversation.ts'
@@ -62,7 +62,10 @@ async function receiveAsWeb(restaurantId: string, texto: string, waIdHash = 'has
   return { conversationId: r.conversationId, wamid }
 }
 
-function fakeLlm(step: { intent: string; confianca: number } | 'erro') {
+const FORA: TriageV2 = { itens: [], fora_escopo: true }
+const h = (tipo: string, tema: string | null = null) =>
+  ({ servico: 'horario_unidades', tipo, unidade: null, data: null, tema }) as TriageV2['itens'][number]
+function fakeLlm(step: TriageV2 | 'erro') {
   let calls = 0
   const llm: LlmClient = {
     async completeJson(p) {
@@ -87,6 +90,12 @@ function fakeWa() {
       sent.push(text)
       return { ok: true, wamid: `wamid.out.${randomUUID()}` }
     },
+    async sendLocation(to: string, loc: { nome: string; endereco: string }): Promise<SendResult> {
+      return this.sendText(to, `${loc.nome}: ${loc.endereco}`)
+    },
+    async sendList(to: string, l: { corpo: string }): Promise<SendResult> {
+      return this.sendText(to, l.corpo)
+    },
   }
 }
 
@@ -104,11 +113,11 @@ describe('grants de runtime (web_app → worker_app)', () => {
     expect(job?.c).toBe(conversationId)
 
     const wa = fakeWa()
-    expect(await processConversation(depsAsWorker(fakeLlm({ intent: 'fora_escopo', confianca: 0.9 }).llm, wa), conversationId)).toBe('replied')
+    expect(await processConversation(depsAsWorker(fakeLlm(FORA).llm, wa), conversationId)).toBe('replied')
     expect(wa.sent).toHaveLength(2) // aviso de privacidade + saudação
 
     await receiveAsWeb(rid, 'como está o tempo hoje?')
-    const llm = fakeLlm({ intent: 'fora_escopo', confianca: 0.97 })
+    const llm = fakeLlm(FORA)
     expect(await processConversation(depsAsWorker(llm.llm, wa), conversationId)).toBe('replied')
     expect(llm.calls()).toBe(1)
     expect((await admin.db.select().from(schema.aiRuns)).map((r) => r.intent)).toEqual(['fora_escopo'])
@@ -147,5 +156,29 @@ describe('grants de runtime (web_app → worker_app)', () => {
     const [c] = await admin.db.select().from(schema.conversations)
     expect(c!.estado).toBe('aguardando_humano')
     expect((await admin.db.select().from(schema.aiRuns)).map((r) => r.resultado)).toEqual(['erro', 'erro'])
+  })
+
+  it('S1 com worker_app: lê horários e fatos, grava lacuna e pendente', async () => {
+    const rid = await seed()
+    const [u1] = await admin.db.select().from(schema.units)
+    await admin.db.update(schema.units).set({ ordem: 1 }).where(eq(schema.units.id, u1!.id))
+    const unidades = [u1!.id]
+    for (const [i, nome] of ['Asa Norte', 'Lago Sul', 'Águas Claras'].entries()) {
+      const [u] = await admin.db.insert(schema.units).values({ restaurantId: rid, nome, slug: `u${i}`, ordem: i + 2 }).returning()
+      unidades.push(u!.id)
+    }
+    for (const unitId of unidades) {
+      await admin.db.insert(schema.unitHours).values({ restaurantId: rid, unitId, weekday: 0, turno: 1, abre: '11:00', fecha: '23:00' })
+    }
+    const { conversationId } = await receiveAsWeb(rid, 'estão abertos agora? e tem área kids?')
+    const wa = fakeWa()
+    const llm = fakeLlm({ itens: [h('aberto_agora'), h('info', 'area kids')], fora_escopo: false })
+    expect(await processConversation(depsAsWorker(llm.llm, wa), conversationId)).toBe('replied')
+
+    expect(await admin.db.select().from(schema.knowledgeGaps)).toHaveLength(1)
+    const [conv] = await admin.db.select().from(schema.conversations).where(eq(schema.conversations.id, conversationId))
+    expect(conv!.pendente).not.toBeNull()
+    const listas = await admin.db.select().from(schema.messages).where(eq(schema.messages.tipo, 'lista'))
+    expect(listas).toHaveLength(1)
   })
 })

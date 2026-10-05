@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm'
 import { encryptPhone, keyFromBase64 } from '@atd/core'
 import { ingestInbound, schema, type Enqueue } from '@atd/db'
 import { getTestDb, resetDb, seedRestaurant } from '@atd/db/test-utils'
-import type { LlmClient } from '@atd/ai'
+import type { LlmClient, TriageV2 } from '@atd/ai'
 import type { SendResult } from '@atd/whatsapp'
 import { createLogger } from '../logger.ts'
 import { processConversation, type ProcessDeps } from './process-conversation.ts'
@@ -47,7 +47,12 @@ async function receive(restaurantId: string, msgs: Msg[]) {
   return conversationId
 }
 
-type Scripted = { intent: string; confianca: number } | 'erro_temporario'
+type Scripted = TriageV2 | 'erro_temporario'
+const item = (servico: string, tipo: string | null = null) =>
+  ({ servico, tipo, unidade: null, data: null, tema: null }) as TriageV2['itens'][number]
+const FORA: TriageV2 = { itens: [], fora_escopo: true }
+const LISTA: TriageV2 = { itens: [item('horario_unidades', 'lista_unidades')], fora_escopo: false }
+const CARDAPIO: TriageV2 = { itens: [item('cardapio')], fora_escopo: false }
 function fakeLlm(script: Scripted[]) {
   const calls: { user: string }[] = []
   const llm: LlmClient = {
@@ -73,6 +78,12 @@ function fakeWa(behaviour?: (n: number) => SendResult | undefined) {
     async sendText(to: string, text: string): Promise<SendResult> {
       sent.push({ to, text })
       return behaviour?.(sent.length) ?? { ok: true, wamid: `wamid.out.${randomUUID()}` }
+    },
+    async sendLocation(to: string, loc: { nome: string; endereco: string }): Promise<SendResult> {
+      return this.sendText(to, `${loc.nome}: ${loc.endereco}`)
+    },
+    async sendList(to: string, l: { corpo: string }): Promise<SendResult> {
+      return this.sendText(to, l.corpo)
     },
   }
 }
@@ -114,24 +125,24 @@ describe('processConversation', () => {
   it('rajada: uma triagem com as três mensagens e uma resposta', async () => {
     const rid = await setup()
     const conv = await receive(rid, ['oi', 'queria saber', 'abre domingo?'])
-    const { llm, calls } = fakeLlm([{ intent: 'horario_unidades', confianca: 0.95 }])
+    const { llm, calls } = fakeLlm([LISTA])
     const wa = fakeWa()
     await processConversation(deps(llm, wa), conv)
     expect(calls).toHaveLength(1)
     expect(calls[0]!.user).toContain('oi\nqueria saber\nabre domingo?')
-    expect(wa.sent).toHaveLength(2) // aviso + emBreve
-    expect(wa.sent[1]!.text).toMatch(/aprendendo/)
+    expect(wa.sent).toHaveLength(2) // aviso + resposta de S1
+    expect(wa.sent[1]!.text).toBe('Nossas unidades:\n• Asa Sul')
   })
 
   it('fora de escopo: resposta fixa, ai_run registrado e custo liquidado', async () => {
     const rid = await setup()
     const conv = await receive(rid, ['como está o tempo hoje?'])
     const wa = fakeWa()
-    await processConversation(deps(fakeLlm([{ intent: 'fora_escopo', confianca: 0.97 }]).llm, wa), conv)
+    await processConversation(deps(fakeLlm([FORA]).llm, wa), conv)
     expect(wa.sent.at(-1)!.text).toMatch(/só consigo ajudar com assuntos do Casa Teste/)
     const runs = await db.select().from(schema.aiRuns)
     expect(runs.map((r) => [r.etapa, r.intent, r.costUsd, r.promptVersion])).toEqual([
-      ['triagem', 'fora_escopo', '0.000200', 'triage-v1'],
+      ['triagem', 'fora_escopo', '0.000200', 'triage-v2'],
     ])
     const counters = await db.select().from(schema.budgetCounters).orderBy(schema.budgetCounters.periodo)
     expect(counters.map((c) => [c.reservado, c.gasto])).toEqual([
@@ -140,11 +151,21 @@ describe('processConversation', () => {
     ])
   })
 
+  it('pedido de cardápio (S4 ainda não implementado): resposta "em breve" de S1, sem contar item', async () => {
+    const rid = await setup()
+    const conv = await receive(rid, ['tem carne de sol?'])
+    const wa = fakeWa()
+    await processConversation(deps(fakeLlm([CARDAPIO]).llm, wa), conv)
+    expect(wa.sent.at(-1)!.text).toBe('Sobre o cardápio, ainda estou aprendendo e em breve vou conseguir responder por aqui.')
+    const [run] = await db.select().from(schema.aiRuns)
+    expect(run).toMatchObject({ itensValidos: 0, itensRespondidos: 0 })
+  })
+
   it('conversa em atendimento humano: IA não responde nem gasta (I5)', async () => {
     const rid = await setup()
     const conv = await receive(rid, ['vocês abrem hoje?'])
     await db.update(schema.conversations).set({ estado: 'humano' })
-    const { llm, calls } = fakeLlm([{ intent: 'horario_unidades', confianca: 0.9 }])
+    const { llm, calls } = fakeLlm([LISTA])
     const wa = fakeWa()
     expect(await processConversation(deps(llm, wa), conv)).toBe('human_state')
     expect(calls).toHaveLength(0)
@@ -157,7 +178,7 @@ describe('processConversation', () => {
   it('sem orçamento: modo econômico, handoff e nenhuma chamada ao LLM (I6)', async () => {
     const rid = await setup({ budget: false })
     const conv = await receive(rid, ['tem carne de sol?'])
-    const { llm, calls } = fakeLlm([{ intent: 'cardapio', confianca: 0.9 }])
+    const { llm, calls } = fakeLlm([CARDAPIO])
     const wa = fakeWa()
     await processConversation(deps(llm, wa), conv)
     expect(calls).toHaveLength(0)
@@ -209,7 +230,7 @@ describe('processConversation', () => {
   it('envio com falha temporária: lança; retentativa entrega sem nova chamada ao LLM', async () => {
     const rid = await setup()
     const conv = await receive(rid, ['como está o tempo?'])
-    const { llm, calls } = fakeLlm([{ intent: 'fora_escopo', confianca: 0.95 }])
+    const { llm, calls } = fakeLlm([FORA])
     const flaky = fakeWa((n) => (n === 1 ? { ok: false, retryable: true, code: 130429, message: 'rate' } : undefined))
     await expect(processConversation(deps(llm, flaky), conv)).rejects.toThrow(/temporária/)
     expect((await outMessages()).map((m) => m.statusEnvio)).toEqual(['pendente', 'pendente'])
@@ -270,6 +291,8 @@ describe('processConversation', () => {
         if (wa.sent.length === 1) await receive(rid, ['mais uma coisa'])
         return r
       },
+      sendLocation: wa.sendLocation.bind(wa),
+      sendList: wa.sendList.bind(wa),
     }
     const d: ProcessDeps = { ...deps(fakeLlm([]).llm, wa), wa: racing, requeue: async (id) => void requeued.push(id) }
     await processConversation(d, conv)
@@ -290,7 +313,7 @@ describe('processConversation', () => {
     const llm: LlmClient = {
       async completeJson(p) {
         return {
-          ok: true as const, data: p.parse({ intent: 'fora_escopo', confianca: 0.95 }), model: 'fake/m',
+          ok: true as const, data: p.parse(FORA), model: 'fake/m',
           usage: { tokensIn: 1, tokensOut: 1, tokensCache: 0, costUsd: null }, latencyMs: 1,
         }
       },
@@ -305,7 +328,7 @@ describe('processConversation', () => {
   it('humano assume durante a triagem: IA não responde, estado preservado, ai_run registrado (I5)', async () => {
     const rid = await setup()
     const conv = await receive(rid, ['como está o tempo?'])
-    const inner = fakeLlm([{ intent: 'fora_escopo', confianca: 0.95 }]).llm
+    const inner = fakeLlm([FORA]).llm
     const llm: LlmClient = {
       async completeJson(p) {
         await db.update(schema.conversations).set({ estado: 'humano' })
@@ -342,7 +365,7 @@ describe('processConversation', () => {
   it('humano assume entre decidir e entregar: resposta da IA cancelada, não enviada (I5)', async () => {
     const rid = await setup()
     const conv = await receive(rid, ['como está o tempo?'])
-    const { llm } = fakeLlm([{ intent: 'fora_escopo', confianca: 0.95 }])
+    const { llm } = fakeLlm([FORA])
     const flaky = fakeWa((n) => (n === 1 ? { ok: false, retryable: true, code: 130429, message: 'rate' } : undefined))
     await expect(processConversation(deps(llm, flaky), conv)).rejects.toThrow(/temporária/)
     await db.update(schema.conversations).set({ estado: 'humano' })
@@ -383,7 +406,7 @@ describe('processConversation', () => {
   it('falha no commit após triagem paga: contabiliza o gasto e propaga o erro original', async () => {
     const rid = await setup()
     const conv = await receive(rid, ['como está o tempo?'])
-    const inner = fakeLlm([{ intent: 'fora_escopo', confianca: 0.95 }]).llm
+    const inner = fakeLlm([FORA]).llm
     const llm: LlmClient = {
       async completeJson(p) {
         const r = await inner.completeJson(p)
