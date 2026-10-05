@@ -50,7 +50,7 @@ TypeScript strict · pnpm + Turborepo · Next.js 16 (Vercel gru1) · Node 24 wor
 
 ## Onde paramos
 
-- **05/10/2026** — Plano 02-A (design system, navegação, formulários, definir senha, Devolver à IA, casca do simulador) implementado; e2e `celular` 14/14. Próximo: revisão final do 02-A, depois plano 02-B.
+- **05/10/2026** — Plano 02-A (design system, navegação, formulários, definir senha, Devolver à IA, casca do simulador) implementado; e2e `celular` 15/15; revisão final sem críticos e leva de correção aplicada (`d10cfff..9ec0da2`, 427 testes). Próximo: plano 02-B.
 - **05/10/2026** — Revisão final + leva de correção aplicadas (250 testes verdes). Repositório GitHub ainda não existe: publicar seguindo `docs/runbooks/publicar-repositorio.md` (repositório vazio, push de `main` e `etapa-01-fundacao`, nunca `--force`). Registro da execução em `docs/historico/etapa-01-ledger.md`. Próximo: refinamento da Etapa 02.
 - **05/10/2026** — Etapa 01 implementada e revisada tarefa a tarefa (240 testes verdes; e2e 4/4). Próximo: deploy em staging + homologação do dono (`docs/homologacao/etapa-01.md`); depois refinamento da Etapa 02, incluindo o design system.
 - **05/10/2026** — Arquitetura aprovada; PRD v1.0, PLAN e CLAUDE.md criados; plano da Etapa 01 escrito em `docs/plans/etapa-01-fundacao.md` (21 tarefas). Próximo: executar a partir da Task 1.
