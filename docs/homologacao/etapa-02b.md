@@ -36,3 +36,11 @@ Depois de obter a chave: `pnpm --filter @atd/ai eval:s1 --modelos <a>,<b>,<c>,<d
 
 ## 6. Ainda não dá para ver
 Telas de Unidades/Respostas e o simulador ligado ao pipeline real (plano 02-C).
+
+## Se a triagem falhar (erro do OpenRouter)
+
+O erro agora mostra a causa real, por exemplo:
+- `No endpoints found matching your data policy (Zero data retention) … [etapa: Filter by Data Policy]` — o modelo não tem provedor que garanta não guardar os dados. Toda chamada exige essa garantia (LGPD), então esse modelo não pode ser usado.
+- `Provider returned error [Novita: … does not support 'json_schema' …]` — o provedor não aceita o formato estruturado que a triagem usa.
+
+Em 05/10/2026, nenhum modelo **grátis** (`:free`) passou nas duas exigências (o Nemotron grátis não é ZDR; o Apodex grátis não aceita `json_schema`). Para testar com IA real é preciso crédito no OpenRouter e um modelo pago barato, por exemplo `AI_TRIAGE_MODELS=mistralai/mistral-nemo,google/gemini-2.5-flash-lite` (confirmar ZDR do endpoint antes de adotar).
