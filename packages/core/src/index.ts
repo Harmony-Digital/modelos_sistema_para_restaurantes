@@ -1,2 +1,5 @@
 export * from './crypto.ts'
 export * from './redact.ts'
+export * from './normalize.ts'
+export * from './prefilter.ts'
+export * from './replies.ts'
