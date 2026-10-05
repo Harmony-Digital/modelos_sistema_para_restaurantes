@@ -1,6 +1,7 @@
-import { carregarUnidadesPainel, listarFatos, listarLacunas } from '@atd/db'
+import { carregarUnidadesPainel, listarFatos, listarLacunas, listarModelos } from '@atd/db'
 import { Abas } from '@/components/painel/abas'
 import { Informacoes } from '@/components/painel/informacoes'
+import { Modelos } from '@/components/painel/modelos'
 import { SemResposta } from '@/components/painel/sem-resposta'
 import { TopBar } from '@/components/shell/top-bar'
 import { requireStaff } from '@/lib/dal'
@@ -36,7 +37,13 @@ export default async function RespostasPage(props: { searchParams: Promise<{ aba
           />
         )}
         {aba === 'informacoes' && <Informacoes somenteLeitura={somenteLeitura} unidades={opcoes} fatos={await listarFatos(db, s.claims)} />}
-        {aba === 'mensagens' && <p className="text-sm text-muted-foreground">Mensagens: Task 10.</p>}
+        {aba === 'mensagens' && (
+          <Modelos
+            somenteLeitura={somenteLeitura}
+            personalizados={await listarModelos(db, s.claims)}
+            unidade={unidades.find((u) => u.ativo) ?? null}
+          />
+        )}
       </main>
     </>
   )
