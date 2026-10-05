@@ -3,6 +3,8 @@ import { createDb } from './client.ts'
 import { restaurants, staff, units } from './schema/restaurant.ts'
 import type { Db } from './client.ts'
 import type postgres from 'postgres'
+import { createBoss, ensureQueues } from './queue.ts'
+import type { PgBoss } from 'pg-boss'
 
 const DEFAULT_URL = 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'
 let cached: ReturnType<typeof createDb> | undefined
@@ -48,4 +50,15 @@ export async function seedStaff(
   const userId = await createAuthUser(sql, `${opts.papel}-${randomUUID()}@teste.local`)
   await db.insert(staff).values({ userId, restaurantId: opts.restaurantId, nome: opts.papel, papel: opts.papel })
   return userId
+}
+
+let bossPromise: Promise<PgBoss> | undefined
+export function getTestBoss() {
+  bossPromise ??= (async () => {
+    const boss = createBoss(process.env.TEST_DATABASE_URL ?? DEFAULT_URL, 'worker')
+    await boss.start()
+    await ensureQueues(boss)
+    return boss
+  })()
+  return bossPromise
 }
