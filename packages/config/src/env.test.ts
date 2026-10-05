@@ -85,8 +85,12 @@ describe('loadEnv', () => {
     ).toThrowError(/WHATSAPP_ACCESS_TOKEN/)
   })
 
-  it('OPENROUTER_BASE_URL é opcional e precisa ser URL http(s)', () => {
+  it('OPENROUTER_BASE_URL é opcional, vazio é ausente e só aceita host local (é só para teste)', () => {
     expect(loadEnv(workerEnvSchema, valida).OPENROUTER_BASE_URL).toBeUndefined()
+    expect(loadEnv(workerEnvSchema, { ...valida, OPENROUTER_BASE_URL: '' }).OPENROUTER_BASE_URL).toBeUndefined()
+    expect(loadEnv(workerEnvSchema, { ...valida, OPENROUTER_BASE_URL: 'http://localhost:4010/api/v1' }).OPENROUTER_BASE_URL).toBe('http://localhost:4010/api/v1')
+    expect(() => loadEnv(workerEnvSchema, { ...valida, OPENROUTER_BASE_URL: 'https://evil.com' })).toThrow('OPENROUTER_BASE_URL')
+    expect(() => loadEnv(workerEnvSchema, { ...valida, OPENROUTER_BASE_URL: 'http://127.0.0.1.evil.com' })).toThrow('OPENROUTER_BASE_URL')
     expect(loadEnv(workerEnvSchema, { ...valida, OPENROUTER_BASE_URL: 'http://127.0.0.1:4010' }).OPENROUTER_BASE_URL).toBe('http://127.0.0.1:4010')
     expect(() => loadEnv(workerEnvSchema, { ...valida, OPENROUTER_BASE_URL: 'ftp://x' })).toThrow('OPENROUTER_BASE_URL')
   })
