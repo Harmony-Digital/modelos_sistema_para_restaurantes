@@ -1,0 +1,27 @@
+{
+  "name": "@atd/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./test-utils": "./src/test-utils.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "generate": "drizzle-kit generate",
+    "generate:custom": "drizzle-kit generate --custom",
+    "migrate": "drizzle-kit migrate",
+    "bootstrap": "node --env-file=../../.env scripts/bootstrap.ts"
+  },
+  "dependencies": {
+    "@atd/core": "workspace:*",
+    "drizzle-orm": "^0.45.3",
+    "pg-boss": "^12.36.0",
+    "postgres": "^3.4.9",
+    "@supabase/supabase-js": "^2.117.2"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.31.11"
+  }
+}

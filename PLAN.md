@@ -7,7 +7,10 @@
 
 ## Onde paramos
 
+- **05/10/2026** — Revisão final da branch inteira feita (sem críticos) e uma leva de correção aplicada (até `d600d25`; `pnpm check` com 250 testes em 29 arquivos). Ficaram 2 correções de documentação (itens abaixo, na Etapa 01). **Repositório no GitHub ainda não existe** (sem permissão na organização) — procedimento em [docs/runbooks/publicar-repositorio.md](docs/runbooks/publicar-repositorio.md); backup em bundle local. Registro completo da execução em [docs/historico/etapa-01-ledger.md](docs/historico/etapa-01-ledger.md). Próximo: refinamento da Etapa 02 (em paralelo à publicação, staging e homologação).
+- **05/10/2026** — Etapa 01 **implementada e revisada tarefa a tarefa** (`etapa-01-fundacao`, 683bf9c..77dab37; `pnpm check` verde com 240 testes em 27 arquivos; e2e do web 4/4). Roteiro de homologação em [docs/homologacao/etapa-01.md](docs/homologacao/etapa-01.md). Próximo: deploy em staging (docs/runbooks/deploy.md) + homologação do dono; depois refinamento da Etapa 02, incluindo o design system.
 - **05/10/2026** — Etapa 01 (arquitetura e stack) **definida e aprovada**; PRD v1.0, PLAN e CLAUDE.md escritos; **plano detalhado da Etapa 01 escrito** em [docs/plans/etapa-01-fundacao.md](docs/plans/etapa-01-fundacao.md) (21 tarefas). Próximo passo: revisão do plano pelo dono e escolha do modo de execução; depois Task 1.
+- **05/10/2026** — Modelos de triagem (provisórios, definitivos nos evals da Etapa 02; consulta à API pública de modelos): principal `mistralai/mistral-nemo` (US$ 0,019/M entrada, 0,03/M saída), fallback `google/gemini-2.5-flash-lite` (US$ 0,10/M entrada, 0,40/M saída); ambos com saída estruturada. Gravados em `AI_TRIAGE_MODELS` no `.env` local.
 
 ## Ciclo de cada etapa
 
@@ -41,21 +44,28 @@ Ler CLAUDE.md → este arquivo → PRD.md → plano detalhado da etapa corrente.
 - [x] Arquitetura e stack definidas (PRD §2) — 05/10/2026
 - [x] PRD.md, PLAN.md, CLAUDE.md/AGENTS.md — 05/10/2026
 - [x] Plano detalhado `docs/plans/etapa-01-fundacao.md` (21 tarefas, TDD) — 05/10/2026
-- [ ] Monorepo: pnpm + Turborepo, `packages/config` (tsconfig strict, eslint, env Zod)
-- [ ] Supabase CLI local; extensões `pg_trgm`, `unaccent` (`pg_cron` entra na Etapa 08, com a retenção)
-- [ ] `packages/db`: schema base (restaurants, units, staff, customers, conversations, messages, ai_runs, budget_*, spend_ledger, audit_log, data_subject_requests, retention_settings, worker_heartbeats) + policies RLS + role `worker_app`
-- [ ] Cliente DB com contexto RLS **parametrizado**; testes de RLS por papel
-- [ ] `apps/web`: Next.js 16, auth Supabase com MFA, papéis, layout mínimo do painel, headers de segurança
-- [ ] `packages/whatsapp`: HMAC, schemas Zod do webhook, cliente de envio (texto)
-- [ ] Webhook: verificação GET, POST com HMAC → transação (customer, conversation, message idempotente, `sendDebounced`)
-- [ ] `apps/worker`: pg-boss (filas, singleton, DLQ), heartbeat, shutdown gracioso, Dockerfile não-root
-- [ ] `packages/core`: pré-filtro (humano, saudação, flood, LGPD, mídia não suportada), redação de PII, orçamento atômico (+ teste concorrente)
-- [ ] `packages/ai`: cliente OpenRouter (`dataCollection: 'deny'`, fallback, registro de `usage.cost`), triagem com `json_schema`, resposta fixa de fora de escopo
-- [ ] Aviso LGPD na primeira interação + página pública de política (rascunho)
-- [ ] Sentry (web + worker) com scrub de PII
-- [ ] CI GitHub Actions (lint, typecheck, test, build); deploy Vercel; imagem GHCR + deploy VPS
-- [ ] Hardening VPS (UFW, fail2ban, unattended-upgrades, usuário de deploy)
-- [ ] Homologação do dono
+- [x] Monorepo: pnpm + Turborepo, `packages/config` (tsconfig strict, eslint, env Zod) — 05/10/2026, commits 683bf9c..bcbf374
+- [x] Supabase CLI local; extensões `pg_trgm`, `unaccent` (`pg_cron` entra na Etapa 08, com a retenção) — 05/10/2026, commits bcbf374..36456bb
+- [x] `packages/db`: schema base (restaurants, units, staff, customers, conversations, messages, ai_runs, budget_*, spend_ledger, audit_log, data_subject_requests, retention_settings, worker_heartbeats) + policies RLS + role `worker_app` — 05/10/2026, commits `36456bb..123cb85` (schema, Tasks 4–5), `50140d5..4e51dec` (RLS e roles, Task 7), `339de6f..9a4ea51` (orçamento, Task 10)
+- [x] Cliente DB com contexto RLS **parametrizado**; testes de RLS por papel — 05/10/2026, commits `123cb85..50140d5` (cliente com contexto parametrizado); `50140d5..4e51dec` (policies RLS e testes por papel)
+- [x] `apps/web`: Next.js 16, auth Supabase com MFA, papéis, layout mínimo do painel, headers de segurança — 05/10/2026, commits `fcc5504..463142a` (e2e 4/4); bootstrap e /privacidade `463142a..47c0e04`
+- [x] `packages/whatsapp`: HMAC, schemas Zod do webhook, cliente de envio (texto) — 05/10/2026, commits 9a4ea51..1f7453f
+- [x] Webhook: verificação GET, POST com HMAC → transação (customer, conversation, message idempotente, `sendDebounced`) — 05/10/2026, commits `d0b918e..a02f4f1` (ingestão, Task 13) e `41c9e58..8c64115` (rota, Task 15)
+- [x] `apps/worker`: pg-boss (filas, singleton, DLQ), heartbeat, shutdown gracioso, Dockerfile não-root — 05/10/2026, commits a02f4f1..41c9e58
+- [x] `packages/core`: pré-filtro (humano, saudação, flood, LGPD, mídia não suportada), redação de PII, orçamento atômico (+ teste concorrente) — 05/10/2026, commits 4e51dec..9a4ea51 (pré-filtro, PII, orçamento + teste concorrente)
+- [x] `packages/ai`: cliente OpenRouter (`dataCollection: 'deny'`, fallback, registro de `usage.cost`), triagem com `json_schema`, resposta fixa de fora de escopo — 05/10/2026, commits `1f7453f..d0b918e` (testes unitários com fetch falso)
+- [ ] Smoke test real + roteamento ZDR dos modelos de triagem — pendente: precisa da key do OpenRouter
+- [x] Aviso LGPD na primeira interação + página pública de política (rascunho) — 05/10/2026, commits 463142a..47c0e04 (/privacidade) e 8c64115..fcc5504 (aviso no worker)
+- [x] Sentry (web + worker) com scrub de PII — 05/10/2026, commits 47c0e04..023cce5
+- [ ] CI GitHub Actions (lint, typecheck, test, build); deploy Vercel; imagem GHCR + deploy VPS — workflows escritos (commits 434f157, d28f8d9..77dab37); pendente: CI verde no GitHub, deploy Vercel, imagem GHCR e deploy na VPS (dependem da nuvem)
+- [ ] Hardening VPS (UFW, fail2ban, unattended-upgrades, usuário de deploy) — script e runbook escritos (commits d28f8d9..77dab37); pendente: executar na VPS
+- [ ] Homologação do dono — pendente: roteiro em [docs/homologacao/etapa-01.md](docs/homologacao/etapa-01.md) pronto; depende de staging + número de teste Meta + key OpenRouter
+
+### Pendências que fecham a Etapa 01
+- [ ] Doc: `docs/homologacao/etapa-01.md` passo 9 — usar `updateUserById(id, { password, email_confirm: true })` (sem isso o dono convidado não entra no Supabase hospedado)
+- [ ] Doc: `docs/runbooks/deploy.md` "Release regular" — desligar o deploy automático de produção da Vercel na `main` (produção só via promoção, depois da migration)
+- [ ] Publicar o repositório (`docs/runbooks/publicar-repositorio.md`) e abrir o PR `etapa-01-fundacao → main`
+- [ ] Página para o usuário convidado definir a senha (hoje contornado pela Admin API) — candidata à Etapa 02
 
 ## Etapa 02 — Horários, funcionamento e unidades (S1)
 - [ ] Refinamento (inclui **definição do design system**)

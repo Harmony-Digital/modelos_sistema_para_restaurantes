@@ -1,0 +1,81 @@
+name: Worker deploy
+on:
+  # Só depois do CI verde na main (lint, typecheck, testes, build e e2e). Sem filtro de paths:
+  # workflow_run não o suporta; o gate do environment `production` decide se o deploy segue.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch: # manual (ex.: redeploy); roda no SHA escolhido, sem esperar o CI
+
+permissions: {}
+
+concurrency: { group: worker-deploy, cancel-in-progress: false }
+
+jobs:
+  build:
+    # CI verde, de push na main deste repositório (nunca de PR, nem de fork com branch "main").
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions: { contents: read, packages: write }
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # O SHA que o CI aprovou (não o topo atual da main).
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - id: meta
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ia-atendimento-worker" >> "$GITHUB_OUTPUT"
+          echo "tag=${SHA::12}" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/worker/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions: {}
+    environment: production   # exige aprovação manual configurada no GitHub
+    steps:
+      - name: Deploy via SSH
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          HOST: ${{ secrets.VPS_HOST }}
+          USER: ${{ secrets.VPS_USER }}
+          IMAGE: ${{ needs.build.outputs.image }}
+          TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh "$USER@$HOST" "cd /opt/atendimento && \
+            printf 'WORKER_IMAGE=%s\nIMAGE_TAG=%s\nENV_FILE=.env\n' '$IMAGE' '$TAG' > .deploy.env.new && mv .deploy.env.new .deploy.env && \
+            docker compose --env-file .deploy.env -f docker-compose.prod.yml pull && \
+            docker compose --env-file .deploy.env -f docker-compose.prod.yml up -d && \
+            docker image prune -f"
+      - name: Verificar worker
+        env:
+          HOST: ${{ secrets.VPS_HOST }}
+          USER: ${{ secrets.VPS_USER }}
+        run: |
+          sleep 20
+          ssh "$USER@$HOST" "cd /opt/atendimento && \
+            docker compose --env-file .deploy.env -f docker-compose.prod.yml ps --status running --services | grep -qx worker && \
+            docker compose --env-file .deploy.env -f docker-compose.prod.yml logs --since 60s worker | grep -q 'worker iniciado'" \
+            || { echo 'worker não subiu'; exit 1; }
