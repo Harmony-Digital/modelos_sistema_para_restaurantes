@@ -1,8 +1,35 @@
 import { redactPii } from './redact.ts'
 
-/** Mensagens do drizzle trazem "\nparams: <valores>" com texto de clientes: corta até os frames da stack (ou o fim). */
+/** Mensagens do drizzle trazem "\nparams: <valores>" com texto livre de clientes: corta até o fim da mensagem. */
 export function stripQueryParams(s: string): string {
-  return s.replace(/\nparams:[\s\S]*?(?=\n\s+at |$)/g, '\nparams: [redigido]')
+  const i = s.indexOf('\nparams:')
+  return i === -1 ? s : `${s.slice(0, i)}\nparams: [redigido]`
+}
+
+const V8_FRAME = /^ {4}at .*(:\d+:\d+\)?|\(native\)|<anonymous>\)?)$/m
+
+function cutParams(s: string): string {
+  const i = s.indexOf('\nparams:')
+  if (i === -1) return s
+  const after = s.slice(i + 1)
+  const nl = after.indexOf('\n')
+  const region = nl === -1 ? '' : after.slice(nl)
+  const frame = V8_FRAME.exec(region)
+  const tail = frame ? cutParams(region.slice(frame.index)) : ''
+  return `${s.slice(0, i)}\nparams: [redigido]${tail ? `\n${tail}` : ''}`
+}
+
+/**
+ * Stack: troca o texto exato das mensagens originais pela versão sem params e, por segurança,
+ * se ainda sobrar "\nparams:", corta até o primeiro frame V8 real (ou o fim).
+ */
+export function stripStackParams(stack: string, originalMessages: string[]): string {
+  let out = stack
+  for (const m of originalMessages) {
+    const stripped = stripQueryParams(m)
+    if (stripped !== m) out = out.split(m).join(stripped)
+  }
+  return cutParams(out)
 }
 
 const mask = (s: string) => redactPii(stripQueryParams(s))

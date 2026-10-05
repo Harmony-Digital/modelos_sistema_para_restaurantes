@@ -42,7 +42,14 @@ describe('scrubEvent', () => {
     const out = JSON.stringify(ev)
     expect(out).not.toMatch(/Maria Silva|Rua X/)
     expect(ev.message).toContain('params: [redigido]')
-    expect(ev.message).toContain('at foo')
     expect(ev.breadcrumbs?.[0]?.data).toEqual({ url: '/x' })
+  })
+
+  it.each([
+    'Failed query: x\nparams: oi\n  at home com Maria Silva\nfim,hash',
+    'Failed query: x\nparams: oi\n\nat Rua X Maria Silva',
+  ])('adversarial: cortar params até o fim da mensagem (%#)', (m) => {
+    const ev = scrubEvent({ message: m, exception: { values: [{ value: m }] }, breadcrumbs: [{ message: m }] })
+    expect(JSON.stringify(ev)).not.toMatch(/Maria Silva|Rua X/)
   })
 })

@@ -44,4 +44,24 @@ describe('logger', () => {
     expect(out).toContain('params: [redigido]')
     expect(out).not.toMatch(/Maria Silva|Rua X/)
   })
+
+  it.each([
+    ['linha com "at" falso', 'Failed query: insert\nparams: oi\n  at home com Maria Silva\nfim,hash'],
+    ['linha em branco e "at" falso', 'Failed query: insert\nparams: oi\n\n    at Rua X Maria Silva\nfim'],
+  ])('adversarial (%s): nada vaza em message, stack nem cause', (_n, m) => {
+    const { lines, stream } = capture()
+    const log = createLogger('error', stream)
+    log.error({ err: new Error(m, { cause: new Error(m) }) }, 'falhou')
+    const out = lines.join('')
+    expect(out).not.toMatch(/Maria Silva|Rua X|fim/)
+    expect(out).toContain('params: [redigido]')
+  })
+
+  it('preserva frames reais da stack depois dos params', () => {
+    const { lines, stream } = capture()
+    createLogger('error', stream).error({ err: new Error('Failed query\nparams: Maria Silva') }, 'x')
+    const err = (JSON.parse(lines.join('')) as { err: { stack: string } }).err
+    expect(err.stack).toMatch(/params: \[redigido\]\n {4}at .*logger\.test\.ts:\d+:\d+/)
+    expect(err.stack).not.toContain('Maria Silva')
+  })
 })
