@@ -84,8 +84,8 @@ Spec aprovada: [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-
 - [ ] Homologação do dono (simulador + celular)
 
 ## Etapa 03 — Avisos de presença (S2)
-- [ ] Refinamento · Plano detalhado
-- [ ] Tools `registrar_aviso_presenca`, `cancelar_aviso_presenca`
+- [ ] Refinamento · Plano detalhado — spec [docs/specs/2026-10-05-etapa-03-s2-design.md](docs/specs/2026-10-05-etapa-03-s2-design.md); plano enxuto [docs/plans/etapa-03-s2-avisos.md](docs/plans/etapa-03-s2-avisos.md) (6 tarefas, 4 blocos de revisão)
+- [ ] Registro/cancelamento de aviso (resolvidos pelo código, como o S1 — não são tools de LLM)
 - [ ] Painel "previsão do dia" por unidade
 - [ ] Evals S2 · Homologação
 
