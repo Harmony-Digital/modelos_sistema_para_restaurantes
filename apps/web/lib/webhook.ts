@@ -1,4 +1,4 @@
-import { encryptPhone, hashWaId, normalizeWaId } from '@atd/core'
+import { encryptPhone, hashWaId, normalizeWaId, redactPii, stripQueryParams } from '@atd/core'
 import { applyStatus, ingestInbound, type Db, type Enqueue } from '@atd/db'
 import { parseWebhook, verifySignature } from '@atd/whatsapp'
 
@@ -11,6 +11,19 @@ export type WebhookDeps = {
   pepper: Buffer
   restaurantId: () => Promise<string>
   onInvalidPayload?: (e: unknown) => void
+  /** Falha ao gravar (banco etc.): o caller manda ao Sentry (já com scrub). */
+  onError?: (e: unknown) => void
+}
+
+/**
+ * Erros do drizzle trazem "\nparams: ..." com texto, nome de perfil e telefone cifrado do cliente.
+ * Nunca deixar o erro bruto chegar ao stdout (logs da Vercel): só a mensagem sem params e mascarada.
+ */
+export function reportWebhookError(err: unknown, capture?: (e: unknown) => void) {
+  capture?.(err)
+  const message = err instanceof Error ? err.message : String(err)
+  // eslint-disable-next-line no-console -- única saída no stdout da Vercel, já sem params e com PII mascarada
+  console.error(`webhook: falha ao processar: ${redactPii(stripQueryParams(message)).slice(0, 2000)}`)
 }
 
 const MAX_BODY = 1_000_000
@@ -36,6 +49,17 @@ export async function handleWebhookPost(deps: WebhookDeps, raw: Buffer | string,
     return { status: 200, body: 'ignorado' }
   }
 
+  try {
+    await persist(deps, events)
+  } catch (err) {
+    reportWebhookError(err, deps.onError)
+    // 500: a Meta reentrega; a ingestão é idempotente por wamid.
+    return { status: 500, body: 'erro interno' }
+  }
+  return { status: 200, body: 'ok' }
+}
+
+async function persist(deps: WebhookDeps, events: ReturnType<typeof parseWebhook>) {
   for (const s of events.statuses) await applyStatus(deps.db, s)
   if (events.inbound.length > 0) {
     const restaurantId = await deps.restaurantId()
@@ -58,5 +82,4 @@ export async function handleWebhookPost(deps: WebhookDeps, raw: Buffer | string,
       )
     }
   }
-  return { status: 200, body: 'ok' }
 }

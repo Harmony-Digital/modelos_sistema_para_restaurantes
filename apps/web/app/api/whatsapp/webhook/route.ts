@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { enqueueProcess, getSingleRestaurantId } from '@atd/db'
 import { verifyChallenge } from '@atd/whatsapp'
-import { handleWebhookPost } from '@/lib/webhook'
+import { handleWebhookPost, reportWebhookError } from '@/lib/webhook'
 import { getBoss } from '@/lib/server/boss'
 import { getDb } from '@/lib/server/db'
 import { env } from '@/lib/server/env'
@@ -25,6 +25,18 @@ export async function POST(req: NextRequest) {
   const raw = Buffer.from(await req.arrayBuffer())
   if (raw.byteLength > MAX_BODY) return new Response('payload grande demais', { status: 413 })
 
+  try {
+    return await handle(raw, req.headers.get('x-hub-signature-256'))
+  } catch (err) {
+    // Defesa extra (env/conexão): nunca deixar o Next imprimir o erro bruto com params do drizzle.
+    reportWebhookError(err, captureWebhookError)
+    return new Response('erro interno', { status: 500 })
+  }
+}
+
+const captureWebhookError = (err: unknown) => Sentry.captureException(err, { tags: { area: 'webhook' } })
+
+async function handle(raw: Buffer, signature: string | null) {
   const e = env()
   const db = getDb()
   const result = await handleWebhookPost(
@@ -37,10 +49,11 @@ export async function POST(req: NextRequest) {
       phoneKey: e.phoneKey,
       pepper: e.pepper,
       restaurantId: async () => e.RESTAURANT_ID ?? getSingleRestaurantId(db),
-      onInvalidPayload: (err) => Sentry.captureException(err, { tags: { area: 'webhook' } }),
+      onInvalidPayload: captureWebhookError,
+      onError: captureWebhookError,
     },
     raw,
-    req.headers.get('x-hub-signature-256'),
+    signature,
   )
   return new Response(result.body, { status: result.status })
 }

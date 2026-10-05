@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { sql as dsql } from 'drizzle-orm'
 import type { PgBoss } from 'pg-boss'
 import { decryptPhone, encryptPhone, hashWaId, keyFromBase64 } from '@atd/core'
 import { enqueueProcess, ingestInbound, schema } from '@atd/db'
@@ -85,5 +86,66 @@ describe('webhook POST', () => {
   it('aceita corpo como Buffer (bytes brutos)', async () => {
     const raw = Buffer.from(JSON.stringify(text), 'utf8')
     expect((await handleWebhookPost(deps, raw, sign(raw))).status).toBe(200)
+  })
+})
+
+describe('webhook POST: falha ao gravar', () => {
+  const nome = 'Maria Sigilosa Albuquerque'
+  const corpo = 'Meu CPF é 529.982.247-25, fone 61 99999-8888'
+  const payload = () => {
+    const p = structuredClone(text)
+    const v = p.entry[0]!.changes[0]!.value
+    v.contacts[0]!.profile.name = nome
+    v.messages[0]!.text.body = corpo
+    return JSON.stringify(p)
+  }
+  let errorSpy: ReturnType<typeof vi.spyOn>
+  let logSpy: ReturnType<typeof vi.spyOn>
+  const printed = () =>
+    [...errorSpy.mock.calls, ...logSpy.mock.calls].flat().map((a) => (a instanceof Error ? `${a.message}\n${a.stack}` : String(a))).join('\n')
+
+  beforeEach(() => {
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined)
+  })
+  afterEach(() => vi.restoreAllMocks())
+
+  it('erro do banco na ingestão (FK): 500, Sentry recebe o erro e o console não vê params/PII', async () => {
+    const raw = payload()
+    const captured: unknown[] = []
+    const r = await handleWebhookPost(
+      { ...deps, restaurantId: async () => '00000000-0000-4000-8000-000000000000', onError: (e) => captured.push(e) },
+      raw,
+      sign(raw),
+    )
+    expect(r).toEqual({ status: 500, body: 'erro interno' })
+    expect(captured).toHaveLength(1)
+    expect(String((captured[0] as Error).message)).toContain('params:') // prova que o erro bruto tinha params
+    const out = printed()
+    expect(out).toContain('webhook: falha ao processar')
+    expect(out).toContain('params: [redigido]')
+    expect(out).not.toMatch(/params: (?!\[redigido\])/)
+    expect(out).not.toContain(nome)
+    expect(out).not.toContain('5561999998888')
+    expect(out).not.toMatch(/[0-9a-f]{64}/) // hash do wa_id
+    expect(out).not.toMatch(/v1\.[\w-]+\.[\w-]+\.[\w-]+/) // telefone cifrado
+    expect(await db.select().from(schema.messages)).toHaveLength(0)
+  })
+
+  it('erro com o texto do cliente nos params: console só vê a mensagem redigida', async () => {
+    const raw = payload()
+    const r = await handleWebhookPost(
+      { ...deps, enqueue: async (tx) => tx.execute(dsql`select ${corpo}::int`) },
+      raw,
+      sign(raw),
+    )
+    expect(r.status).toBe(500)
+    const out = printed()
+    expect(out).toContain('webhook: falha ao processar')
+    expect(out).not.toContain(corpo)
+    expect(out).not.toContain('529.982.247-25')
+    expect(out).not.toContain('99999-8888')
+    expect(out).not.toContain(nome)
+    expect(await db.select().from(schema.messages)).toHaveLength(0) // rollback: Meta reentrega
   })
 })
