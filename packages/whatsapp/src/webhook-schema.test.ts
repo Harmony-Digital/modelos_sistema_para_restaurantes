@@ -12,7 +12,7 @@ describe('parseWebhook', () => {
     expect(inbound).toEqual([
       {
         wamid: 'wamid.TEXT1', waId: '5561999998888', profileName: 'Maria',
-        timestamp: new Date(1759680000 * 1000), tipo: 'texto', texto: 'Vocês abrem domingo?', mediaId: null,
+        timestamp: new Date(1759680000 * 1000), tipo: 'texto', texto: 'Vocês abrem domingo?', mediaId: null, interativoId: null,
       },
     ])
   })

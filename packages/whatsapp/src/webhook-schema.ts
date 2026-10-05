@@ -16,8 +16,8 @@ const message = z.looseObject({
   button: z.looseObject({ text: z.string() }).optional(),
   interactive: z
     .looseObject({
-      button_reply: z.looseObject({ title: z.string() }).optional(),
-      list_reply: z.looseObject({ title: z.string() }).optional(),
+      button_reply: z.looseObject({ id: z.string().optional(), title: z.string() }).optional(),
+      list_reply: z.looseObject({ id: z.string().optional(), title: z.string() }).optional(),
     })
     .optional(),
 })
@@ -56,6 +56,8 @@ export type InboundMessage = {
   tipo: 'texto' | 'audio' | 'imagem' | 'documento' | 'outro'
   texto: string | null
   mediaId: string | null
+  /** id da linha/botão escolhido numa resposta interativa */
+  interativoId: string | null
 }
 
 export type StatusUpdate = { wamid: string; status: string; timestamp: Date; errorCode: number | null }
@@ -67,7 +69,7 @@ const toDate = (unixSeconds: string) => new Date(Number(unixSeconds) * 1000)
 
 function toInbound(m: z.infer<typeof message>, rawProfileName: string | null): InboundMessage {
   const profileName = clean(rawProfileName)
-  const base = { wamid: m.id, waId: m.from, profileName, timestamp: toDate(m.timestamp) }
+  const base = { wamid: m.id, waId: m.from, profileName, timestamp: toDate(m.timestamp), interativoId: null }
   switch (m.type) {
     case 'text':
       return { ...base, tipo: 'texto', texto: clean(m.text?.body), mediaId: null }
@@ -78,6 +80,7 @@ function toInbound(m: z.infer<typeof message>, rawProfileName: string | null): I
         ...base,
         tipo: 'texto',
         texto: clean(m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title),
+        interativoId: clean(m.interactive?.list_reply?.id ?? m.interactive?.button_reply?.id),
         mediaId: null,
       }
     case 'audio':

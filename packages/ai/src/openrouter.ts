@@ -1,3 +1,5 @@
+import { redactPii } from '@atd/core'
+
 export type LlmUsage = { tokensIn: number; tokensOut: number; tokensCache: number; costUsd: string | null }
 
 export type JsonCallResult<T> =
@@ -25,7 +27,40 @@ type ApiResponse = {
     prompt_tokens_details?: { cached_tokens?: number } | null
     cost?: number | null
   }
-  error?: { code?: number; message?: string }
+  error?: {
+    code?: number
+    message?: string
+    metadata?: { raw?: unknown; provider_name?: unknown; failed_routing_step?: unknown } | null
+  }
+}
+
+const MAX_ERRO = 400
+
+/**
+ * Mensagem de erro com a causa real: o OpenRouter devolve só "Provider returned error" e põe o motivo
+ * do provedor em metadata.raw, e a etapa de roteamento que barrou em metadata.failed_routing_step.
+ * O texto vai para log e ai_runs.erro: PII mascarada e tamanho limitado.
+ */
+function mensagemDeErro(body: ApiResponse, status: number): string {
+  const e = body.error
+  if (!e?.message) return `HTTP ${status}`
+  const md = e.metadata ?? {}
+  let detalhe = ''
+  if (typeof md.failed_routing_step === 'string') detalhe = `etapa: ${md.failed_routing_step}`
+  if (md.raw !== undefined && md.raw !== null) {
+    let motivo = typeof md.raw === 'string' ? md.raw : JSON.stringify(md.raw)
+    try {
+      const raw: unknown = typeof md.raw === 'string' ? JSON.parse(md.raw) : md.raw
+      const msg = (raw as { message?: unknown; error?: { message?: unknown } } | null)
+      const texto = msg?.message ?? msg?.error?.message
+      if (typeof texto === 'string') motivo = texto
+    } catch {
+      // raw não é JSON: usa o texto como veio
+    }
+    detalhe = typeof md.provider_name === 'string' ? `${md.provider_name}: ${motivo}` : motivo
+  }
+  const completa = detalhe ? `${e.message} [${detalhe}]` : e.message
+  return redactPii(completa).slice(0, MAX_ERRO)
 }
 
 const num = (x: unknown): number => {
@@ -102,7 +137,7 @@ export function createOpenRouterClient(cfg: {
       const model = body.model ?? null
       if (!res.ok) {
         const retryable = res.status >= 500 || res.status === 429 || res.status === 408
-        return { ok: false, error: body.error?.message ?? `HTTP ${res.status}`, retryable, status: res.status, model, usage, latencyMs: elapsed() }
+        return { ok: false, error: mensagemDeErro(body, res.status), retryable, status: res.status, model, usage, latencyMs: elapsed() }
       }
 
       try {

@@ -14,6 +14,8 @@ export type IngestInput = {
   mediaId: string | null
   /** Horário da mensagem segundo a Meta. */
   timestamp: Date
+  /** id da linha/botão escolhido numa mensagem interativa */
+  interativoId?: string | null
 }
 
 /** Transação única do webhook: cliente → conversa → mensagem idempotente → job (I7). */
@@ -73,6 +75,7 @@ export function ingestInbound(db: Db, input: IngestInput, enqueue: Enqueue) {
         tipo: input.tipo,
         texto: input.texto,
         midiaRef: input.mediaId ? { mediaId: input.mediaId } : null,
+        payload: input.interativoId ? { interativoId: input.interativoId } : null,
       })
       .onConflictDoNothing({ target: messages.wamid })
       .returning({ id: messages.id })

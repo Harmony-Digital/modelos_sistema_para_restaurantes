@@ -1,8 +1,14 @@
 import { and, asc, count, eq, gt, gte, sql } from 'drizzle-orm'
-import { decryptPhone, prefilter, renderReply, type InboundItem, type ReplyKey } from '@atd/core'
-import { releaseBudget, reserveBudget, schema, settleBudget, type Db, type Reservation } from '@atd/db'
+import { z } from 'zod'
 import {
-  triage, TRIAGE_BUDGET_ESTIMATE_USD, TRIAGE_PROMPT_VERSION, type JsonCallResult, type LlmClient, type Triage,
+  decryptPhone, escolhaDeUnidade, prefilter, redactPii, renderModelo, renderReply, resolverS1, SERVICOS, TIPOS_S1,
+  type InboundItem, type Lacuna, type ListaUnidades, type Localizacao, type ReplyKey, type ResultadoS1,
+} from '@atd/core'
+import {
+  carregarContextoS1, registrarLacunas, releaseBudget, reserveBudget, schema, settleBudget, type Db, type Reservation,
+} from '@atd/db'
+import {
+  TRIAGE_BUDGET_ESTIMATE_USD, TRIAGE_V2_PROMPT_VERSION, triageV2, type JsonCallResult, type LlmClient, type TriageV2,
 } from '@atd/ai'
 import type { WhatsAppClient } from '@atd/whatsapp'
 import type { Logger } from '../logger.ts'
@@ -12,7 +18,7 @@ const { aiRuns, auditLog, conversations, customers, dataSubjectRequests, message
 export type ProcessDeps = {
   db: Db
   llm: LlmClient
-  wa: Pick<WhatsAppClient, 'sendText'>
+  wa: Pick<WhatsAppClient, 'sendText' | 'sendLocation' | 'sendList'>
   phoneKey: Buffer
   triageModels: string[]
   log: Logger
@@ -24,9 +30,40 @@ export type Outcome = 'not_found' | 'nothing' | 'human_state' | 'blocked' | 'flo
 
 const FLOOD_LIMIT = 10
 const PRIVACY_RENOTICE_MS = 365 * 24 * 3600_000
-const MIN_OUT_OF_SCOPE_CONFIDENCE = 0.6
 
 type AiRunRow = Omit<typeof aiRuns.$inferInsert, 'restaurantId' | 'conversationId'>
+
+type Saida =
+  | { tipo: 'texto'; texto: string }
+  | { tipo: 'localizacao'; texto: string; payload: Localizacao }
+  | { tipo: 'lista'; texto: string; payload: Pick<ListaUnidades, 'botao' | 'opcoes'> }
+
+const itemSchema = z.object({
+  servico: z.enum(SERVICOS),
+  tipo: z.enum(TIPOS_S1).nullable(),
+  unidade: z.string().nullable(),
+  data: z.string().nullable(),
+  tema: z.string().nullable(),
+})
+const pendenteSchema = z.object({
+  pergunta: z.string().max(300).default(''),
+  itens: z.array(itemSchema).min(1).max(5),
+  opcoes: z.array(z.string()).min(1).max(10),
+  expiraEm: z.iso.datetime(),
+})
+type Pendente = z.infer<typeof pendenteSchema>
+const localizacaoPayload = z.object({ lat: z.number(), lng: z.number(), nome: z.string(), endereco: z.string() })
+const listaPayload = z.object({
+  botao: z.string(),
+  opcoes: z.array(z.object({ id: z.string(), titulo: z.string(), descricao: z.string() })).min(1).max(10),
+})
+const interativoSchema = z.object({ interativoId: z.string() })
+
+const PENDENTE_MIN = 30
+const MAX_PALAVRAS_ESCOLHA = 4
+const MAX_PERGUNTA = 300
+
+type Pending = InboundItem & { id: number; payload: unknown }
 
 type Decision = {
   replies: ReplyKey[]
@@ -37,6 +74,12 @@ type Decision = {
   falhas?: 'incrementar' | 'zerar'
   runs?: AiRunRow[]
   budget?: { reservation: Reservation; spentMicros: number }
+  saidas?: Saida[]
+  lacunas?: Lacuna[]
+  pergunta?: string
+  contagem?: { validos: number; respondidos: number }
+  /** undefined = não mexe; null = limpa; objeto = grava */
+  pendente?: Pendente | null
 }
 
 type Ctx = {
@@ -79,7 +122,7 @@ async function decide(deps: ProcessDeps, conversationId: string): Promise<Outcom
   if (!ctx) return 'not_found'
 
   const pending = await db
-    .select({ id: messages.id, tipo: messages.tipo, texto: messages.texto })
+    .select({ id: messages.id, tipo: messages.tipo, texto: messages.texto, payload: messages.payload })
     .from(messages)
     .where(and(eq(messages.conversationId, conversationId), eq(messages.direcao, 'in'), gt(messages.id, ctx.conv.processedUpToId)))
     .orderBy(asc(messages.id))
@@ -113,16 +156,16 @@ async function decide(deps: ProcessDeps, conversationId: string): Promise<Outcom
     return 'flood'
   }
 
-  const decision = await classify(deps, ctx, pending)
-  const lastNotice = ctx.customer.privacyNoticeSentAt?.getTime() ?? 0
-  const [noticePending] = await db
-    .select({ id: messages.id })
-    .from(messages)
-    .where(and(eq(messages.conversationId, conversationId), eq(messages.replyKey, 'avisoPrivacidade'), eq(messages.statusEnvio, 'pendente')))
-    .limit(1)
-  const needsNotice = !noticePending && now.getTime() - lastNotice > PRIVACY_RENOTICE_MS
-  if (needsNotice) decision.replies.unshift('avisoPrivacidade')
+  const decision = await classify(deps, ctx, pending, now)
   try {
+    const lastNotice = ctx.customer.privacyNoticeSentAt?.getTime() ?? 0
+    const [noticePending] = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(and(eq(messages.conversationId, conversationId), eq(messages.replyKey, 'avisoPrivacidade'), eq(messages.statusEnvio, 'pendente')))
+      .limit(1)
+    const needsNotice = !noticePending && now.getTime() - lastNotice > PRIVACY_RENOTICE_MS
+    if (needsNotice) decision.replies.unshift('avisoPrivacidade')
     return await commit(db, ctx, upTo, decision)
   } catch (err) {
     // a transação desfez a liquidação: contabiliza o que já foi gasto (ou devolve a reserva)
@@ -142,8 +185,12 @@ async function compensate(deps: ProcessDeps, reservation: Reservation, spentMicr
   }
 }
 
-async function classify(deps: ProcessDeps, ctx: Ctx, pending: InboundItem[]): Promise<Decision> {
+async function classify(deps: ProcessDeps, ctx: Ctx, pending: Pending[], now: Date): Promise<Decision> {
   const pre = prefilter(pending)
+  if (pre.kind === 'pass') {
+    const daLista = await respostaDaLista(deps, ctx, pending, now)
+    if (daLista) return daLista
+  }
   switch (pre.kind) {
     case 'handoff':
       return { replies: ['handoff'], autor: 'sistema', novoEstado: 'aguardando_humano', audit: 'conversa.handoff_pedido' }
@@ -154,7 +201,63 @@ async function classify(deps: ProcessDeps, ctx: Ctx, pending: InboundItem[]): Pr
     case 'unsupported_media':
       return { replies: ['midiaNaoSuportada'], autor: 'sistema' }
     case 'pass':
-      return triageDecision(deps, ctx, pre.text)
+      return triageDecision(deps, ctx, pre.text, now)
+  }
+}
+
+const perguntaMascarada = (texto: string) => redactPii(texto).slice(0, MAX_PERGUNTA)
+
+function lerPendente(v: unknown): Pendente | null {
+  const r = pendenteSchema.safeParse(v)
+  return r.success ? r.data : null
+}
+
+/** Cliente escolheu a unidade na lista (ou digitou o nome): responde os itens guardados sem chamar o LLM. */
+async function respostaDaLista(deps: ProcessDeps, ctx: Ctx, pending: Pending[], now: Date): Promise<Decision | null> {
+  if (pending.length !== 1) return null
+  const ultimo = pending[0]!
+  const lido = interativoSchema.safeParse(ultimo.payload)
+  const idLista = lido.success ? lido.data.interativoId : null
+  const p = lerPendente(ctx.conv.pendente)
+  if (!p || new Date(p.expiraEm) <= now) {
+    // toque numa lista que já não vale: avisa sem gastar o modelo
+    if (!idLista) return null
+    const run: AiRunRow = { etapa: 'resposta', modelo: 'deterministico', promptVersion: 's1-lista', costUsd: '0', intent: 'lista_expirada', resultado: 'ok' }
+    return {
+      replies: [], saidas: [{ tipo: 'texto', texto: renderModelo('lista_expirada', {}) }],
+      autor: 'ia', falhas: 'zerar', pendente: null, runs: [run],
+    }
+  }
+  const texto = ultimo.texto?.trim() ?? ''
+  if (!idLista && (!texto || texto.split(/\s+/).length > MAX_PALAVRAS_ESCOLHA)) return null
+  const s1 = await carregarContextoS1(deps.db, ctx.restaurant.id, now)
+  const opcoes = s1.unidades.filter((u) => p.opcoes.includes(u.id))
+  const escolhida = idLista ? opcoes.find((u) => u.id === idLista) : escolhaDeUnidade(texto, opcoes)
+  if (!escolhida) return null
+  const r = resolverS1(p.itens, s1, now, escolhida.id)
+  const run: AiRunRow = {
+    etapa: 'resposta', modelo: 'deterministico', promptVersion: 's1-lista', costUsd: '0', intent: 'escolha_unidade', resultado: 'ok',
+  }
+  return { ...decisaoS1(r, now, p.pergunta), pendente: null, runs: [run] }
+}
+
+function decisaoS1(r: ResultadoS1, now: Date, pergunta: string): Decision {
+  const saidas: Saida[] = []
+  if (r.texto) saidas.push({ tipo: 'texto', texto: r.texto })
+  for (const l of r.localizacoes) saidas.push({ tipo: 'localizacao', texto: `${l.nome}: ${l.endereco}`, payload: l })
+  if (r.lista) saidas.push({ tipo: 'lista', texto: r.lista.corpo, payload: { botao: r.lista.botao, opcoes: r.lista.opcoes } })
+  const pendente: Pendente | null = r.lista && r.pendente.length
+    ? { pergunta, itens: r.pendente, opcoes: r.lista.opcoes.map((o) => o.id), expiraEm: new Date(now.getTime() + PENDENTE_MIN * 60_000).toISOString() }
+    : null
+  return {
+    replies: saidas.length ? [] : ['foraEscopo'],
+    saidas,
+    autor: 'ia',
+    falhas: 'zerar',
+    lacunas: r.lacunas,
+    pergunta,
+    contagem: { validos: r.validos, respondidos: r.respondidos },
+    pendente,
   }
 }
 
@@ -165,30 +268,35 @@ const RESERVE_USD = fmt(2 * ESTIMATE_MICROS)
 
 // Custo desconhecido (null) de chamada possivelmente cobrada é contabilizado pela estimativa;
 // falha sem uso reportado (502, rede) não custa nada.
-function runCostMicros(r: JsonCallResult<Triage>): number {
+function runCostMicros(r: JsonCallResult<TriageV2>): number {
   if (r.usage?.costUsd != null) return micros(r.usage.costUsd)
   const maybeBilled = r.ok || r.usage !== null
   return maybeBilled ? ESTIMATE_MICROS : 0
 }
 
 
-function toRun(r: JsonCallResult<Triage>, fallbackModel: string): AiRunRow {
+function resumoItens(t: TriageV2): string {
+  if (t.itens.length === 0) return 'fora_escopo'
+  return [...new Set(t.itens.map((i) => (i.tipo ? `${i.servico}:${i.tipo}` : i.servico)))].join(',')
+}
+
+function toRun(r: JsonCallResult<TriageV2>, fallbackModel: string): AiRunRow {
   return {
     etapa: 'triagem',
     modelo: r.model ?? fallbackModel,
-    promptVersion: TRIAGE_PROMPT_VERSION,
+    promptVersion: TRIAGE_V2_PROMPT_VERSION,
     tokensIn: r.usage?.tokensIn ?? 0,
     tokensOut: r.usage?.tokensOut ?? 0,
     tokensCache: r.usage?.tokensCache ?? 0,
     costUsd: fmt(runCostMicros(r)),
     latenciaMs: r.latencyMs,
-    intent: r.ok ? r.data.intent : null,
+    intent: r.ok ? resumoItens(r.data) : null,
     resultado: r.ok ? 'ok' : 'erro',
     erro: r.ok ? null : r.error,
   }
 }
 
-async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string): Promise<Decision> {
+async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, now: Date): Promise<Decision> {
   const { db } = deps
   const reservation = await reserveBudget(db, {
     restaurantId: ctx.restaurant.id,
@@ -201,10 +309,10 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string): Promis
     return { replies: ['modoEconomico'], autor: 'sistema', novoEstado: 'aguardando_humano', audit: 'orcamento.sem_saldo' }
   }
 
-  let result: JsonCallResult<Triage>
+  let result: JsonCallResult<TriageV2>
   const runs: AiRunRow[] = []
   try {
-    const call = () => triage(deps.llm, { models: deps.triageModels, restaurante: ctx.restaurant.nome, text })
+    const call = () => triageV2(deps.llm, { models: deps.triageModels, restaurante: ctx.restaurant.nome, text })
     const fallbackModel = deps.triageModels[0]!
     result = await call()
     runs.push(toRun(result, fallbackModel))
@@ -224,18 +332,21 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string): Promis
 
   if (!result.ok) {
     deps.log.error({ conversationId: ctx.conv.id, erro: result.error, status: result.status }, 'triagem falhou')
-    return { replies: ['erro'], autor: 'sistema', novoEstado: 'aguardando_humano', falhas: 'incrementar', audit: 'ia.falha_triagem', runs, budget }
+    return { replies: ['erro'], autor: 'sistema', novoEstado: 'aguardando_humano', falhas: 'incrementar', audit: 'ia.falha_triagem', runs, budget, pendente: null }
   }
 
-  const { intent, confianca } = result.data
-  if (intent === 'fora_escopo' && confianca >= MIN_OUT_OF_SCOPE_CONFIDENCE) {
-    return { replies: ['foraEscopo'], autor: 'ia', falhas: 'zerar', runs, budget }
+  const { itens } = result.data
+  if (itens.some((i) => i.servico === 'humano' || i.servico === 'lgpd')) {
+    return { replies: ['handoff'], autor: 'ia', novoEstado: 'aguardando_humano', audit: 'conversa.handoff_triagem', runs, budget, pendente: null }
   }
-  if (intent === 'humano' || intent === 'lgpd') {
-    return { replies: ['handoff'], autor: 'ia', novoEstado: 'aguardando_humano', audit: 'conversa.handoff_triagem', runs, budget }
+  if (itens.length === 0) return { replies: ['foraEscopo'], autor: 'ia', falhas: 'zerar', runs, budget, pendente: null }
+  try {
+    const s1 = await carregarContextoS1(db, ctx.restaurant.id, now)
+    return { ...decisaoS1(resolverS1(itens, s1, now), now, perguntaMascarada(text)), runs, budget }
+  } catch (err) {
+    await compensate(deps, reservation, spentMicros, ctx.conv.id)
+    throw err
   }
-  // Etapa 01: S1–S4 ainda não implementados — substituído nas Etapas 02–05.
-  return { replies: ['emBreve'], autor: 'ia', falhas: 'zerar', runs, budget }
 }
 
 async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outcome> {
@@ -252,8 +363,14 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outc
     const humanOwns = !!cur && cur.estado !== 'ia'
 
     let lastRunId: number | null = null
-    for (const run of d.runs ?? []) {
-      const [row] = await tx.insert(aiRuns).values({ ...run, restaurantId, conversationId }).returning({ id: aiRuns.id })
+    const runs = d.runs ?? []
+    for (const [i, run] of runs.entries()) {
+      const contagem = i === runs.length - 1 && d.contagem
+        ? { itensValidos: d.contagem.validos, itensRespondidos: d.contagem.respondidos }
+        : {}
+      const [row] = await tx.insert(aiRuns)
+        .values({ ...run, ...contagem, simulado: ctx.conv.simulada, restaurantId, conversationId })
+        .returning({ id: aiRuns.id })
       lastRunId = row!.id
     }
     if (d.budget) {
@@ -263,7 +380,7 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outc
     }
     if (alreadyDone) return 'nothing'
     if (humanOwns) {
-      await tx.update(conversations).set({ processedUpToId: upTo }).where(eq(conversations.id, conversationId))
+      await tx.update(conversations).set({ processedUpToId: upTo, pendente: null }).where(eq(conversations.id, conversationId))
       return 'human_state'
     }
 
@@ -282,6 +399,24 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outc
       })
     }
 
+    for (const s of d.saidas ?? []) {
+      await tx.insert(messages).values({
+        restaurantId,
+        conversationId,
+        direcao: 'out',
+        autor: d.autor,
+        tipo: s.tipo,
+        texto: s.texto,
+        payload: s.tipo === 'texto' ? null : s.payload,
+        statusEnvio: 'pendente',
+        aiRunId: lastRunId,
+        replyKey: 's1',
+      })
+    }
+    if (d.lacunas?.length && !ctx.conv.simulada) {
+      await registrarLacunas(tx, { restaurantId, lacunas: d.lacunas, pergunta: d.pergunta ?? '' })
+    }
+
     await tx
       .update(conversations)
       .set({
@@ -289,6 +424,7 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outc
         ...(d.novoEstado ? { estado: d.novoEstado } : {}),
         ...(d.falhas === 'incrementar' ? { falhasConsecutivas: sql`${conversations.falhasConsecutivas} + 1` } : {}),
         ...(d.falhas === 'zerar' ? { falhasConsecutivas: 0 } : {}),
+        ...(d.pendente !== undefined ? { pendente: d.pendente } : {}),
       })
       .where(eq(conversations.id, conversationId))
 
@@ -296,7 +432,7 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outc
     if (d.audit) {
       await tx.insert(auditLog).values({ restaurantId, atorTipo: d.autor, acao: d.audit, entidade: 'conversation', entidadeId: conversationId })
     }
-    return d.replies.length > 0 ? 'replied' : 'nothing'
+    return d.replies.length + (d.saidas?.length ?? 0) > 0 ? 'replied' : 'nothing'
   })
 }
 
@@ -310,6 +446,8 @@ async function deliver(deps: ProcessDeps, conversationId: string) {
       autor: messages.autor,
       replyKey: messages.replyKey,
       texto: messages.texto,
+      tipo: messages.tipo,
+      payload: messages.payload,
       telefoneCifrado: customers.telefoneCifrado,
       customerId: customers.id,
       estado: conversations.estado,
@@ -331,7 +469,12 @@ async function deliver(deps: ProcessDeps, conversationId: string) {
         continue
       }
     }
-    const r = await deps.wa.sendText(to, m.texto ?? '')
+    const r = await enviar(deps, to, m)
+    if (r === 'payload_invalido') {
+      await db.update(messages).set({ statusEnvio: 'falhou:payload_invalido' }).where(eq(messages.id, m.id))
+      deps.log.warn({ conversationId, messageId: m.id }, 'payload de mensagem interativa inválido; envio descartado')
+      continue
+    }
     if (r.ok) {
       await db.update(messages).set({ wamid: r.wamid, statusEnvio: 'enviado' }).where(eq(messages.id, m.id))
       if (m.replyKey === 'avisoPrivacidade') {
@@ -344,4 +487,16 @@ async function deliver(deps: ProcessDeps, conversationId: string) {
       throw new Error(`Falha temporária ao enviar pelo WhatsApp (código ${r.code ?? 'rede'})`)
     }
   }
+}
+
+function enviar(deps: ProcessDeps, to: string, m: { tipo: string; texto: string | null; payload: unknown }) {
+  if (m.tipo === 'localizacao') {
+    const p = localizacaoPayload.safeParse(m.payload)
+    return p.success ? deps.wa.sendLocation(to, p.data) : 'payload_invalido'
+  }
+  if (m.tipo === 'lista') {
+    const p = listaPayload.safeParse(m.payload)
+    return p.success ? deps.wa.sendList(to, { corpo: m.texto ?? '', ...p.data }) : 'payload_invalido'
+  }
+  return deps.wa.sendText(to, m.texto ?? '')
 }

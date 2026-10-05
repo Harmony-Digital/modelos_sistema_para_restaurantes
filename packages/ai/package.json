@@ -4,6 +4,6 @@
   "private": true,
   "type": "module",
   "exports": { ".": "./src/index.ts" },
-  "scripts": { "typecheck": "tsc -p tsconfig.json" },
+  "scripts": { "typecheck": "tsc -p tsconfig.json", "eval:s1": "node --env-file=../../.env evals/s1/extracao.ts" },
   "dependencies": { "@atd/core": "workspace:*", "zod": "^4.6.5" }
 }

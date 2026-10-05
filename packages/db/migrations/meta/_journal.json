@@ -71,6 +71,41 @@
       "when": 1791207346999,
       "tag": "0009_reply_key",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791226403701,
+      "tag": "0010_s1_funcoes",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791226419858,
+      "tag": "0011_s1_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1791226633463,
+      "tag": "0012_s1_seguranca",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791227022505,
+      "tag": "0013_s1_fact_tenant",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791227024441,
+      "tag": "0014_s1_fact_fk",
+      "breakpoints": true
     }
   ]
 }

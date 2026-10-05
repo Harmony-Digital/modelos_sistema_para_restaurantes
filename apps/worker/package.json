@@ -7,6 +7,7 @@
     "dev": "node --env-file=../../.env --watch src/main.ts",
     "build": "node build.mjs",
     "start": "node dist/main.js",
+    "perguntar": "node --env-file=../../.env scripts/perguntar.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {

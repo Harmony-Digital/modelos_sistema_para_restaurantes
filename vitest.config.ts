@@ -12,7 +12,7 @@ export default defineConfig({
         resolve: { alias: webAlias },
         test: {
           name: 'unit',
-          include: ['packages/**/src/**/*.test.ts', 'apps/**/src/**/*.test.ts', 'apps/web/**/*.test.ts'],
+          include: ['packages/**/src/**/*.test.ts', 'packages/ai/evals/**/*.test.ts', 'apps/**/src/**/*.test.ts', 'apps/web/**/*.test.ts'],
           exclude: ['**/*.db.test.ts', '**/node_modules/**'],
           environment: 'node',
         },

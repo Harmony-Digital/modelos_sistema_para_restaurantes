@@ -77,6 +77,7 @@ async function persist(deps: WebhookDeps, events: ReturnType<typeof parseWebhook
           texto: m.texto,
           mediaId: m.mediaId,
           timestamp: m.timestamp,
+          interativoId: m.interativoId,
         },
         deps.enqueue,
       )

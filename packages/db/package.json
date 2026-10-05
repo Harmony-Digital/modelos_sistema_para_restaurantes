@@ -12,7 +12,8 @@
     "generate": "drizzle-kit generate",
     "generate:custom": "drizzle-kit generate --custom",
     "migrate": "drizzle-kit migrate",
-    "bootstrap": "node --env-file=../../.env scripts/bootstrap.ts"
+    "bootstrap": "node --env-file=../../.env scripts/bootstrap.ts",
+    "demo:s1": "node --env-file=../../.env scripts/demo-s1.ts"
   },
   "dependencies": {
     "@atd/core": "workspace:*",

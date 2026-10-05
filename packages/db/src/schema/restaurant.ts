@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
-import { boolean, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { boolean, index, integer, jsonb, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import { authUsers } from 'drizzle-orm/supabase'
-import { staffRole } from './enums.ts'
+import { holidayPolicy, staffRole } from './enums.ts'
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -18,10 +18,10 @@ export const restaurants = pgTable('restaurants', {
   dpoNome: text('dpo_nome'),
   dpoContato: text('dpo_contato'),
   politicaUrl: text('politica_url'),
+  politicaFeriado: holidayPolicy('politica_feriado').notNull().default('como_domingo'),
   ...timestamps,
 })
 
-// Etapa 01: colunas mínimas. Endereço, horários etc. entram na Etapa 02.
 export const units = pgTable(
   'units',
   {
@@ -30,9 +30,24 @@ export const units = pgTable(
     nome: text('nome').notNull(),
     slug: text('slug').notNull(),
     ativo: boolean('ativo').notNull().default(true),
+    endereco: text('endereco'),
+    bairro: text('bairro'),
+    cidade: text('cidade'),
+    uf: text('uf'),
+    cep: text('cep'),
+    lat: numeric('lat', { precision: 9, scale: 6, mode: 'number' }),
+    lng: numeric('lng', { precision: 9, scale: 6, mode: 'number' }),
+    mapsUrl: text('maps_url'),
+    telefone: text('telefone'),
+    apelidos: text('apelidos').array().notNull().default(sql`'{}'::text[]`),
+    ordem: integer('ordem').notNull().default(0),
     ...timestamps,
   },
-  (t) => [uniqueIndex('units_restaurant_slug_uq').on(t.restaurantId, t.slug)],
+  (t) => [
+    uniqueIndex('units_restaurant_slug_uq').on(t.restaurantId, t.slug),
+    // alvo das FKs compostas (unit_id, restaurant_id): impede misturar unidade de outro restaurante
+    uniqueIndex('units_id_restaurant_uq').on(t.id, t.restaurantId),
+  ],
 )
 
 export const staff = pgTable(

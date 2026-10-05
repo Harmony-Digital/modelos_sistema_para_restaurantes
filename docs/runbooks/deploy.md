@@ -26,7 +26,9 @@ Da máquina do dono, com a conexão direta de administrador (usuário `postgres`
 DATABASE_URL=<conexão direta de administrador> pnpm db:migrate
 ```
 
-As migrations (0000–0009) criam as tabelas, RLS, os roles `web_app` e `worker_app` e o schema `pgboss` (migration 0004). **As migrations devem rodar antes da primeira subida do worker em cada ambiente**: o pg-boss usa `createSchema: false` e apenas cria suas tabelas dentro do schema `pgboss`, que pertence a `worker_app`.
+Antes de migrar, **confirmar que o projeto Supabase de staging/produção é Postgres 17** (a migration 0014 revoga `MAINTAIN` de `authenticated`, privilégio que só existe no PG 17).
+
+As migrations (0000–0014) criam as tabelas, RLS, os roles `web_app` e `worker_app` e o schema `pgboss` (migration 0004). **As migrations devem rodar antes da primeira subida do worker em cada ambiente**: o pg-boss usa `createSchema: false` e apenas cria suas tabelas dentro do schema `pgboss`, que pertence a `worker_app`.
 
 ## 3. Senhas dos roles
 
@@ -136,6 +138,7 @@ docker compose -p atendimento-staging --env-file .deploy.staging.env -f docker-c
 - Settings → Environments → criar `production` com **Required reviewers** (aprovação obrigatória) e **Deployment branches = `main`** (somente).
 - Os quatro secrets **`VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS` devem ser Environment secrets do `production`**, não secrets do repositório. Assim só um deploy aprovado a partir da `main` os lê.
 - `VPS_KNOWN_HOSTS` = saída de `ssh-keyscan <host>`. **Compare a fingerprint** (`ssh-keygen -lf <(ssh-keyscan <host> 2>/dev/null)`) com a mostrada no console do provedor antes de salvar.
+- O job de CI `evals-extracao` (camada 1 dos evals de S1) precisa do **secret de repositório `OPENROUTER_API_KEY_EVALS`** (chave com teto de gasto próprio) e da **variável de repositório `AI_TRIAGE_MODELS`** (modelos separados por vírgula).
 - O workflow `Worker deploy` dispara por `workflow_run` quando o **CI** termina com sucesso em um push na `main` (builda o SHA aprovado pelo CI); também pode ser disparado manualmente (`workflow_dispatch`). O job de deploy sempre espera a aprovação do environment `production`.
 - O workflow não publica `:latest`; cada deploy usa a tag `<sha12>`. Após o deploy, ele verifica via SSH que o container está `running` e que os logs dos últimos 60 s contêm `worker iniciado`; senão o job falha.
 
