@@ -103,6 +103,28 @@ describe('SimulatorLauncher', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  it('polling pausa com a aba escondida e volta quando ela fica visível', async () => {
+    const acoes = acoesFalsas()
+    await abrir(acoes)
+    await waitFor(() => expect(acoes.buscar).toHaveBeenCalled())
+    const escondida = (v: boolean) => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => v })
+      document.dispatchEvent(new Event('visibilitychange'))
+    }
+    try {
+      escondida(true)
+      await new Promise((r) => setTimeout(r, 50))
+      const antes = vi.mocked(acoes.buscar).mock.calls.length
+      await new Promise((r) => setTimeout(r, 1600))
+      expect(acoes.buscar).toHaveBeenCalledTimes(antes)
+      escondida(false)
+      await waitFor(() => expect(vi.mocked(acoes.buscar).mock.calls.length).toBeGreaterThan(antes))
+    } finally {
+      // volta ao getter do protótipo
+      delete (document as { hidden?: boolean }).hidden
+    }
+  })
+
   it('Simular data e hora aplica e volta ao relógio real', async () => {
     const acoes = acoesFalsas()
     const user = await abrir(acoes)

@@ -59,7 +59,8 @@ export function useSimulador(acoes: AcoesSimulador, aberto: boolean, timezone: s
     let vivo = true
     let ocupado = false
     const tick = async () => {
-      if (ocupado) return
+      // aba escondida: não consulta; volta ao ficar visível
+      if (ocupado || document.hidden) return
       ocupado = true
       const c = conversa.current
       try {
@@ -76,11 +77,16 @@ export function useSimulador(acoes: AcoesSimulador, aberto: boolean, timezone: s
         ocupado = false
       }
     }
+    const aoMudarVisibilidade = () => {
+      if (!document.hidden) void tick()
+    }
     void tick()
     const t = setInterval(() => void tick(), INTERVALO_MS)
+    document.addEventListener('visibilitychange', aoMudarVisibilidade)
     return () => {
       vivo = false
       clearInterval(t)
+      document.removeEventListener('visibilitychange', aoMudarVisibilidade)
     }
   }, [aberto, acoes, aplicar])
 
