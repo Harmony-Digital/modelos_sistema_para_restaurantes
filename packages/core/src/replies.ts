@@ -1,6 +1,6 @@
 export type ReplyKey =
   | 'saudacao' | 'agradecimento' | 'foraEscopo' | 'midiaNaoSuportada' | 'handoff'
-  | 'lgpdRecebido' | 'avisoPrivacidade' | 'emBreve' | 'modoEconomico' | 'erro'
+  | 'lgpdRecebido' | 'avisoPrivacidade' | 'modoEconomico' | 'erro'
 
 const TEMPLATES: Record<ReplyKey, string> = {
   saudacao:
@@ -14,8 +14,6 @@ const TEMPLATES: Record<ReplyKey, string> = {
     'Recebemos seu pedido sobre seus dados pessoais. Nossa equipe vai tratar e responder em até 15 dias.',
   avisoPrivacidade:
     'Você está falando com o assistente virtual do {restaurante}. Seus dados são tratados conforme nossa política de privacidade{politica}. Para falar com uma pessoa, digite *atendente*.',
-  emBreve:
-    'Ainda estou aprendendo sobre isso e em breve vou conseguir responder por aqui. Se quiser, digite *atendente* para falar com uma pessoa.',
   modoEconomico: 'No momento não consigo responder automaticamente. Vou chamar alguém da equipe para te atender.',
   erro: 'Tive um problema para responder agora. Vou chamar alguém da equipe para te ajudar.',
 }
