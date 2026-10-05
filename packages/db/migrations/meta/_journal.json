@@ -141,6 +141,13 @@
       "when": 1791244066901,
       "tag": "0019_avisos_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791244328897,
+      "tag": "0020_avisos_grants_coluna",
+      "breakpoints": true
     }
   ]
 }

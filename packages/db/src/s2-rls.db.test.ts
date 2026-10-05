@@ -52,4 +52,31 @@ describe('RLS de attendance_notices', () => {
       tx.insert(attendanceNotices).values({ restaurantId: a.restaurantId, unitId: u2!.id, data: '2026-10-10', pessoas: 1, origem: 'painel' }),
     )).rejects.toMatchObject({ cause: { code: '42501' } })
   })
+
+  it('authenticated só atualiza status; não reativa nem muda outras colunas; atendente não escreve', async () => {
+    const { restaurantId, unitId } = await seedRestaurant(db)
+    const dono = await seedStaff(db, sql, { restaurantId, papel: 'dono' })
+    const atendente = await seedStaff(db, sql, { restaurantId, papel: 'atendente' })
+    const [ativo, cancelado] = await db.insert(attendanceNotices).values([
+      { restaurantId, unitId, data: '2026-10-10', pessoas: 2, origem: 'ia' },
+      { restaurantId, unitId, data: '2026-10-11', pessoas: 2, origem: 'ia', status: 'cancelado' },
+    ]).returning()
+    await expect(withUserContext(db, as(dono), (tx) =>
+      tx.update(attendanceNotices).set({ simulado: true }).where(eq(attendanceNotices.id, ativo!.id)),
+    )).rejects.toMatchObject({ cause: { code: '42501' } })
+    await expect(withUserContext(db, as(dono), (tx) =>
+      tx.update(attendanceNotices).set({ status: 'ativo' }).where(eq(attendanceNotices.id, cancelado!.id)),
+    )).rejects.toMatchObject({ cause: { code: '42501' } })
+    const ok = await withUserContext(db, as(dono), (tx) =>
+      tx.update(attendanceNotices).set({ status: 'cancelado' }).where(eq(attendanceNotices.id, ativo!.id)).returning(),
+    )
+    expect(ok).toHaveLength(1)
+    await expect(withUserContext(db, as(atendente), (tx) =>
+      tx.insert(attendanceNotices).values({ restaurantId, unitId, data: '2026-10-10', pessoas: 1, origem: 'painel' }),
+    )).rejects.toMatchObject({ cause: { code: '42501' } })
+    const r = await withUserContext(db, as(atendente), (tx) =>
+      tx.update(attendanceNotices).set({ status: 'cancelado' }).where(eq(attendanceNotices.id, cancelado!.id)).returning(),
+    )
+    expect(r).toHaveLength(0)
+  })
 })
