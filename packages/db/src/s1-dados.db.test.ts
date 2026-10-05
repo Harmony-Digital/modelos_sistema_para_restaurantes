@@ -50,6 +50,21 @@ describe('carregarContextoS1 (como worker_app)', () => {
   })
 })
 
+describe('carregarContextoS1 sem unidades ativas', () => {
+  it('devolve unidades vazias e só os fatos gerais', async () => {
+    const { restaurantId, unitId } = await seedRestaurant(db)
+    await db.update(units).set({ ativo: false }).where(eq(units.id, unitId))
+    await db.insert(unitHours).values({ restaurantId, unitId, weekday: 1, turno: 1, abre: '10:00', fecha: '12:00' })
+    await db.insert(knowledgeFacts).values([
+      { restaurantId, tema: 'Geral', texto: 'Fato geral.' },
+      { restaurantId, unitId, tema: 'Da unidade', texto: 'Fato da unidade inativa.' },
+    ])
+    const ctx = await withRole(db, 'worker_app', (tx) => carregarContextoS1(tx, restaurantId, AGORA))
+    expect(ctx.unidades).toEqual([])
+    expect(ctx.fatos.map((f) => f.tema)).toEqual(['Geral'])
+  })
+})
+
 describe('registrarLacunas (como worker_app)', () => {
   it('soma ocorrências na lacuna aberta, separa por unidade e trata unidade nula', async () => {
     const { restaurantId, unitId } = await seedRestaurant(db)
@@ -61,6 +76,39 @@ describe('registrarLacunas (como worker_app)', () => {
       ['horario', unitId, 2, 'e o wifi?'],
       ['info:wifi', null, 2, 'e o wifi?'],
     ])
+  })
+
+  it('processa as lacunas em ordem estável, qualquer que seja a ordem de entrada', async () => {
+    const { restaurantId, unitId } = await seedRestaurant(db)
+    const a = { chave: 'a', unitId: null }
+    const b = { chave: 'b', unitId }
+    const c = { chave: 'b', unitId: null }
+    const ordens: string[][] = []
+    for (const lacunas of [[b, c, a], [a, c, b], [c, b, a]]) {
+      await db.delete(knowledgeGaps)
+      const vistas: string[] = []
+      await withRole(db, 'worker_app', (tx) => {
+        const espiao = new Proxy(tx, {
+          get(alvo, prop, recv) {
+            if (prop !== 'insert') return Reflect.get(alvo, prop, recv)
+            return (...args: unknown[]) => {
+              const ins = (alvo.insert as (...x: unknown[]) => { values: (v: { chaveNormalizada: string; unitId: string | null }) => unknown })(...args)
+              const values = ins.values.bind(ins)
+              ins.values = (v) => {
+                vistas.push(`${v.chaveNormalizada}:${v.unitId ? 'u' : 'n'}`)
+                return values(v)
+              }
+              return ins
+            }
+          },
+        })
+        return registrarLacunas(espiao, { restaurantId, lacunas, pergunta: 'p' })
+      })
+      ordens.push(vistas)
+    }
+    expect(ordens[0]).toEqual(['a:n', 'b:n', 'b:u'])
+    expect(ordens[1]).toEqual(ordens[0])
+    expect(ordens[2]).toEqual(ordens[0])
   })
 
   it('concorrência: duas transações ao mesmo tempo não duplicam', async () => {
