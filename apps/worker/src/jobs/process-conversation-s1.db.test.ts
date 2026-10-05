@@ -351,7 +351,7 @@ describe('S1 no worker', () => {
   it('item humano em qualquer posição ⇒ handoff', async () => {
     const { restaurantId } = await setup()
     const conv = await receive(restaurantId, 'abre domingo? quero reclamar')
-    const { llm } = fakeLlm([{ itens: [h('horario_dia', { data: 'domingo' }), { servico: 'humano', tipo: null, unidade: null, data: null, tema: null }], fora_escopo: false }])
+    const { llm } = fakeLlm([{ itens: [h('horario_dia', { data: 'domingo' }), { servico: 'humano', tipo: null, unidade: null, data: null, tema: null, pessoas: null, horario: null }], fora_escopo: false }])
     await processConversation(deps(llm, fakeWa()), conv)
     expect((await conversa(conv)).estado).toBe('aguardando_humano')
   })

@@ -34,13 +34,15 @@ export function triage(
 // ------------------------------------------------------------- v2: lista de itens (Etapa 02)
 
 const cortar = (max: number) => z.string().transform((s) => s.slice(0, max)).nullable()
-const itemSchema = z.object({
-  servico: z.enum(SERVICOS),
-  tipo: z.enum(TIPOS_S1).nullable(),
-  unidade: cortar(120),
-  data: cortar(60),
-  tema: cortar(120),
-})
+const itemSchema = z
+  .object({
+    servico: z.enum(SERVICOS),
+    tipo: z.enum(TIPOS_S1).nullable(),
+    unidade: cortar(120),
+    data: cortar(60),
+    tema: cortar(120),
+  })
+  .transform((i) => ({ ...i, pessoas: null, horario: null })) // v2 não extrai avisos de presença
 const triageV2Schema = z.object({
   itens: z.array(itemSchema).transform((a) => a.slice(0, 5)),
   fora_escopo: z.boolean(),

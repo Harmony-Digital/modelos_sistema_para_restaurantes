@@ -6,12 +6,13 @@ import {
   asHora, DIAS_SEMANA, formatarEndereco, formatarTurnos, quandoAbre, renderModelo, rotuloDoDia, type ChaveModelo,
 } from './modelos.ts'
 import { agoraLocal, type DataIso } from './tempo.ts'
-import type {
-  ContextoS1, ItemExtraido, Lacuna, ListaUnidades, Localizacao, ResultadoS1, Servico, TipoS1, UnidadeS1,
+import {
+  TIPOS_S1, type ContextoS1, type ItemExtraido, type Lacuna, type ListaUnidades, type Localizacao, type ResultadoS1, type Servico,
+  type TipoS1, type UnidadeS1,
 } from './tipos.ts'
 
+// aviso_presenca é resolvido pelo S2 (@atd/core/s2): aqui é ignorado
 const NOME_SERVICO: Partial<Record<Servico, string>> = {
-  aviso_presenca: 'avisos de presença',
   evento: 'eventos',
   cardapio: 'o cardápio',
 }
@@ -22,6 +23,25 @@ const BOTAO_LISTA = 'Ver unidades'
 type Parcial = { trecho: string; respondido: boolean }
 
 const ordenar = (ts: readonly Turno[]) => [...ts].sort((a, b) => minutosDe(a.abre) - minutosDe(b.abre))
+const ehTipoS1 = (t: ItemExtraido['tipo']): t is TipoS1 => (TIPOS_S1 as readonly string[]).includes(t ?? '')
+
+/** Unidades ativas na ordem de exibição (ordem do painel, depois nome). */
+export function unidadesOrdenadas(ctx: ContextoS1): UnidadeS1[] {
+  return [...ctx.unidades].sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome, 'pt-BR'))
+}
+
+/** Lista interativa "Ver unidades" (a mesma para pendentes do S1 e do S2). */
+export function listaDeUnidades(ctx: ContextoS1): ListaUnidades {
+  return {
+    corpo: renderModelo('escolher_unidade', {}, ctx.modelos),
+    botao: BOTAO_LISTA,
+    opcoes: unidadesOrdenadas(ctx).slice(0, MAX_OPCOES).map((u) => ({
+      id: u.id,
+      titulo: u.nome.slice(0, 24),
+      descricao: [u.bairro, u.cidade].filter(Boolean).join(' · ').slice(0, 72),
+    })),
+  }
+}
 
 export function resolverS1(itens: readonly ItemExtraido[], ctx: ContextoS1, agora: Date, escolhidaId?: string): ResultadoS1 {
   const local = agoraLocal(agora, ctx.timezone)
@@ -29,7 +49,7 @@ export function resolverS1(itens: readonly ItemExtraido[], ctx: ContextoS1, agor
   const listaFeriados = [...feriadosNacionais(ano), ...feriadosNacionais(ano + 1)]
   const feriados = mapaFeriados(listaFeriados)
   const m = (chave: ChaveModelo, vars: Record<string, string> = {}) => renderModelo(chave, vars, ctx.modelos)
-  const unidades = [...ctx.unidades].sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome, 'pt-BR'))
+  const unidades = unidadesOrdenadas(ctx)
   const escolhida = escolhidaId ? (unidades.find((u) => u.id === escolhidaId) ?? null) : null
 
   const trechos: string[] = []
@@ -159,9 +179,9 @@ export function resolverS1(itens: readonly ItemExtraido[], ctx: ContextoS1, agor
     if (item.servico !== 'horario_unidades') {
       const nome = NOME_SERVICO[item.servico]
       if (nome) trechos.push(m('em_breve', { servico: nome }))
-      continue // humano/lgpd: tratados pelo worker antes daqui
+      continue // humano/lgpd: tratados pelo worker antes daqui; aviso_presenca: S2
     }
-    const tipo: TipoS1 = item.tipo ?? 'info'
+    const tipo: TipoS1 = ehTipoS1(item.tipo) ? item.tipo : 'info'
 
     if (tipo === 'lista_unidades') {
       validos++
@@ -209,17 +229,7 @@ export function resolverS1(itens: readonly ItemExtraido[], ctx: ContextoS1, agor
     if (r.respondido) respondidos++
   }
 
-  const lista: ListaUnidades | null = pendente.length
-    ? {
-        corpo: m('escolher_unidade'),
-        botao: BOTAO_LISTA,
-        opcoes: unidades.slice(0, MAX_OPCOES).map((u) => ({
-          id: u.id,
-          titulo: u.nome.slice(0, 24),
-          descricao: [u.bairro, u.cidade].filter(Boolean).join(' · ').slice(0, 72),
-        })),
-      }
-    : null
+  const lista: ListaUnidades | null = pendente.length ? listaDeUnidades(ctx) : null
   const vistos = new Set<string>()
   const locs = localizacoes.filter((l) => {
     const k = `${l.nome}|${l.lat}|${l.lng}`

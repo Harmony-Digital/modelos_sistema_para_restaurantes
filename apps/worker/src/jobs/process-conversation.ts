@@ -1,7 +1,7 @@
 import { and, asc, count, eq, gt, gte, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import {
-  decryptPhone, escolhaDeUnidade, prefilter, redactPii, renderModelo, renderReply, resolverS1, SERVICOS, TIPOS_S1,
+  decryptPhone, escolhaDeUnidade, prefilter, redactPii, renderModelo, renderReply, resolverS1, SERVICOS, TIPOS_S1, TIPOS_S2,
   type InboundItem, type Lacuna, type ListaUnidades, type Localizacao, type ReplyKey, type ResultadoS1,
 } from '@atd/core'
 import {
@@ -40,10 +40,13 @@ type Saida =
 
 const itemSchema = z.object({
   servico: z.enum(SERVICOS),
-  tipo: z.enum(TIPOS_S1).nullable(),
+  tipo: z.enum([...TIPOS_S1, ...TIPOS_S2]).nullable(),
   unidade: z.string().nullable(),
   data: z.string().nullable(),
   tema: z.string().nullable(),
+  // avisos de presença (Etapa 03): pendentes antigos não têm os campos
+  pessoas: z.number().int().min(1).max(60).nullable().default(null),
+  horario: z.string().max(40).nullable().default(null),
 })
 const pendenteSchema = z.object({
   pergunta: z.string().max(300).default(''),

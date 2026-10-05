@@ -153,6 +153,8 @@ exports[`evals S1 — camada 2 (resolução + composição, determinística) > a
   "pendente": [
     {
       "data": null,
+      "horario": null,
+      "pessoas": null,
       "servico": "horario_unidades",
       "tema": null,
       "tipo": "aberto_agora",
@@ -360,6 +362,8 @@ exports[`evals S1 — camada 2 (resolução + composição, determinística) > d
   "pendente": [
     {
       "data": "amanhã",
+      "horario": null,
+      "pessoas": null,
       "servico": "horario_unidades",
       "tema": null,
       "tipo": "horario_dia",
@@ -635,6 +639,8 @@ exports[`evals S1 — camada 2 (resolução + composição, determinística) > e
   "pendente": [
     {
       "data": null,
+      "horario": null,
+      "pessoas": null,
       "servico": "horario_unidades",
       "tema": null,
       "tipo": "endereco",
@@ -781,6 +787,8 @@ exports[`evals S1 — camada 2 (resolução + composição, determinística) > f
   "pendente": [
     {
       "data": null,
+      "horario": null,
+      "pessoas": null,
       "servico": "horario_unidades",
       "tema": null,
       "tipo": "feriado",
@@ -1180,6 +1188,8 @@ exports[`evals S1 — camada 2 (resolução + composição, determinística) > m
   "pendente": [
     {
       "data": "amanhã",
+      "horario": null,
+      "pessoas": null,
       "servico": "horario_unidades",
       "tema": null,
       "tipo": "horario_dia",
@@ -1440,7 +1450,7 @@ exports[`evals S1 — camada 2 (resolução + composição, determinística) > v
   "localizacoes": [],
   "pendente": [],
   "respondidos": 0,
-  "texto": "Sobre avisos de presença, ainda estou aprendendo e em breve vou conseguir responder por aqui.",
+  "texto": null,
   "validos": 0,
 }
 `;
