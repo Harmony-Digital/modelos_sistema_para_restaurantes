@@ -1,0 +1,14 @@
+import { describe, expect, it } from 'vitest'
+import { maskData, maskHora, maskTelefone } from './masks.ts'
+
+describe('máscaras', () => {
+  it.each([['1', '1'], ['11', '11'], ['113', '11:3'], ['1130', '11:30'], ['11:30', '11:30'], ['113099', '11:30']])('hora %s → %s', (a, b) => {
+    expect(maskHora(a)).toBe(b)
+  })
+  it.each([['12', '12'], ['121', '12/1'], ['12102026', '12/10/2026'], ['12/10/2026', '12/10/2026']])('data %s → %s', (a, b) => {
+    expect(maskData(a)).toBe(b)
+  })
+  it.each([['61', '(61'], ['619', '(61) 9'], ['61999998888', '(61) 99999-8888'], ['6133334444', '(61) 3333-4444']])('telefone %s → %s', (a, b) => {
+    expect(maskTelefone(a)).toBe(b)
+  })
+})
