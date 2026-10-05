@@ -1,7 +1,8 @@
 'use client'
 import dynamic from 'next/dynamic'
 import { useRef, useState } from 'react'
-import { useLocalSimulator } from './use-local-simulator'
+import { SimuladorControles } from './controles'
+import { useSimulador, type AcoesSimulador } from './use-simulador'
 import { WA } from './colors'
 import { WhatsAppIcon } from './whatsapp-icon'
 
@@ -15,11 +16,11 @@ const SimulatorDialog = dynamic(() => import('./simulator-dialog'), {
   ),
 })
 
-export function SimulatorLauncher({ restaurante }: { restaurante: string }) {
+export function SimulatorLauncher({ restaurante, timezone, acoes }: { restaurante: string; timezone: string; acoes: AcoesSimulador }) {
   const [aberto, setAberto] = useState(false)
   const [jaAbriu, setJaAbriu] = useState(false)
   const fab = useRef<HTMLButtonElement>(null)
-  const sim = useLocalSimulator()
+  const sim = useSimulador(acoes, aberto, timezone)
   return (
     <>
       <button
@@ -42,6 +43,18 @@ export function SimulatorLauncher({ restaurante }: { restaurante: string }) {
           onEnviar={sim.enviar}
           onFechado={() => fab.current?.focus()}
           onEscolher={sim.escolher}
+          controles={
+            <SimuladorControles
+              timezone={timezone}
+              offset={sim.offset}
+              relogio={sim.relogio}
+              erro={sim.erro}
+              detalhes={sim.detalhes}
+              onNovoCliente={() => void sim.novoCliente()}
+              onRelogio={sim.mudarRelogio}
+              onDetalhes={() => void sim.verDetalhes()}
+            />
+          }
         />
       )}
     </>

@@ -15,12 +15,13 @@ export default function SimulatorDialog(props: {
   /** devolve o foco ao botão flutuante ao fechar */
   onFechado: () => void
   onEscolher: (mensagemId: string, itemId: string, titulo: string) => void
+  controles: React.ReactNode
 }) {
   return (
     <Dialog open={props.aberto} onOpenChange={props.onAbertoChange}>
       <DialogContent
         showCloseButton={false}
-        className="h-dvh max-h-dvh w-full max-w-none gap-0 rounded-none border-0 bg-transparent p-0 shadow-none motion-reduce:animate-none sm:max-w-none md:h-auto md:w-[393px] md:max-w-fit"
+        className="flex h-dvh max-h-dvh flex-col w-full max-w-none gap-0 rounded-none border-0 bg-transparent p-0 shadow-none motion-reduce:animate-none sm:max-w-none md:h-auto md:w-[393px] md:max-w-fit"
         onCloseAutoFocus={(e) => { e.preventDefault(); props.onFechado() }}
         onOpenAutoFocus={(e) => {
           // foco direto no campo de mensagem (não no primeiro link/botão do histórico)
@@ -29,7 +30,8 @@ export default function SimulatorDialog(props: {
         }}
       >
         <DialogTitle className="sr-only">Simulador de WhatsApp</DialogTitle>
-        <DialogDescription className="sr-only">Converse como se fosse um cliente. Nenhuma mensagem é enviada pelo WhatsApp de verdade.</DialogDescription>
+        <DialogDescription className="sr-only">Converse como se fosse um cliente. As respostas passam pela IA de verdade e nunca são enviadas pelo WhatsApp.</DialogDescription>
+        {props.controles}
         <PhoneFrame>
           <WhatsAppChat restaurante={props.restaurante} mensagens={props.mensagens} digitando={props.digitando} onEnviar={props.onEnviar} onEscolher={props.onEscolher} />
         </PhoneFrame>
