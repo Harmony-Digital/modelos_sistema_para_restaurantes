@@ -157,15 +157,15 @@ async function decide(deps: ProcessDeps, conversationId: string): Promise<Outcom
   }
 
   const decision = await classify(deps, ctx, pending, now)
-  const lastNotice = ctx.customer.privacyNoticeSentAt?.getTime() ?? 0
-  const [noticePending] = await db
-    .select({ id: messages.id })
-    .from(messages)
-    .where(and(eq(messages.conversationId, conversationId), eq(messages.replyKey, 'avisoPrivacidade'), eq(messages.statusEnvio, 'pendente')))
-    .limit(1)
-  const needsNotice = !noticePending && now.getTime() - lastNotice > PRIVACY_RENOTICE_MS
-  if (needsNotice) decision.replies.unshift('avisoPrivacidade')
   try {
+    const lastNotice = ctx.customer.privacyNoticeSentAt?.getTime() ?? 0
+    const [noticePending] = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(and(eq(messages.conversationId, conversationId), eq(messages.replyKey, 'avisoPrivacidade'), eq(messages.statusEnvio, 'pendente')))
+      .limit(1)
+    const needsNotice = !noticePending && now.getTime() - lastNotice > PRIVACY_RENOTICE_MS
+    if (needsNotice) decision.replies.unshift('avisoPrivacidade')
     return await commit(db, ctx, upTo, decision)
   } catch (err) {
     // a transação desfez a liquidação: contabiliza o que já foi gasto (ou devolve a reserva)
