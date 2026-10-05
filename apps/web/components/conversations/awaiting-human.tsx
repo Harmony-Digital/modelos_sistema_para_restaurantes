@@ -45,10 +45,14 @@ export function AwaitingHuman(props: { itens: Item[]; action: (id: string) => Pr
                 disabled={pending}
                 aria-label={`Devolver à IA a conversa de ${nome}`}
                 onClick={() => start(async () => {
-                  const { resultado } = await props.action(c.id)
-                  if (resultado === 'devolvida') toast.success('Conversa devolvida à IA')
-                  else if (resultado === 'ja_estava') toast.info('Esta conversa já estava com a IA')
-                  else toast.error('Conversa não encontrada')
+                  try {
+                    const { resultado } = await props.action(c.id)
+                    if (resultado === 'devolvida') toast.success('Conversa devolvida à IA')
+                    else if (resultado === 'ja_estava') toast.info('Esta conversa já estava com a IA')
+                    else toast.error('Conversa não encontrada')
+                  } catch {
+                    toast.error('Não foi possível devolver agora. Tente de novo.')
+                  }
                 })}
               >
                 <Bot aria-hidden="true" className="size-4" /> Devolver à IA

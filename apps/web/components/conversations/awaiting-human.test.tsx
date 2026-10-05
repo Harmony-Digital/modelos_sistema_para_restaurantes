@@ -30,4 +30,17 @@ describe('AwaitingHuman', () => {
     await user.click(screen.getByRole('button', { name: /Devolver à IA/ }))
     expect(toast.info).toHaveBeenCalledWith('Esta conversa já estava com a IA')
   })
+  it('não encontrada: toast de erro', async () => {
+    const user = userEvent.setup()
+    render(<AwaitingHuman itens={[item]} action={vi.fn(async () => ({ resultado: 'nao_encontrada' as const }))} />)
+    await user.click(screen.getByRole('button', { name: /Devolver à IA/ }))
+    expect(toast.error).toHaveBeenCalledWith('Conversa não encontrada')
+  })
+  it('ação lança: toast de erro e botão volta a ficar ativo', async () => {
+    const user = userEvent.setup()
+    render(<AwaitingHuman itens={[item]} action={vi.fn(async () => { throw new Error('boom') })} />)
+    await user.click(screen.getByRole('button', { name: /Devolver à IA/ }))
+    expect(toast.error).toHaveBeenCalledWith('Não foi possível devolver agora. Tente de novo.')
+    expect(screen.getByRole('button', { name: /Devolver à IA/ })).toBeEnabled()
+  })
 })

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { and, asc, eq, inArray } from 'drizzle-orm'
 import type { Db } from './client.ts'
 import { withUserContext, type JwtClaims } from './rls.ts'
 import { auditLog, conversations, customers } from './schema/index.ts'
@@ -15,7 +15,7 @@ export function listAwaitingHuman(db: Db, claims: JwtClaims): Promise<AwaitingIt
       .from(conversations)
       .innerJoin(customers, eq(customers.id, conversations.customerId))
       .where(inArray(conversations.estado, [...COM_HUMANO]))
-      .orderBy(desc(conversations.lastMessageAt))
+      .orderBy(asc(conversations.lastMessageAt))
       .limit(50)
     return rows as AwaitingItem[]
   })
