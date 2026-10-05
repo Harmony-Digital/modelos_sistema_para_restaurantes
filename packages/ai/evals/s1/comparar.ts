@@ -6,7 +6,7 @@ import {
 /**
  * Chave semântica de um item: dois itens com a mesma chave levam à MESMA resposta.
  * Por isso compara unidade/data/fato resolvidos, não o texto cru (ex.: "amanhã" = "amanha";
- * como_chegar ≈ endereco; feriado sem data ≈ horario_dia na data do próximo feriado).
+ * feriado sem data ≈ horario_dia na data do próximo feriado).
  */
 export function chaveItem(i: ItemExtraido, ctx: ContextoS1, agora: Date): string {
   if (i.servico !== 'horario_unidades') return i.servico
@@ -17,7 +17,7 @@ export function chaveItem(i: ItemExtraido, ctx: ContextoS1, agora: Date): string
     return `horario_unidades|info|${encontrarFato(i.tema, ctx.fatos, u?.id ?? null)?.id ?? '?'}`
   }
   const unidade = encontrarUnidade(i.unidade, ctx.unidades)?.id ?? '-'
-  if (tipo === 'endereco' || tipo === 'como_chegar') return `horario_unidades|endereco|${unidade}`
+  if (tipo === 'endereco' || tipo === 'como_chegar') return `horario_unidades|${tipo}|${unidade}`
   if (tipo === 'horario_semana') return `horario_unidades|horario_semana|${unidade}`
   const hoje = agoraLocal(agora, ctx.timezone).data
   const ano = Number(hoje.slice(0, 4))

@@ -11,7 +11,7 @@ describe('comparação de extração', () => {
   it('equivalências que levam à mesma resposta', () => {
     const k = (i: ItemExtraido) => chaveItem(i, CONTEXTO, agora)
     expect(k(h('horario_dia', 'asa sul', 'amanhã'))).toBe(k(h('horario_dia', 'Asa Sul', 'amanha')))
-    expect(k(h('como_chegar', 'asa norte'))).toBe(k(h('endereco', 'aza norte')))
+    expect(k(h('endereco', 'asa norte'))).toBe(k(h('endereco', 'aza norte')))
     expect(k(h('feriado', 'asa sul'))).toBe(k(h('horario_dia', 'asa sul', '12/10')))
     expect(k(h('aberto_agora', 'asa sul', 'hoje'))).toBe(k(h('aberto_agora', 'asa sul')))
     expect(k(h('info', 'asa sul', null, 'pet'))).toBe(k(h('info', null, null, 'cachorro')))
@@ -22,6 +22,7 @@ describe('comparação de extração', () => {
     expect(k(h('horario_dia', 'asa sul', 'amanhã'))).not.toBe(k(h('horario_dia', 'asa norte', 'amanhã')))
     expect(k(h('info', null, null, 'wifi'))).not.toBe(k(h('info', 'asa norte', null, 'wifi')))
     expect(k(h('aberto_agora', 'asa sul'))).not.toBe(k(h('horario_dia', 'asa sul', 'amanhã')))
+    expect(k(h('como_chegar', 'asa norte'))).not.toBe(k(h('endereco', 'asa norte')))
   })
   it('ordem dos itens não importa; itens a mais ou a menos importam', () => {
     const a = [h('endereco', 'asa sul'), h('info', null, null, 'estacionamento')]
