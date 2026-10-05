@@ -1,23 +1,38 @@
 'use server'
 import { redirect } from 'next/navigation'
 import { actionErrorFromZod, type ActionResult } from '@/lib/action-result'
+import { isInviteSession } from '@/lib/auth-confirm'
 import { createClient } from '@/lib/supabase/server'
 import { definirSenhaSchema } from './schema'
 
+const GENERICO = 'Não foi possível salvar a senha. Tente novamente.'
+const LINK_INVALIDO = 'Este link de convite não vale mais. Peça um novo convite.'
+
+const ERROS_POR_CODIGO: Record<string, string> = {
+  same_password: 'Escolha uma senha diferente da anterior',
+  weak_password: 'Senha considerada fraca. Use mais caracteres, misturando letras e números.',
+}
+
 export async function definirSenha(input: { senha: string; confirmacao: string }): Promise<ActionResult> {
+  const supabase = await createClient()
+  let claims: { amr?: unknown; sub?: string } | null | undefined
+  try {
+    claims = (await supabase.auth.getClaims()).data?.claims
+  } catch {
+    return { ok: false, formError: GENERICO }
+  }
+  if (!claims?.sub) redirect('/auth/erro?motivo=link')
+  if (!isInviteSession(claims)) return { ok: false, formError: LINK_INVALIDO }
+
   const parsed = definirSenhaSchema.safeParse(input)
   if (!parsed.success) return actionErrorFromZod(parsed.error)
-  const supabase = await createClient()
-  const { data } = await supabase.auth.getClaims()
-  if (!data?.claims?.sub) redirect('/auth/erro?motivo=link')
+
   const { error } = await supabase.auth.updateUser({ password: parsed.data.senha })
   if (error) {
-    const msg = /different from the old/i.test(error.message)
-      ? 'Escolha uma senha diferente da anterior'
-      : /weak|pwned|short/i.test(error.message)
-        ? 'Senha considerada fraca. Use mais caracteres, misturando letras e números.'
-        : null
-    return msg ? { ok: false, fieldErrors: { senha: msg } } : { ok: false, formError: 'Não foi possível salvar a senha. Tente novamente.' }
+    const code = error.code ?? ''
+    if (code in ERROS_POR_CODIGO) return { ok: false, fieldErrors: { senha: ERROS_POR_CODIGO[code]! } }
+    if (code === 'insufficient_aal') return { ok: false, formError: LINK_INVALIDO }
+    return { ok: false, formError: GENERICO }
   }
   redirect('/')
 }

@@ -17,3 +17,13 @@ export async function confirmEmailLink(
   const { error } = await verify({ token_hash, type })
   return error ? ERRO : safeNext(url.searchParams.get('next'))
 }
+
+/**
+ * Sessão criada pelo link de convite (`verifyOtp`). O GoTrue registra esse login
+ * em `amr` com método `otp` (verificado localmente; não existe método `invite`).
+ * `/auth/confirm` só aceita `type=invite`, então `otp` aqui significa convite.
+ */
+export function isInviteSession(claims: { amr?: unknown } | null | undefined): boolean {
+  const amr = claims?.amr
+  return Array.isArray(amr) && amr.some((e) => typeof e === 'object' && e !== null && (e as { method?: unknown }).method === 'otp')
+}

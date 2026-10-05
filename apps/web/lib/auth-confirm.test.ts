@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { confirmEmailLink, safeNext } from './auth-confirm.ts'
+import { confirmEmailLink, isInviteSession, safeNext } from './auth-confirm.ts'
 
 describe('safeNext', () => {
   it.each([
@@ -40,5 +40,21 @@ describe('confirmEmailLink', () => {
   it('next malicioso é ignorado mesmo com token válido', async () => {
     const verify = vi.fn(async () => ({ error: null }))
     expect(await confirmEmailLink(verify, url('token_hash=abc&type=invite&next=//evil.com'))).toBe('/')
+  })
+})
+
+describe('isInviteSession', () => {
+  it('sessão vinda do link (otp) é de convite', () => {
+    expect(isInviteSession({ amr: [{ method: 'otp', timestamp: 1 }] })).toBe(true)
+  })
+  it('login por senha (com ou sem MFA) não é de convite', () => {
+    expect(isInviteSession({ amr: [{ method: 'password', timestamp: 1 }] })).toBe(false)
+    expect(isInviteSession({ amr: [{ method: 'totp' }, { method: 'password' }] })).toBe(false)
+  })
+  it('sem amr ou formato estranho não é de convite', () => {
+    expect(isInviteSession({})).toBe(false)
+    expect(isInviteSession(null)).toBe(false)
+    expect(isInviteSession({ amr: 'otp' })).toBe(false)
+    expect(isInviteSession({ amr: [null, 'otp'] })).toBe(false)
   })
 })
