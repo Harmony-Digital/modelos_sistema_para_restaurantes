@@ -4,7 +4,7 @@ import { Controller } from 'react-hook-form'
 import { toast } from 'sonner'
 import { applyServerErrors, DateInput, Field, FormError, SubmitButton, SwitchField, TextInput, TimeInput, useZodForm } from '@/components/form'
 import { Button } from '@/components/ui/button'
-import type { ActionResult } from '@/lib/action-result'
+import { chamarAcao, type ActionResult } from '@/lib/action-result'
 import { excecaoSchema, type ExcecaoForm as Valores } from '@/lib/schemas/unidades'
 
 export function ExcecaoForm(props: {
@@ -21,7 +21,7 @@ export function ExcecaoForm(props: {
   const definir = (t: { abre: string; fecha: string }[]) => form.setValue('turnos', t, { shouldDirty: true, shouldValidate: form.formState.isSubmitted })
   // envia os valores digitados (data em dd/mm/aaaa): a action valida e converte de novo
   const onSubmit = form.handleSubmit(async () => {
-    const r = await props.acao(form.getValues())
+    const r = await chamarAcao(() => props.acao(form.getValues()))
     if (!r.ok) {
       applyServerErrors(form, r)
       return

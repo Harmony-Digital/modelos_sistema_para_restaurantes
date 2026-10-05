@@ -28,6 +28,15 @@ describe('DadosUnidadeForm', () => {
     expect(acao).toHaveBeenCalledWith(expect.objectContaining({ nome: 'Asa Sul', mapsUrl: 'https://maps.app.goo.gl/Ab12' }))
   })
 
+  it('ação que lança vira erro geral em português', async () => {
+    const user = userEvent.setup()
+    const acao = vi.fn().mockRejectedValue(new Error('rede'))
+    render(<DadosUnidadeForm inicial={UNIDADE_VAZIA} acao={acao} />)
+    await user.type(screen.getByLabelText(/^Nome da unidade/), 'Asa Sul')
+    await user.click(screen.getByRole('button', { name: 'Salvar unidade' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível salvar. Tente de novo.')
+  })
+
   it('somente leitura: campos desabilitados e sem botão de salvar', () => {
     render(<DadosUnidadeForm inicial={{ ...UNIDADE_VAZIA, nome: 'Asa Sul' }} acao={vi.fn()} somenteLeitura />)
     expect(screen.getByLabelText(/^Nome da unidade/)).toBeDisabled()

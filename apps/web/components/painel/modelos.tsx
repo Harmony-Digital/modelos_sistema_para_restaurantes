@@ -7,6 +7,7 @@ import { restaurarModeloAction, salvarModeloAction } from '@/app/(painel)/respos
 import { applyServerErrors, Field, FormError, SubmitButton, Textarea, useZodForm } from '@/components/form'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { chamarAcao } from '@/lib/action-result'
 import { previaModelo, ROTULOS_MODELO, type UnidadeExemplo } from '@/lib/modelos-tela'
 import { modeloSchema } from '@/lib/schemas/respostas'
 import { Confirmar } from './confirmar'
@@ -25,7 +26,7 @@ function ModeloForm(props: { chave: ChaveModelo; texto: string; unidade: Unidade
     if (enviando.current) return
     enviando.current = true
     try {
-      const r = await salvarModeloAction(props.chave, v)
+      const r = await chamarAcao(() => salvarModeloAction(props.chave, v))
       if (!r.ok) {
         applyServerErrors(form, r)
         return

@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { DIAS_SEMANA } from '@atd/core/s1'
 import { applyServerErrors, Field, FormError, SubmitButton, TimeInput, useZodForm } from '@/components/form'
 import { Button } from '@/components/ui/button'
-import type { ActionResult } from '@/lib/action-result'
+import { chamarAcao, type ActionResult } from '@/lib/action-result'
 import { horariosSchema, type HorariosForm as Valores } from '@/lib/schemas/unidades'
 
 const SEGUNDA_A_DOMINGO = [1, 2, 3, 4, 5, 6, 0] as const
@@ -27,7 +27,7 @@ export function HorariosForm(props: {
     for (const d of dias) definir(d, base.map((t) => ({ ...t })))
   }
   const onSubmit = form.handleSubmit(async (valores) => {
-    const r = await props.acao(valores)
+    const r = await chamarAcao(() => props.acao(valores))
     if (!r.ok) {
       applyServerErrors(form, r)
       return

@@ -29,6 +29,14 @@ describe('FatoForm', () => {
 })
 
 describe('FatoForm: duplo envio', () => {
+  it('ação que lança vira erro geral em português', async () => {
+    const user = userEvent.setup()
+    const acao = vi.fn().mockRejectedValue(new Error('rede'))
+    render(<FatoForm inicial={{ tema: 'Wifi', exemplos: [], texto: 'Sim, temos.', unitId: '', ativo: true }} unidades={unidades} acao={acao} rotuloSalvar="Salvar informação" />)
+    await user.click(screen.getByRole('button', { name: 'Salvar informação' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível salvar. Tente de novo.')
+  })
+
   it('dois submits seguidos chamam a ação uma vez só', async () => {
     let liberar: (v: { ok: true }) => void = () => {}
     const acao = vi.fn().mockImplementation(() => new Promise((r) => { liberar = r }))

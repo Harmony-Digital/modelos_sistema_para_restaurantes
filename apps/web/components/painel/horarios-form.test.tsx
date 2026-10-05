@@ -38,4 +38,12 @@ describe('HorariosForm', () => {
     expect(enviada[5]).toEqual([{ abre: '18:00', fecha: '02:00' }])
     expect(enviada[6]).toEqual([])
   })
+
+  it('ação que lança vira erro geral em português', async () => {
+    const user = userEvent.setup()
+    const acao = vi.fn().mockRejectedValue(new Error('rede'))
+    render(<HorariosForm unitId="u" inicial={vazia()} acao={acao} />)
+    await user.click(screen.getByRole('button', { name: 'Salvar horários' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível salvar. Tente de novo.')
+  })
 })

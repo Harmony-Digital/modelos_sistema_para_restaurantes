@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import {
   applyServerErrors, Field, FormError, Select, SubmitButton, SwitchField, TagInput, Textarea, TextInput, useZodForm,
 } from '@/components/form'
-import type { ActionResult } from '@/lib/action-result'
+import { chamarAcao, type ActionResult } from '@/lib/action-result'
 import { fatoSchema, type FatoForm as Valores } from '@/lib/schemas/respostas'
 
 export function FatoForm(props: {
@@ -23,7 +23,7 @@ export function FatoForm(props: {
     if (enviando.current) return
     enviando.current = true
     try {
-      const r = await props.acao(valores)
+      const r = await chamarAcao(() => props.acao(valores))
       if (!r.ok) {
         applyServerErrors(form, r)
         return

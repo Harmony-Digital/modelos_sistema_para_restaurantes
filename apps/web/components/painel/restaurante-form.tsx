@@ -2,7 +2,7 @@
 import { useRef } from 'react'
 import { toast } from 'sonner'
 import { applyServerErrors, Field, FormError, Select, SubmitButton, TextInput, useZodForm } from '@/components/form'
-import type { ActionResult } from '@/lib/action-result'
+import { chamarAcao, type ActionResult } from '@/lib/action-result'
 import { restauranteSchema, type RestauranteForm as Valores } from '@/lib/schemas/restaurante'
 
 export function RestauranteForm(props: { inicial: Valores; acao: (v: Valores) => Promise<ActionResult<null>>; somenteLeitura?: boolean }) {
@@ -14,7 +14,7 @@ export function RestauranteForm(props: { inicial: Valores; acao: (v: Valores) =>
     if (enviando.current) return
     enviando.current = true
     try {
-      const r = await props.acao(v)
+      const r = await chamarAcao(() => props.acao(v))
       if (!r.ok) {
         applyServerErrors(form, r)
         return

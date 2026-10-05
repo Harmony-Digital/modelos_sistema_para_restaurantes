@@ -7,7 +7,7 @@ import {
   applyServerErrors, ErrorSummary, Field, FormError, PhoneInput, SubmitButton, SwitchField, TagInput, TextInput, useErrorSummary,
   useZodForm,
 } from '@/components/form'
-import type { ActionResult } from '@/lib/action-result'
+import { chamarAcao, type ActionResult } from '@/lib/action-result'
 import { dadosUnidadeSchema, type DadosUnidadeForm as Valores } from '@/lib/schemas/unidades'
 
 export const UNIDADE_VAZIA: Valores = {
@@ -31,7 +31,7 @@ export function DadosUnidadeForm(props: {
   const maps = form.watch('mapsUrl') ?? ''
   const mapsOk = maps !== '' && ehLinkGoogleMaps(maps) && !errors.mapsUrl
   const onSubmit = form.handleSubmit(async (valores) => {
-    const r = await props.acao(valores)
+    const r = await chamarAcao(() => props.acao(valores))
     if (!r.ok) {
       applyServerErrors(form, r)
       return

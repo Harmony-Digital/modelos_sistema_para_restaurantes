@@ -25,4 +25,13 @@ describe('Modelos', () => {
     expect(await screen.findByText('Inclua {turnos} no texto: é ali que entra a informação.')).toBeInTheDocument()
     expect(salvarModeloAction).not.toHaveBeenCalled()
   })
+
+  it('ação que lança vira erro geral em português', async () => {
+    const user = userEvent.setup()
+    salvarModeloAction.mockRejectedValueOnce(new Error('rede'))
+    render(<Modelos personalizados={{}} unidade={unidade} somenteLeitura={false} />)
+    await user.click(screen.getByRole('button', { name: 'Editar: Ainda não sabe responder' }))
+    await user.click(await screen.findByRole('button', { name: 'Salvar modelo' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível salvar. Tente de novo.')
+  })
 })

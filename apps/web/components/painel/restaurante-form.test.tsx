@@ -21,4 +21,12 @@ describe('RestauranteForm', () => {
     expect(screen.getByLabelText(/^Nome do restaurante/)).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Salvar restaurante' })).toBeNull()
   })
+
+  it('ação que lança vira erro geral em português', async () => {
+    const user = userEvent.setup()
+    const acao = vi.fn().mockRejectedValue(new Error('rede'))
+    render(<RestauranteForm inicial={inicial} acao={acao} />)
+    await user.click(screen.getByRole('button', { name: 'Salvar restaurante' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível salvar. Tente de novo.')
+  })
 })
