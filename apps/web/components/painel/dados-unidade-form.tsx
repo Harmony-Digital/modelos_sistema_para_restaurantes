@@ -21,7 +21,7 @@ const ROTULOS = {
 
 export function DadosUnidadeForm(props: {
   inicial: Valores
-  acao: (valores: Valores) => Promise<ActionResult<{ id: string }>>
+  acao: (valores: Valores) => Promise<ActionResult<{ id: string; aviso?: string }>>
   onSalvo?: (id: string) => void
   somenteLeitura?: boolean
 }) {
@@ -36,7 +36,8 @@ export function DadosUnidadeForm(props: {
       applyServerErrors(form, r)
       return
     }
-    toast.success('Unidade salva')
+    if (r.data?.aviso) toast.warning(r.data.aviso)
+    else toast.success('Unidade salva')
     if (r.data) props.onSalvo?.(r.data.id)
   })
 

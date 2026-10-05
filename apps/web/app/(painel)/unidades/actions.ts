@@ -1,7 +1,7 @@
 'use server'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { removerExcecao, salvarExcecao, salvarHorarios, salvarUnidade } from '@atd/db'
+import { carregarUnidadesPainel, removerExcecao, salvarExcecao, salvarHorarios, salvarUnidade } from '@atd/db'
 import { actionErrorFromZod, type ActionResult } from '@/lib/action-result'
 import { requireStaff } from '@/lib/dal'
 import { coordenadasDoLink } from '@/lib/maps-link'
@@ -13,8 +13,8 @@ import { getDb } from '@/lib/server/db'
 
 const GESTAO: ['dono', 'gerente'] = ['dono', 'gerente']
 const NAO_ENCONTRADA = { ok: false as const, formError: 'Não encontramos essa unidade.' }
-const LINK_ILEGIVEL =
-  'Não consegui ler a localização desse link. Abra o local no Google Maps, toque em Compartilhar → Copiar link e cole aqui.'
+const AVISO_SEM_LOCALIZACAO =
+  'Link salvo, mas não consegui ler a localização exata; o cartão de localização não será enviado.'
 const idValido = (id: string) => z.uuid().safeParse(id).success
 const nulo = (v: string) => (v === '' ? null : v)
 
@@ -23,16 +23,24 @@ function revalidarUnidade(id: string) {
   revalidatePath(`/unidades/${id}`)
 }
 
-export async function salvarDadosUnidadeAction(id: string | null, input: DadosUnidadeForm): Promise<ActionResult<{ id: string }>> {
+export async function salvarDadosUnidadeAction(id: string | null, input: DadosUnidadeForm): Promise<ActionResult<{ id: string; aviso?: string }>> {
   const s = await requireStaff(GESTAO)
   if (id !== null && !idValido(id)) return NAO_ENCONTRADA
   const p = dadosUnidadeSchema.safeParse(input)
   if (!p.success) return actionErrorFromZod(p.error)
   const d = p.data
+  const mapsUrl = nulo(d.mapsUrl)
   let coords: { lat: number; lng: number } | null = null
-  if (d.mapsUrl) {
-    coords = await coordenadasDoLink(d.mapsUrl)
-    if (!coords) return { ok: false, fieldErrors: { mapsUrl: LINK_ILEGIVEL } }
+  let aviso: string | undefined
+  if (mapsUrl) {
+    const gravada = id === null ? undefined : (await carregarUnidadesPainel(getDb(), s.claims)).unidades.find((u) => u.id === id)
+    if (gravada && gravada.mapsUrl === mapsUrl) {
+      // Link inalterado: preserva o que já foi lido, sem ir à rede.
+      coords = gravada.lat !== null && gravada.lng !== null ? { lat: gravada.lat, lng: gravada.lng } : null
+    } else {
+      coords = await coordenadasDoLink(mapsUrl)
+      if (!coords) aviso = AVISO_SEM_LOCALIZACAO
+    }
   }
   const r = await salvarUnidade(getDb(), s.claims, s.restaurantId, id, {
     nome: d.nome,
@@ -43,13 +51,14 @@ export async function salvarDadosUnidadeAction(id: string | null, input: DadosUn
     cep: nulo(d.cep),
     telefone: nulo(d.telefone),
     apelidos: d.apelidos,
-    mapsUrl: nulo(d.mapsUrl),
+    mapsUrl,
     lat: coords?.lat ?? null,
     lng: coords?.lng ?? null,
     ativo: d.ativo,
   })
   if (r.ok) revalidarUnidade(r.valor.id)
-  return resultadoDoPainel(r, { nome_duplicado: 'nome' })
+  const resultado = resultadoDoPainel(r, { nome_duplicado: 'nome' })
+  return resultado.ok && aviso && resultado.data ? { ok: true, data: { ...resultado.data, aviso } } : resultado
 }
 
 export async function salvarHorariosAction(unitId: string, input: HorariosForm): Promise<ActionResult<null>> {
