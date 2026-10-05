@@ -8,6 +8,7 @@
 ## Onde paramos
 
 - **05/10/2026** — Etapa 01 (arquitetura e stack) **definida e aprovada**; PRD v1.0, PLAN e CLAUDE.md escritos; **plano detalhado da Etapa 01 escrito** em [docs/plans/etapa-01-fundacao.md](docs/plans/etapa-01-fundacao.md) (21 tarefas). Próximo passo: revisão do plano pelo dono e escolha do modo de execução; depois Task 1.
+- **05/10/2026** — Modelos de triagem (provisórios, definitivos nos evals da Etapa 02; consulta à API pública de modelos): principal `mistralai/mistral-nemo` (US$ 0,019/M entrada, 0,03/M saída), fallback `google/gemini-2.5-flash-lite` (US$ 0,10/M entrada, 0,40/M saída); ambos com saída estruturada. Gravados em `AI_TRIAGE_MODELS` no `.env` local.
 
 ## Ciclo de cada etapa
 
