@@ -1,6 +1,6 @@
 # Publicar o repositório no GitHub (Harmony-Digital)
 
-> Situação em 05/10/2026: o repositório ainda **não existe** no GitHub. A conta usada localmente (`BrunoRaposoo`) não é membro da organização `Harmony-Digital` e não pode criar repositórios nela. Todo o trabalho está commitado localmente e há um backup completo em bundle (abaixo).
+> **Publicado em 05/10/2026** em [Harmony-Digital/modelos_sistema_para_restaurantes](https://github.com/Harmony-Digital/modelos_sistema_para_restaurantes) (privado), seguindo este procedimento: repositório vazio conferido com `git ls-remote`, push de `main`, `etapa-01-fundacao` e `etapa-02-s1`, sem `--force`. O nome final difere do previsto abaixo (`ia-atendimento`); o restante vale como registro e para recriar o remoto em outra máquina.
 
 ## Estado local
 
