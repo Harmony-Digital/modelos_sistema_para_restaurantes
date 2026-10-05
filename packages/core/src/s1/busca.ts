@@ -74,6 +74,22 @@ export function encontrarUnidade<U extends { id: string; nome: string; apelidos:
   return p.u
 }
 
+const LIMIAR_ESCOLHA = 0.6
+const palavras = (s: string) => s.split(' ').filter(Boolean).length
+
+/** Resposta curta a uma lista: o texto tem de ser o nome (ou apelido) da unidade, não uma pergunta que a cita. */
+export function escolhaDeUnidade<U extends { id: string; nome: string; apelidos: readonly string[] }>(
+  texto: string,
+  opcoes: readonly U[],
+): U | null {
+  const t = limpar(texto)
+  if (!t) return null
+  const casam = opcoes.filter((u) =>
+    [u.nome, ...u.apelidos].map(limpar).some((n) => t === n || (palavras(t) === palavras(n) && similaridade(t, n) >= LIMIAR_ESCOLHA)),
+  )
+  return casam.length === 1 ? casam[0]! : null
+}
+
 export function encontrarFato<F extends { id: string; tema: string; exemplos: readonly string[]; unitId: string | null }>(
   tema: string | null,
   fatos: readonly F[],

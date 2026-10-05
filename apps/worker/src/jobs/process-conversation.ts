@@ -1,7 +1,7 @@
 import { and, asc, count, eq, gt, gte, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import {
-  decryptPhone, encontrarUnidade, prefilter, redactPii, renderReply, resolverS1, SERVICOS, TIPOS_S1,
+  decryptPhone, escolhaDeUnidade, prefilter, redactPii, renderReply, resolverS1, SERVICOS, TIPOS_S1,
   type InboundItem, type Lacuna, type ListaUnidades, type Localizacao, type ReplyKey, type ResultadoS1,
 } from '@atd/core'
 import {
@@ -46,6 +46,7 @@ const itemSchema = z.object({
   tema: z.string().nullable(),
 })
 const pendenteSchema = z.object({
+  pergunta: z.string().max(300).default(''),
   itens: z.array(itemSchema).min(1).max(5),
   opcoes: z.array(z.string()).min(1).max(10),
   expiraEm: z.iso.datetime(),
@@ -185,9 +186,11 @@ async function compensate(deps: ProcessDeps, reservation: Reservation, spentMicr
 }
 
 async function classify(deps: ProcessDeps, ctx: Ctx, pending: Pending[], now: Date): Promise<Decision> {
-  const daLista = await respostaDaLista(deps, ctx, pending, now)
-  if (daLista) return daLista
   const pre = prefilter(pending)
+  if (pre.kind === 'pass') {
+    const daLista = await respostaDaLista(deps, ctx, pending, now)
+    if (daLista) return daLista
+  }
   switch (pre.kind) {
     case 'handoff':
       return { replies: ['handoff'], autor: 'sistema', novoEstado: 'aguardando_humano', audit: 'conversa.handoff_pedido' }
@@ -213,20 +216,21 @@ function lerPendente(v: unknown): Pendente | null {
 async function respostaDaLista(deps: ProcessDeps, ctx: Ctx, pending: Pending[], now: Date): Promise<Decision | null> {
   const p = lerPendente(ctx.conv.pendente)
   if (!p || new Date(p.expiraEm) <= now) return null
-  const ultimo = pending.at(-1)!
+  if (pending.length !== 1) return null
+  const ultimo = pending[0]!
   const lido = interativoSchema.safeParse(ultimo.payload)
   const idLista = lido.success ? lido.data.interativoId : null
   const texto = ultimo.texto?.trim() ?? ''
-  if (!idLista && (pending.length > 1 || !texto || texto.split(/\s+/).length > MAX_PALAVRAS_ESCOLHA)) return null
+  if (!idLista && (!texto || texto.split(/\s+/).length > MAX_PALAVRAS_ESCOLHA)) return null
   const s1 = await carregarContextoS1(deps.db, ctx.restaurant.id, now)
   const opcoes = s1.unidades.filter((u) => p.opcoes.includes(u.id))
-  const escolhida = idLista ? opcoes.find((u) => u.id === idLista) : encontrarUnidade(texto, opcoes)
+  const escolhida = idLista ? opcoes.find((u) => u.id === idLista) : escolhaDeUnidade(texto, opcoes)
   if (!escolhida) return null
   const r = resolverS1(p.itens, s1, now, escolhida.id)
   const run: AiRunRow = {
     etapa: 'resposta', modelo: 'deterministico', promptVersion: 's1-lista', costUsd: '0', intent: 'escolha_unidade', resultado: 'ok',
   }
-  return { ...decisaoS1(r, now, perguntaMascarada(texto)), pendente: null, runs: [run] }
+  return { ...decisaoS1(r, now, p.pergunta), pendente: null, runs: [run] }
 }
 
 function decisaoS1(r: ResultadoS1, now: Date, pergunta: string): Decision {
@@ -235,7 +239,7 @@ function decisaoS1(r: ResultadoS1, now: Date, pergunta: string): Decision {
   for (const l of r.localizacoes) saidas.push({ tipo: 'localizacao', texto: `${l.nome}: ${l.endereco}`, payload: l })
   if (r.lista) saidas.push({ tipo: 'lista', texto: r.lista.corpo, payload: { botao: r.lista.botao, opcoes: r.lista.opcoes } })
   const pendente: Pendente | null = r.lista && r.pendente.length
-    ? { itens: r.pendente, opcoes: r.lista.opcoes.map((o) => o.id), expiraEm: new Date(now.getTime() + PENDENTE_MIN * 60_000).toISOString() }
+    ? { pergunta, itens: r.pendente, opcoes: r.lista.opcoes.map((o) => o.id), expiraEm: new Date(now.getTime() + PENDENTE_MIN * 60_000).toISOString() }
     : null
   return {
     replies: saidas.length ? [] : ['foraEscopo'],
@@ -328,14 +332,13 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, now: Da
     return { replies: ['handoff'], autor: 'ia', novoEstado: 'aguardando_humano', audit: 'conversa.handoff_triagem', runs, budget, pendente: null }
   }
   if (itens.length === 0) return { replies: ['foraEscopo'], autor: 'ia', falhas: 'zerar', runs, budget, pendente: null }
-  let s1
   try {
-    s1 = await carregarContextoS1(db, ctx.restaurant.id, now)
+    const s1 = await carregarContextoS1(db, ctx.restaurant.id, now)
+    return { ...decisaoS1(resolverS1(itens, s1, now), now, perguntaMascarada(text)), runs, budget }
   } catch (err) {
     await compensate(deps, reservation, spentMicros, ctx.conv.id)
     throw err
   }
-  return { ...decisaoS1(resolverS1(itens, s1, now), now, perguntaMascarada(text)), runs, budget }
 }
 
 async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outcome> {
@@ -369,7 +372,7 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outc
     }
     if (alreadyDone) return 'nothing'
     if (humanOwns) {
-      await tx.update(conversations).set({ processedUpToId: upTo }).where(eq(conversations.id, conversationId))
+      await tx.update(conversations).set({ processedUpToId: upTo, pendente: null }).where(eq(conversations.id, conversationId))
       return 'human_state'
     }
 
@@ -459,6 +462,11 @@ async function deliver(deps: ProcessDeps, conversationId: string) {
       }
     }
     const r = await enviar(deps, to, m)
+    if (r === 'payload_invalido') {
+      await db.update(messages).set({ statusEnvio: 'falhou:payload_invalido' }).where(eq(messages.id, m.id))
+      deps.log.warn({ conversationId, messageId: m.id }, 'payload de mensagem interativa inválido; envio descartado')
+      continue
+    }
     if (r.ok) {
       await db.update(messages).set({ wamid: r.wamid, statusEnvio: 'enviado' }).where(eq(messages.id, m.id))
       if (m.replyKey === 'avisoPrivacidade') {
@@ -474,7 +482,13 @@ async function deliver(deps: ProcessDeps, conversationId: string) {
 }
 
 function enviar(deps: ProcessDeps, to: string, m: { tipo: string; texto: string | null; payload: unknown }) {
-  if (m.tipo === 'localizacao') return deps.wa.sendLocation(to, localizacaoPayload.parse(m.payload))
-  if (m.tipo === 'lista') return deps.wa.sendList(to, { corpo: m.texto ?? '', ...listaPayload.parse(m.payload) })
+  if (m.tipo === 'localizacao') {
+    const p = localizacaoPayload.safeParse(m.payload)
+    return p.success ? deps.wa.sendLocation(to, p.data) : 'payload_invalido'
+  }
+  if (m.tipo === 'lista') {
+    const p = listaPayload.safeParse(m.payload)
+    return p.success ? deps.wa.sendList(to, { corpo: m.texto ?? '', ...p.data }) : 'payload_invalido'
+  }
   return deps.wa.sendText(to, m.texto ?? '')
 }

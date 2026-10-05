@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chaveLacuna, encontrarFato, encontrarUnidade, similaridade } from './busca.ts'
+import { chaveLacuna, encontrarFato, encontrarUnidade, escolhaDeUnidade, similaridade } from './busca.ts'
 
 const unidades = [
   { id: 'as', nome: 'Asa Sul', apelidos: ['204 sul'] },
@@ -45,6 +45,18 @@ describe('encontrarUnidade', () => {
     expect(encontrarUnidade('lago norte', unidades)).toBeNull()
     expect(encontrarUnidade(null, unidades)).toBeNull()
     expect(encontrarUnidade('   ', unidades)).toBeNull()
+  })
+})
+
+describe('escolhaDeUnidade', () => {
+  it('só aceita o nome (ou apelido) quase exato, nunca uma pergunta', () => {
+    expect(id(escolhaDeUnidade('Lago Sul', unidades))).toBe('ls')
+    expect(id(escolhaDeUnidade('lago sull', unidades))).toBe('ls')
+    expect(id(escolhaDeUnidade('AC', unidades))).toBe('ac')
+    expect(escolhaDeUnidade('asa', unidades)).toBeNull()
+    expect(escolhaDeUnidade('Asa Sul fecha quando?', unidades)).toBeNull()
+    expect(escolhaDeUnidade('lago sul tem estacionamento', unidades)).toBeNull()
+    expect(escolhaDeUnidade('', unidades)).toBeNull()
   })
 })
 
