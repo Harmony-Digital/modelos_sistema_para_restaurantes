@@ -1,6 +1,6 @@
 # Runbook de deploy em produção
 
-Ordem recomendada: 1 → 12. Repita as seções 1 a 5 para **staging** (projeto Supabase separado, chaves separadas).
+Ordem recomendada: 1 → 6, 8 → 10, e só então 7 (Meta): o webhook só deve ser assinado depois que o worker estiver no ar. Para **staging**, siga a seção [Staging](#staging) (mesmos passos, recursos separados).
 
 ## 1. Supabase produção
 
@@ -11,7 +11,8 @@ Ordem recomendada: 1 → 12. Repita as seções 1 a 5 para **staging** (projeto 
    - Multi-Factor → ativar **TOTP**.
    - Password: tamanho mínimo **12** caracteres.
    - URL Configuration → Site URL = domínio da Vercel (`https://<domínio>`).
-4. Repetir tudo para o projeto de **staging**.
+4. Project Settings → **Data API** → Exposed schemas: **remover `public` e `graphql_public`** (deixar a lista vazia; se o painel permitir, desligar a Data API). O app não usa PostgREST/GraphQL: todo acesso a dados é via Postgres com os roles `web_app`/`worker_app`. Auth e Storage não dependem dessa lista. Localmente, o `supabase/config.toml` já tem `[api] enabled = false` e `schemas = []`.
+5. Repetir tudo para o projeto de **staging**.
 
 ## 2. Migrations
 
@@ -43,7 +44,7 @@ Dashboard → Connect → Connection pooling. Se a senha tiver caracteres especi
 | Web (Vercel) | **transaction** | `6543` | `web_app.<project_ref>` |
 | Worker (VPS) | **session** | `5432` | `worker_app.<project_ref>` |
 
-O worker usa o pooler de sessão (IPv4) porque o `LISTEN` do pg-boss exige sessão.
+O worker usa o pooler de sessão (IPv4) porque é um processo de longa duração que usa prepared statements, que o modo transaction não suporta. Não é por causa de `LISTEN`: o pg-boss 12 vem com `useListenNotify: false` (usa polling e advisory locks de transação). Conexão direta também funciona, se a VPS tiver IPv6. Pools do worker: drizzle `max 6` + pg-boss `max 3` = até 9 conexões; confira o limite do pooler do plano.
 
 ## 5. Bootstrap
 
@@ -69,12 +70,15 @@ Confira que a saída aponta para o projeto de produção. O comando imprime o id
 3. Variáveis de ambiente (`webEnvSchema`):
    - `DATABASE_URL` (role `web_app`, pooler transaction, porta 6543)
    - `PHONE_ENC_KEY`, `WA_ID_PEPPER`
-   - `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_GRAPH_VERSION`
+   - `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID` (a web só valida e recebe; **não** cadastre `WHATSAPP_ACCESS_TOKEN` na Vercel: o token de envio fica só no worker)
    - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
    - `SENTRY_DSN` (opcional)
    - `RESTAURANT_ID` = id impresso pelo bootstrap
+4. Cadastre cada variável **só no ambiente certo**: valores de produção apenas em *Production*; os de staging em *Preview* (ou no ambiente/branch de staging, ver [Staging](#staging)). Nunca marque "All Environments" para segredos.
 
 ## 7. Meta
+
+**Só depois que o worker estiver no ar** (seção 9: container `running` e log `worker iniciado`, o que garante que `ensureQueues` já criou as filas). Se o webhook for assinado antes, o enqueue falha (fila inexistente), a Meta recebe 500 e fica reentregando.
 
 App → WhatsApp → Configuration:
 
@@ -84,7 +88,7 @@ App → WhatsApp → Configuration:
 - Gerar token **permanente** de System User (Business Settings → System Users → Generate token, permissões `whatsapp_business_messaging` e `whatsapp_business_management`). Não use o token temporário de 24 h.
 - Conferir a versão da Graph API (padrão `v24.0`, variável `WHATSAPP_GRAPH_VERSION`).
 
-## 8. OpenRouter
+## 8. OpenRouter (antes da seção 7)
 
 - Criar API key de produção com `limit` mensal.
 - Criar Guardrail com `limit_usd`, `reset_interval: monthly` e **ZDR (Zero Data Retention) obrigatório**.
@@ -121,14 +125,39 @@ docker compose -p atendimento-staging --env-file .deploy.staging.env -f docker-c
 docker compose -p atendimento-staging --env-file .deploy.staging.env -f docker-compose.prod.yml up -d
 ```
 
-`.env.staging` (`chmod 600`) tem as credenciais do Supabase de staging, chaves próprias e `DATABASE_URL` de staging.
+`.env.staging` (`chmod 600`) tem as credenciais do Supabase de staging, chaves próprias e `DATABASE_URL` de staging. Detalhes na seção [Staging](#staging).
 
 ## 10. GitHub
 
 - Settings → Environments → criar `production` com **Required reviewers** (aprovação obrigatória) e **Deployment branches = `main`** (somente).
 - Os quatro secrets **`VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS` devem ser Environment secrets do `production`**, não secrets do repositório. Assim só um deploy aprovado a partir da `main` os lê.
 - `VPS_KNOWN_HOSTS` = saída de `ssh-keyscan <host>`. **Compare a fingerprint** (`ssh-keygen -lf <(ssh-keyscan <host> 2>/dev/null)`) com a mostrada no console do provedor antes de salvar.
+- O workflow `Worker deploy` dispara por `workflow_run` quando o **CI** termina com sucesso em um push na `main` (builda o SHA aprovado pelo CI); também pode ser disparado manualmente (`workflow_dispatch`). O job de deploy sempre espera a aprovação do environment `production`.
 - O workflow não publica `:latest`; cada deploy usa a tag `<sha12>`. Após o deploy, ele verifica via SSH que o container está `running` e que os logs dos últimos 60 s contêm `worker iniciado`; senão o job falha.
+
+## Staging
+
+Ambiente completo e isolado da produção, usado na homologação e em todo release antes da produção.
+
+- **Supabase**: projeto separado (também em `sa-east-1`), com as mesmas configurações da seção 1 (inclusive Data API sem schemas expostos), migrations (2), senhas próprias dos roles (3) e bootstrap (5) com um arquivo `.env.staging-bootstrap` próprio.
+- **Chaves**: `PHONE_ENC_KEY`, `WA_ID_PEPPER` e senhas de `web_app`/`worker_app` **diferentes** das de produção.
+- **Vercel** (mesmo projeto): as variáveis de produção ficam **só** no ambiente *Production*; as de staging (`DATABASE_URL` do Supabase de staging, `NEXT_PUBLIC_SUPABASE_*` de staging, chaves e segredos do app Meta de staging, `RESTAURANT_ID` de staging) ficam em *Preview* restrito à branch `staging` (Settings → Environment Variables → Preview → branch específica) ou em um Custom Environment `staging`. Assim um preview de PR qualquer nunca recebe segredos de produção.
+- **Domínio estável**: associe um domínio fixo à branch `staging` (Settings → Domains → ex.: `staging.<domínio>` → Git Branch `staging`). A URL de callback da Meta precisa ser estável; URLs de preview mudam a cada deploy.
+- **Deployment Protection**: a Vercel Authentication/Password Protection bloqueia a Meta (o webhook recebe 401/redirect e a verificação falha). Escolha uma: (a) deixar o domínio de staging fora da proteção (Settings → Deployment Protection → aplicar só a "Standard Protection" sem incluir o domínio customizado de staging, ou desligar para Preview), ou (b) usar **Protection Bypass for Automation** e acrescentar `?x-vercel-protection-bypass=<segredo>` à Callback URL configurada na Meta. Teste com `curl "https://staging.<domínio>/api/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=<token>&hub.challenge=ok"` (deve responder `ok`).
+- **Meta**: app e número de teste **de staging** (outro app ou o número de teste do app de desenvolvimento), com `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID` e token próprios. Callback URL = domínio de staging.
+- **OpenRouter**: API key de staging separada, com `limit` mensal baixo e o mesmo Guardrail com ZDR.
+- **Worker**: na VPS, projeto compose `atendimento-staging` com `.env.staging` e `.deploy.staging.env` (seção 9).
+
+## Release regular
+
+1. PR revisado e mergeado na `main`; o CI precisa estar verde (o workflow de deploy do worker só dispara depois do CI concluído com sucesso).
+2. **Migrations em staging**: `DATABASE_URL=<admin de staging> pnpm db:migrate`.
+3. **Deploy em staging**: web (push na branch `staging`, ou promover o build para o domínio de staging) e worker (`IMAGE_TAG=<sha12>` em `.deploy.staging.env`, `pull` + `up -d` do projeto `atendimento-staging`; a imagem já foi publicada pelo build do workflow).
+4. **Verificar staging**: painel mostra IA Online; enviar uma mensagem do número de teste e receber resposta; Sentry sem erros novos.
+5. **Migrations em produção**: `DATABASE_URL=<admin de produção> pnpm db:migrate` (migrations devem ser compatíveis com a versão anterior do código, pois web e worker sobem depois).
+6. **Aprovar o deploy do worker** no GitHub (environment `production`) e acompanhar a verificação pós-deploy do workflow.
+7. **Promover a web na Vercel** (deploy de produção da `main`, ou Promote to Production do deploy verificado).
+8. Conferir em produção: IA Online, uma conversa de teste, Sentry.
 
 ## 11. Rollback
 

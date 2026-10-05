@@ -107,7 +107,7 @@ ia-atendimento/
 
 ### 2.4 Conexões ao banco
 - **Vercel (serverless)** → pooler Supavisor em modo *transaction*, `postgres(url, { prepare: false })`.
-- **Worker** → conexão *session*/direta (pg-boss usa `LISTEN/NOTIFY` e precisa de sessão persistente).
+- **Worker** → conexão *session*/direta (processo de longa duração com prepared statements, que o modo transaction não suporta; o pg-boss 12 usa polling por padrão, `useListenNotify: false`).
 - **Painel** → consultas dentro de transação com contexto RLS do usuário: `select set_config('request.jwt.claims', $1, true)` **parametrizado** + `set local role authenticated`. **Proibido** montar esse SQL com `sql.raw` (o exemplo oficial do Drizzle faz isso; é vetor de SQL injection).
 - **Worker** → role Postgres próprio (`worker_app`), grants mínimos por tabela; **nunca** `service_role`/superuser.
 
@@ -209,7 +209,7 @@ Após a chamada: `reservado -= $est, gasto += $real` (custo real de `usage.cost`
 5. Status de entrega (`sent`/`delivered`/`read`/`failed`) atualizam `messages.status_envio`.
 6. Responde 200 em < 500 ms. Nenhuma chamada de IA ou à Meta acontece na requisição.
 
-### 4.2 Processamento (worker) — fila `conversation.process`, policy `singleton` por `conversationId`
+### 4.2 Processamento (worker) — fila `conversation.process`, policy `stately` por `conversationId`
 
 | Passo | O quê | Custo |
 |---|---|---|
@@ -264,7 +264,7 @@ Não há fine-tuning. A IA é "treinada" por: (a) dados aprovados no banco; (b) 
 ### 4.8 Erros
 | Falha | Tratamento |
 |---|---|
-| OpenRouter indisponível / 5xx | Fallback de modelo → retry pg-boss (backoff exponencial, até 3) → resposta fixa + handoff |
+| OpenRouter indisponível / 5xx | Dentro do mesmo job: 1 nova tentativa com o próximo modelo da lista (fallback); se falhar de novo → resposta fixa + handoff (sem retry do pg-boss, para não gastar nem atrasar o cliente). O retry do pg-boss (backoff exponencial, até 3) cobre crash do worker, erro de banco e falha temporária de entrega na Meta |
 | OpenRouter 402 (crédito/guardrail) | Modo econômico + alerta ao dono |
 | Meta 5xx / rate limit | Retry com backoff |
 | Meta erro permanente (bloqueio, janela expirada, número inválido) | Registra, não retenta |
