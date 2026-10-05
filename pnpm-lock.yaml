@@ -54,6 +54,12 @@ importers:
         specifier: ^0.31.11
         version: 0.31.11
 
+  packages/whatsapp:
+    dependencies:
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
+
 packages:
 
   '@drizzle-team/brocli@0.10.2':
