@@ -13,7 +13,8 @@ export function maskData(v: string): string {
 }
 
 export function maskTelefone(v: string): string {
-  const d = digits(v).slice(0, 11)
+  const todos = digits(v)
+  const d = ((todos.length === 12 || todos.length === 13) && todos.startsWith('55') ? todos.slice(2) : todos).slice(0, 11)
   if (d.length === 0) return ''
   if (d.length <= 2) return `(${d}`
   const ddd = d.slice(0, 2)
