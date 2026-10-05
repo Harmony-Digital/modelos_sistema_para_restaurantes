@@ -178,6 +178,33 @@ describe('S1 no worker', () => {
     expect(calls).toHaveLength(2)
   })
 
+  it('toque na lista depois de expirada: avisa sem chamar o LLM', async () => {
+    const { restaurantId, ids } = await setup(4)
+    const conv = await receive(restaurantId, 'estão abertos agora?')
+    const { llm, calls } = fakeLlm([{ itens: [h('aberto_agora')], fora_escopo: false }])
+    const wa = fakeWa()
+    await comLista(restaurantId, conv, llm, wa)
+    const p = (await conversa(conv)).pendente as { itens: unknown[]; opcoes: string[] }
+    await db.update(schema.conversations).set({ pendente: { ...p, expiraEm: '2026-10-05T16:00:00.000Z' } })
+    await receive(restaurantId, 'Selecionado', ids['Asa Norte']!)
+    await processConversation(deps(llm, wa), conv)
+    expect(calls).toHaveLength(1)
+    expect(wa.enviados.at(-1)!.corpo).toBe('Essa lista expirou. Pode me mandar a pergunta de novo?')
+    expect((await conversa(conv)).pendente).toBeNull()
+    const runs = await db.select().from(schema.aiRuns).orderBy(asc(schema.aiRuns.id))
+    expect(runs.at(-1)).toMatchObject({ etapa: 'resposta', modelo: 'deterministico', promptVersion: 's1-lista', costUsd: '0.000000', itensValidos: null })
+  })
+
+  it('toque na lista sem nenhum pendente: avisa sem chamar o LLM', async () => {
+    const { restaurantId, ids } = await setup(4)
+    const conv = await receive(restaurantId, 'Selecionado', ids['Asa Norte']!)
+    const { llm, calls } = fakeLlm([])
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    expect(calls).toHaveLength(0)
+    expect(wa.enviados.at(-1)!.corpo).toBe('Essa lista expirou. Pode me mandar a pergunta de novo?')
+  })
+
   it('id fora das opções é ignorado, sem cair no texto digitado: segue a triagem', async () => {
     const { restaurantId } = await setup(4)
     const conv = await receive(restaurantId, 'estão abertos agora?')

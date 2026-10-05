@@ -1,7 +1,7 @@
 import { and, asc, count, eq, gt, gte, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import {
-  decryptPhone, escolhaDeUnidade, prefilter, redactPii, renderReply, resolverS1, SERVICOS, TIPOS_S1,
+  decryptPhone, escolhaDeUnidade, prefilter, redactPii, renderModelo, renderReply, resolverS1, SERVICOS, TIPOS_S1,
   type InboundItem, type Lacuna, type ListaUnidades, type Localizacao, type ReplyKey, type ResultadoS1,
 } from '@atd/core'
 import {
@@ -214,12 +214,20 @@ function lerPendente(v: unknown): Pendente | null {
 
 /** Cliente escolheu a unidade na lista (ou digitou o nome): responde os itens guardados sem chamar o LLM. */
 async function respostaDaLista(deps: ProcessDeps, ctx: Ctx, pending: Pending[], now: Date): Promise<Decision | null> {
-  const p = lerPendente(ctx.conv.pendente)
-  if (!p || new Date(p.expiraEm) <= now) return null
   if (pending.length !== 1) return null
   const ultimo = pending[0]!
   const lido = interativoSchema.safeParse(ultimo.payload)
   const idLista = lido.success ? lido.data.interativoId : null
+  const p = lerPendente(ctx.conv.pendente)
+  if (!p || new Date(p.expiraEm) <= now) {
+    // toque numa lista que já não vale: avisa sem gastar o modelo
+    if (!idLista) return null
+    const run: AiRunRow = { etapa: 'resposta', modelo: 'deterministico', promptVersion: 's1-lista', costUsd: '0', intent: 'lista_expirada', resultado: 'ok' }
+    return {
+      replies: [], saidas: [{ tipo: 'texto', texto: renderModelo('lista_expirada', {}) }],
+      autor: 'ia', falhas: 'zerar', pendente: null, runs: [run],
+    }
+  }
   const texto = ultimo.texto?.trim() ?? ''
   if (!idLista && (!texto || texto.split(/\s+/).length > MAX_PALAVRAS_ESCOLHA)) return null
   const s1 = await carregarContextoS1(deps.db, ctx.restaurant.id, now)

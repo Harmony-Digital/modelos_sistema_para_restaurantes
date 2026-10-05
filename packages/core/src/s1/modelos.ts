@@ -20,6 +20,7 @@ export const MODELOS_S1 = {
     texto: 'Não entendi para qual dia é a pergunta. Pode dizer o dia da semana ou a data (ex.: sábado ou 12/10)?',
     variaveis: [],
   },
+  lista_expirada: { texto: 'Essa lista expirou. Pode me mandar a pergunta de novo?', variaveis: [] },
   lacuna: { texto: 'Ainda não tenho essa informação; vou verificar com a equipe.', variaveis: [] },
   em_breve: { texto: 'Sobre {servico}, ainda estou aprendendo e em breve vou conseguir responder por aqui.', variaveis: ['servico'] },
 } as const satisfies Record<string, { texto: string; variaveis: readonly string[] }>
