@@ -1,4 +1,4 @@
-export type LlmUsage = { tokensIn: number; tokensOut: number; tokensCache: number; costUsd: string }
+export type LlmUsage = { tokensIn: number; tokensOut: number; tokensCache: number; costUsd: string | null }
 
 export type JsonCallResult<T> =
   | { ok: true; data: T; model: string; usage: LlmUsage; latencyMs: number }
@@ -28,13 +28,29 @@ type ApiResponse = {
   error?: { code?: number; message?: string }
 }
 
-function toUsage(u: ApiResponse['usage']): LlmUsage | null {
-  if (!u) return null
+const num = (x: unknown): number => {
+  const n = typeof x === 'string' && x.trim() === '' ? NaN : Number(x)
+  return Number.isFinite(n) ? n : 0
+}
+
+// null = custo desconhecido (ausente, não finito ou negativo); custo > 0 arredonda para CIMA
+// (uma chamada paga nunca é registrada como 0).
+function toCostUsd(raw: unknown): string | null {
+  if (raw === null || raw === undefined || (typeof raw === 'string' && raw.trim() === '')) return null
+  const c = Number(raw)
+  if (!Number.isFinite(c) || c < 0) return null
+  if (c === 0) return '0.000000'
+  return (Math.ceil(Number((c * 1e6).toFixed(6))) / 1e6).toFixed(6)
+}
+
+function toUsage(u: unknown): LlmUsage | null {
+  if (typeof u !== 'object' || u === null) return null
+  const x = u as NonNullable<ApiResponse['usage']>
   return {
-    tokensIn: u.prompt_tokens ?? 0,
-    tokensOut: u.completion_tokens ?? 0,
-    tokensCache: u.prompt_tokens_details?.cached_tokens ?? 0,
-    costUsd: (u.cost ?? 0).toFixed(6),
+    tokensIn: num(x.prompt_tokens),
+    tokensOut: num(x.completion_tokens),
+    tokensCache: num(x.prompt_tokens_details?.cached_tokens),
+    costUsd: toCostUsd(x.cost),
   }
 }
 
@@ -80,7 +96,8 @@ export function createOpenRouterClient(cfg: {
         return { ok: false, error: msg, retryable: true, status: null, model: null, usage: null, latencyMs: elapsed() }
       }
 
-      const body = (await res.json().catch(() => ({}))) as ApiResponse
+      const parsed: unknown = await res.json().catch(() => ({}))
+      const body = (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : {}) as ApiResponse
       const usage = toUsage(body.usage)
       const model = body.model ?? null
       if (!res.ok) {
@@ -91,7 +108,7 @@ export function createOpenRouterClient(cfg: {
       try {
         const content = body.choices?.[0]?.message?.content ?? ''
         const data = p.parse(JSON.parse(content))
-        return { ok: true, data, model: model ?? p.models[0]!, usage: usage ?? toUsage({})!, latencyMs: elapsed() }
+        return { ok: true, data, model: model ?? p.models[0]!, usage: usage ?? { tokensIn: 0, tokensOut: 0, tokensCache: 0, costUsd: null }, latencyMs: elapsed() }
       } catch {
         return { ok: false, error: 'saida_invalida', retryable: true, status: res.status, model, usage, latencyMs: elapsed() }
       }

@@ -12,6 +12,9 @@ export type Triage = z.infer<typeof triageSchema>
 export { TRIAGE_PROMPT_VERSION }
 export const TRIAGE_BUDGET_ESTIMATE_USD = '0.005'
 
+// impede que o texto do cliente feche a região de dados (<mensagem_cliente>)
+const neutralize = (t: string) => t.replaceAll('<', '‹').replaceAll('>', '›')
+
 export function triage(
   llm: LlmClient,
   p: { models: string[]; restaurante: string; text: string },
@@ -19,7 +22,7 @@ export function triage(
   return llm.completeJson({
     models: p.models,
     system: triageSystemPrompt(p.restaurante),
-    user: `<mensagem_cliente>\n${redactPii(p.text)}\n</mensagem_cliente>`,
+    user: `<mensagem_cliente>\n${neutralize(redactPii(p.text))}\n</mensagem_cliente>`,
     schemaName: 'triagem',
     jsonSchema: triageJsonSchema,
     parse: (raw) => triageSchema.parse(raw),

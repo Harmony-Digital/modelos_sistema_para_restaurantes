@@ -65,4 +65,31 @@ describe('OpenRouter completeJson', () => {
     expect(await call(async () => json(502, {}))).toMatchObject({ ok: false, retryable: true, status: 502 })
     expect(await call(async () => { throw new TypeError('fetch failed') })).toMatchObject({ ok: false, retryable: true, status: null })
   })
+
+  it('corpo null com 200 não lança', async () => {
+    const r = await call(async () => json(200, null))
+    expect(r).toMatchObject({ ok: false, error: 'saida_invalida', retryable: true })
+  })
+
+  it('custo: string numérica, ausente, negativo, NaN e minúsculo', async () => {
+    const withCost = (cost: unknown) => async () =>
+      json(200, { ...okBody('{"a":1}'), usage: { prompt_tokens: 1, completion_tokens: 1, cost } })
+    expect(await call(withCost('0.0001'))).toMatchObject({ ok: true, usage: { costUsd: '0.000100' } })
+    expect(await call(withCost(undefined))).toMatchObject({ ok: true, usage: { costUsd: null } })
+    expect(await call(withCost(-1))).toMatchObject({ ok: true, usage: { costUsd: null } })
+    expect(await call(withCost('abc'))).toMatchObject({ ok: true, usage: { costUsd: null } })
+    expect(await call(withCost(0))).toMatchObject({ ok: true, usage: { costUsd: '0.000000' } })
+    expect(await call(withCost(1e-7))).toMatchObject({ ok: true, usage: { costUsd: '0.000001' } })
+  })
+
+  it('sucesso sem usage: tokens zero e custo desconhecido', async () => {
+    const r = await call(async () => json(200, { model: 'm', choices: [{ message: { content: '{"a":1}' } }] }))
+    expect(r).toMatchObject({ ok: true, usage: { tokensIn: 0, tokensOut: 0, tokensCache: 0, costUsd: null } })
+  })
+
+  it('408 e 429 são temporários; 401 é permanente', async () => {
+    expect(await call(async () => json(408, {}))).toMatchObject({ retryable: true, status: 408 })
+    expect(await call(async () => json(429, {}))).toMatchObject({ retryable: true, status: 429 })
+    expect(await call(async () => json(401, {}))).toMatchObject({ retryable: false, status: 401 })
+  })
 })
