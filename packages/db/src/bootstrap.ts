@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm'
 import type { Db } from './client.ts'
 import { budgetLimits, retentionSettings } from './schema/ops.ts'
 import { restaurants, staff } from './schema/restaurant.ts'
@@ -23,6 +24,8 @@ export const DEFAULT_RETENTION = [
 
 export async function bootstrapRestaurant(db: Db, p: { nome: string; politicaUrl?: string }): Promise<string> {
   return db.transaction(async (tx) => {
+    // Serializa bootstraps concorrentes (evita dois restaurantes).
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('atd:bootstrap'))`)
     const existing = await tx.select({ id: restaurants.id }).from(restaurants).limit(2)
     if (existing.length > 1) throw new Error('Mais de um restaurante no banco; bootstrap abortado')
     const restaurantId =

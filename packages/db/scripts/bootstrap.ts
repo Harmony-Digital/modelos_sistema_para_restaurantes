@@ -28,7 +28,15 @@ const restaurantId = await bootstrapRestaurant(db, {
 
 const admin = createClient(url, serviceKey, { auth: { persistSession: false } })
 const { data, error } = await admin.auth.admin.inviteUserByEmail(values.dono)
-if (error) throw error
-await addStaff(db, { userId: data.user.id, restaurantId, nome: values['nome-dono'], papel: 'dono' })
+let userId = data.user?.id
+let invited = true
+if (error) {
+  if (!/already|registered|exists/i.test(error.message)) throw error
+  const rows = await sql<{ id: string }[]>`select id from auth.users where lower(email) = lower(${values.dono})`
+  if (!rows[0]) throw error
+  userId = rows[0].id
+  invited = false
+}
+await addStaff(db, { userId: userId!, restaurantId, nome: values['nome-dono'], papel: 'dono' })
 await sql.end()
-process.stdout.write(`Restaurante ${restaurantId} pronto; convite enviado para o dono.\n`)
+process.stdout.write(`Restaurante ${restaurantId} pronto; ${invited ? 'convite enviado para o dono.' : 'dono já existia; convite não reenviado.'}\n`)

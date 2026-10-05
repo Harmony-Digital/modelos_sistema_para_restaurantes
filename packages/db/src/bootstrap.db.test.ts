@@ -25,4 +25,13 @@ describe('bootstrap', () => {
     await addStaff(db, { userId, restaurantId: rid, nome: 'Dono', papel: 'dono' })
     expect(await db.select().from(staff)).toHaveLength(1)
   })
+
+  it('bootstraps concorrentes criam um único restaurante', async () => {
+    const ids = await Promise.all([
+      bootstrapRestaurant(db, { nome: 'Casa X' }),
+      bootstrapRestaurant(db, { nome: 'Casa X' }),
+    ])
+    expect(ids[0]).toBe(ids[1])
+    expect(await db.select().from(restaurants)).toHaveLength(1)
+  })
 })
