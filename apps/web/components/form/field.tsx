@@ -21,10 +21,10 @@ export function Field(props: {
   const errorId = props.error ? `${props.id}-erro` : undefined
   const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined
   return (
-    <div className={cn('group flex flex-col gap-1.5', props.className)} data-invalid={props.error ? '' : undefined}>
+    <div className={cn('group/field flex flex-col gap-1.5', props.className)} data-invalid={props.error ? '' : undefined}>
       <label
         htmlFor={props.id}
-        className="text-sm font-medium text-foreground transition-colors duration-150 group-focus-within:text-link group-data-[invalid]:text-destructive"
+        className="text-sm font-medium text-foreground transition-colors duration-150 group-focus-within/field:text-link group-data-[invalid]/field:text-destructive"
       >
         {props.label}
         {props.required && <span aria-hidden="true" className="ml-0.5 text-destructive">*</span>}
@@ -39,7 +39,7 @@ export function Field(props: {
         <p id={hintId} className="text-sm text-muted-foreground">{props.hint}</p>
       )}
       {props.error && (
-        <p id={errorId} role="alert" className="flex items-start gap-1.5 text-sm font-medium text-destructive">
+        <p id={errorId} aria-live="polite" className="flex items-start gap-1.5 text-sm font-medium text-destructive">
           <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           {props.error}
         </p>

@@ -25,4 +25,16 @@ describe('validação compartilhada', () => {
     expect(telefoneBr.parse('(61) 99999-8888')).toBe('61999998888')
     expect(telefoneBr.safeParse('9999-8888').success).toBe(false)
   })
+  it('telefone remove +55 e rejeita letras', () => {
+    expect(telefoneBr.parse('+55 (61) 99999-8888')).toBe('61999998888')
+    expect(telefoneBr.parse('55 61 3333-4444')).toBe('6133334444')
+    const r = telefoneBr.safeParse('61 9999a-8888')
+    expect(r.success).toBe(false)
+    expect(r.error!.issues[0]!.message).toBe('Use só números, como (61) 99999-8888')
+  })
+  it('hora e data vazias pedem o dado; e-mail vai para minúsculas', () => {
+    expect(hora.safeParse('').error!.issues[0]!.message).toBe('Informe a hora')
+    expect(dataBr.safeParse('').error!.issues[0]!.message).toBe('Informe a data')
+    expect(email.parse('  Maria@Empresa.com.br ')).toBe('maria@empresa.com.br')
+  })
 })

@@ -3,6 +3,7 @@ import { z } from 'zod'
 export const email = z
   .string()
   .trim()
+  .toLowerCase()
   .min(1, 'Informe o e-mail')
   .pipe(z.email('Digite um e-mail completo, como nome@empresa.com.br'))
 
@@ -16,11 +17,13 @@ export const senhaNova = z
 export const hora = z
   .string()
   .trim()
+  .min(1, 'Informe a hora')
   .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Use o formato 24h HH:mm, como 11:30')
 
 export const dataBr = z
   .string()
   .trim()
+  .min(1, 'Informe a data')
   .regex(/^\d{2}\/\d{2}\/\d{4}$/, 'Use dd/mm/aaaa, como 12/10/2026')
   .transform((v, ctx) => {
     const [d, m, y] = v.split('/').map(Number) as [number, number, number]
@@ -34,7 +37,11 @@ export const dataBr = z
 
 export const telefoneBr = z
   .string()
-  .transform((v) => v.replace(/\D/g, ''))
+  .refine((v) => !/\p{L}/u.test(v), 'Use só números, como (61) 99999-8888')
+  .transform((v) => {
+    const digits = v.replace(/\D/g, '')
+    return (digits.length === 12 || digits.length === 13) && digits.startsWith('55') ? digits.slice(2) : digits
+  })
   .refine((v) => v.length === 10 || v.length === 11, 'Informe DDD + número, como (61) 99999-8888')
 
 export function texto(min: number, max: number, rotulo: string) {
