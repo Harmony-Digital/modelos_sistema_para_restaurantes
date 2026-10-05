@@ -39,6 +39,7 @@ export const aiRuns = pgTable(
   (t) => [
     index('ai_runs_created_brin').using('brin', t.createdAt),
     index('ai_runs_conversation_idx').on(t.conversationId),
+    index('ai_runs_restaurant_created_idx').on(t.restaurantId, t.createdAt.desc()),
   ],
 )
 

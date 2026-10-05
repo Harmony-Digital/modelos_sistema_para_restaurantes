@@ -44,6 +44,8 @@ export const conversations = pgTable(
     /** Itens à espera da escolha de unidade pela lista: { itens, opcoes, expiraEm }. Só o worker escreve. */
     pendente: jsonb('pendente'),
     simulada: boolean('simulada').notNull().default(false),
+    /** Só em conversa simulada: deslocamento do relógio (segundos) usado na resolução de S1. Nulo = relógio real. */
+    relogioOffsetSegundos: integer('relogio_offset_segundos'),
     ...timestamps,
   },
   (t) => [
