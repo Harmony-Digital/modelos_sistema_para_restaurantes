@@ -1,0 +1,16 @@
+import { pgEnum } from 'drizzle-orm/pg-core'
+
+export const staffRole = pgEnum('staff_role', ['dono', 'gerente', 'atendente'])
+export const conversationState = pgEnum('conversation_state', ['ia', 'aguardando_humano', 'humano', 'encerrada'])
+export const messageDirection = pgEnum('message_direction', ['in', 'out'])
+export const messageAuthor = pgEnum('message_author', ['cliente', 'ia', 'humano', 'sistema'])
+export const messageType = pgEnum('message_type', ['texto', 'audio', 'imagem', 'documento', 'outro'])
+export const budgetScope = pgEnum('budget_scope', ['ia', 'whatsapp'])
+export const budgetPeriod = pgEnum('budget_period', ['dia', 'mes'])
+export const budgetAction = pgEnum('budget_action', ['modo_economico', 'bloquear'])
+export const ledgerKind = pgEnum('ledger_kind', ['reserva', 'liquidacao', 'estorno'])
+export const aiStage = pgEnum('ai_stage', ['triagem', 'resposta', 'stt', 'ingestao'])
+export const actorType = pgEnum('actor_type', ['staff', 'ia', 'sistema'])
+export const dsrType = pgEnum('dsr_type', ['acesso', 'exclusao', 'correcao'])
+export const dsrStatus = pgEnum('dsr_status', ['aberto', 'em_andamento', 'concluido', 'negado'])
+export const retentionAction = pgEnum('retention_action', ['apagar', 'anonimizar'])

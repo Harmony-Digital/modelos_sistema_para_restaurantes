@@ -1,0 +1,15 @@
+{
+  "name": "@atd/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts", "./test-utils": "./src/test-utils.ts" },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "generate": "drizzle-kit generate",
+    "generate:custom": "drizzle-kit generate --custom",
+    "migrate": "drizzle-kit migrate"
+  },
+  "dependencies": { "drizzle-orm": "^0.45.3", "postgres": "^3.4.9" },
+  "devDependencies": { "drizzle-kit": "^0.31.11" }
+}
