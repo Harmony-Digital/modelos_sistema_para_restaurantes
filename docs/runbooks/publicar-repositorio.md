@@ -8,6 +8,7 @@
 |---|---|
 | `main` | Base documental: PRD, PLAN, CLAUDE/AGENTS e plano da Etapa 01 |
 | `etapa-01-fundacao` | Implementação completa da Etapa 01 (sobre a `main`), revisada tarefa a tarefa |
+| `etapa-02-s1` | Etapa 02 em andamento (sobre a `etapa-01-fundacao`): spec e, depois, os planos 02-A/B/C |
 
 A `main` **não** recebeu merge da Etapa 01 de propósito: assim a primeira publicação já gera um Pull Request revisável `etapa-01-fundacao → main`.
 
@@ -29,7 +30,9 @@ git remote add origin https://github.com/Harmony-Digital/ia-atendimento.git
 git ls-remote origin            # deve imprimir NADA (repositório vazio)
 git push -u origin main
 git push -u origin etapa-01-fundacao
+git push -u origin etapa-02-s1
 ```
+PRs em ordem: primeiro `etapa-01-fundacao → main`; depois de mesclado, `etapa-02-s1 → main` (o GitHub passa a mostrar só os commits da Etapa 02).
 
 Regras:
 - Se `git ls-remote origin` mostrar qualquer ref, **pare**: alguém inicializou o repositório com arquivos. Não use `--force`. Traga o conteúdo remoto (`git fetch origin`) e decida com o time.
