@@ -7,6 +7,7 @@
 
 ## Onde paramos
 
+- **05/10/2026** — Revisão final da branch inteira feita (sem críticos) e uma leva de correção aplicada (até `d600d25`; `pnpm check` com 250 testes em 29 arquivos). Ficaram 2 correções de documentação (itens abaixo, na Etapa 01). **Repositório no GitHub ainda não existe** (sem permissão na organização) — procedimento em [docs/runbooks/publicar-repositorio.md](docs/runbooks/publicar-repositorio.md); backup em bundle local. Registro completo da execução em [docs/historico/etapa-01-ledger.md](docs/historico/etapa-01-ledger.md). Próximo: refinamento da Etapa 02 (em paralelo à publicação, staging e homologação).
 - **05/10/2026** — Etapa 01 **implementada e revisada tarefa a tarefa** (`etapa-01-fundacao`, 683bf9c..77dab37; `pnpm check` verde com 240 testes em 27 arquivos; e2e do web 4/4). Roteiro de homologação em [docs/homologacao/etapa-01.md](docs/homologacao/etapa-01.md). Próximo: deploy em staging (docs/runbooks/deploy.md) + homologação do dono; depois refinamento da Etapa 02, incluindo o design system.
 - **05/10/2026** — Etapa 01 (arquitetura e stack) **definida e aprovada**; PRD v1.0, PLAN e CLAUDE.md escritos; **plano detalhado da Etapa 01 escrito** em [docs/plans/etapa-01-fundacao.md](docs/plans/etapa-01-fundacao.md) (21 tarefas). Próximo passo: revisão do plano pelo dono e escolha do modo de execução; depois Task 1.
 - **05/10/2026** — Modelos de triagem (provisórios, definitivos nos evals da Etapa 02; consulta à API pública de modelos): principal `mistralai/mistral-nemo` (US$ 0,019/M entrada, 0,03/M saída), fallback `google/gemini-2.5-flash-lite` (US$ 0,10/M entrada, 0,40/M saída); ambos com saída estruturada. Gravados em `AI_TRIAGE_MODELS` no `.env` local.
@@ -59,6 +60,12 @@ Ler CLAUDE.md → este arquivo → PRD.md → plano detalhado da etapa corrente.
 - [ ] CI GitHub Actions (lint, typecheck, test, build); deploy Vercel; imagem GHCR + deploy VPS — workflows escritos (commits 434f157, d28f8d9..77dab37); pendente: CI verde no GitHub, deploy Vercel, imagem GHCR e deploy na VPS (dependem da nuvem)
 - [ ] Hardening VPS (UFW, fail2ban, unattended-upgrades, usuário de deploy) — script e runbook escritos (commits d28f8d9..77dab37); pendente: executar na VPS
 - [ ] Homologação do dono — pendente: roteiro em [docs/homologacao/etapa-01.md](docs/homologacao/etapa-01.md) pronto; depende de staging + número de teste Meta + key OpenRouter
+
+### Pendências que fecham a Etapa 01
+- [ ] Doc: `docs/homologacao/etapa-01.md` passo 9 — usar `updateUserById(id, { password, email_confirm: true })` (sem isso o dono convidado não entra no Supabase hospedado)
+- [ ] Doc: `docs/runbooks/deploy.md` "Release regular" — desligar o deploy automático de produção da Vercel na `main` (produção só via promoção, depois da migration)
+- [ ] Publicar o repositório (`docs/runbooks/publicar-repositorio.md`) e abrir o PR `etapa-01-fundacao → main`
+- [ ] Página para o usuário convidado definir a senha (hoje contornado pela Admin API) — candidata à Etapa 02
 
 ## Etapa 02 — Horários, funcionamento e unidades (S1)
 - [ ] Refinamento (inclui **definição do design system**)
