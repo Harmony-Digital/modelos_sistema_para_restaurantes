@@ -101,9 +101,8 @@ test('formulário de unidade: erro no campo certo, sem gravar', async ({ page })
   await entrarComoGestor(page)
   await page.getByRole('link', { name: 'Unidades', exact: true }).click()
   await page.getByRole('button', { name: 'Nova unidade' }).click()
-  // envia com Enter no Nome (que abre focado). Clicar/tocar em "Salvar unidade" tira o foco do Nome, o erro
-  // do blur aparece e empurra o botão antes de o clique terminar, e o envio se perde (relatório da Task 14)
-  await page.getByLabel(/^Nome/).press('Enter')
+  // o SubmitButton não tira o foco no mousedown: o clique envia mesmo com o erro do blur do Nome
+  await page.getByRole('button', { name: 'Salvar unidade' }).click()
   await expect(page.getByRole('region', { name: 'Corrija 1 campo' })).toBeVisible()
   await expect(page.getByLabel(/^Nome/)).toHaveAccessibleDescription(/Informe o nome da unidade, como "Asa Sul"/)
   await expect(page.getByLabel(/^Nome/)).toBeFocused()
