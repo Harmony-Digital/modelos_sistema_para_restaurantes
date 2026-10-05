@@ -15,19 +15,20 @@ export type WebhookDeps = {
 
 const MAX_BODY = 1_000_000
 
-export async function handleWebhookPost(deps: WebhookDeps, raw: string, signature: string | null) {
-  if (raw.length > MAX_BODY) return { status: 413, body: 'payload grande demais' }
+export async function handleWebhookPost(deps: WebhookDeps, raw: Buffer | string, signature: string | null) {
+  if (Buffer.byteLength(raw) > MAX_BODY) return { status: 413, body: 'payload grande demais' }
   if (!verifySignature(raw, signature, deps.appSecret)) return { status: 401, body: 'assinatura inválida' }
 
   let events: ReturnType<typeof parseWebhook>
   try {
-    events = parseWebhook(JSON.parse(raw), deps.phoneNumberId)
+    events = parseWebhook(JSON.parse(typeof raw === 'string' ? raw : raw.toString('utf8')), deps.phoneNumberId)
   } catch (e) {
     // Assinado pela Meta mas fora do formato esperado: registrar e não pedir reentrega.
     deps.onInvalidPayload?.(e)
     return { status: 200, body: 'ignorado' }
   }
 
+  for (const s of events.statuses) await applyStatus(deps.db, s)
   if (events.inbound.length > 0) {
     const restaurantId = await deps.restaurantId()
     for (const m of events.inbound) {
@@ -49,6 +50,5 @@ export async function handleWebhookPost(deps: WebhookDeps, raw: string, signatur
       )
     }
   }
-  for (const s of events.statuses) await applyStatus(deps.db, s)
   return { status: 200, body: 'ok' }
 }

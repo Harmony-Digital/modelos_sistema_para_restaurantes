@@ -1,8 +1,8 @@
 import { createHmac } from 'node:crypto'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { PgBoss } from 'pg-boss'
-import { decryptPhone, keyFromBase64 } from '@atd/core'
-import { enqueueProcess, schema } from '@atd/db'
+import { decryptPhone, encryptPhone, hashWaId, keyFromBase64 } from '@atd/core'
+import { enqueueProcess, ingestInbound, schema } from '@atd/db'
 import { getTestBoss, getTestDb, resetDb, seedRestaurant } from '@atd/db/test-utils'
 import text from '@atd/whatsapp/fixtures/text.json' with { type: 'json' }
 import status from '@atd/whatsapp/fixtures/status.json' with { type: 'json' }
@@ -23,7 +23,7 @@ beforeEach(async () => {
 })
 afterAll(async () => { await boss.stop({ graceful: false }); await sql.end() })
 
-const sign = (raw: string) => `sha256=${createHmac('sha256', secret).update(raw).digest('hex')}`
+const sign = (raw: string | Buffer) => `sha256=${createHmac('sha256', secret).update(raw).digest('hex')}`
 
 describe('webhook POST', () => {
   it('assinatura válida: grava mensagem com telefone cifrado e hash', async () => {
@@ -57,8 +57,33 @@ describe('webhook POST', () => {
     expect((await handleWebhookPost(deps, raw, sign(raw))).status).toBe(413)
   })
 
-  it('status de entrega é aplicado', async () => {
+  it('status de entrega é aplicado à mensagem', async () => {
+    const waId = '5561999998888'
+    await ingestInbound(
+      db,
+      {
+        restaurantId: await deps.restaurantId(),
+        waIdHash: hashWaId(waId, pepper),
+        telefoneCifrado: encryptPhone(waId, phoneKey),
+        profileName: null,
+        wamid: 'wamid.OUT1',
+        tipo: 'texto',
+        texto: 'oi',
+        mediaId: null,
+        timestamp: new Date(),
+      },
+      deps.enqueue,
+    )
+    const [before] = await db.select().from(schema.messages)
+    expect(before!.statusEnvio).toBeNull()
     const raw = JSON.stringify(status)
+    expect((await handleWebhookPost(deps, raw, sign(raw))).status).toBe(200)
+    const [after] = await db.select().from(schema.messages)
+    expect(after!.statusEnvio).toBe('failed:131047')
+  })
+
+  it('aceita corpo como Buffer (bytes brutos)', async () => {
+    const raw = Buffer.from(JSON.stringify(text), 'utf8')
     expect((await handleWebhookPost(deps, raw, sign(raw))).status).toBe(200)
   })
 })

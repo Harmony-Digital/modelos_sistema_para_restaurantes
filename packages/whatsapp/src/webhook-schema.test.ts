@@ -66,4 +66,23 @@ describe('parseWebhook', () => {
     const [r] = parseWebhook(envelope(wrap({ metadata: meta, messages: [m] })), '111').inbound
     expect([r!.tipo, r!.texto]).toEqual(['texto', 'Sim'])
   })
+
+  it('remove NUL de texto, legenda, título e nome de perfil (Postgres rejeita)', () => {
+    const base = { id: 'a', from: '5561999998888', timestamp: '1759680000' }
+    const body = {
+      object: 'whatsapp_business_account',
+      entry: [{ id: 'W', changes: [wrap({
+        metadata: meta,
+        contacts: [{ wa_id: '5561999998888', profile: { name: 'Ma\u0000ria' } }],
+        messages: [
+          { ...base, type: 'text', text: { body: 'o\u0000i' } },
+          { ...base, id: 'b', type: 'image', image: { id: 'm', caption: 'le\u0000genda' } },
+          { ...base, id: 'c', type: 'interactive', interactive: { button_reply: { title: 'si\u0000m' } } },
+        ],
+      })] }],
+    }
+    const { inbound } = parseWebhook(body, '111')
+    expect(inbound.map((m) => m.texto)).toEqual(['oi', 'legenda', 'sim'])
+    expect(inbound[0]!.profileName).toBe('Maria')
+  })
 })

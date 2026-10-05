@@ -1,12 +1,11 @@
-import * as Sentry from '@sentry/node'
-import { scrubEvent } from '@atd/core'
+import * as Sentry from '@sentry/nextjs'
+import { scrubEvent } from '@atd/core/scrub'
 
-export function initSentry(dsn: string | undefined, release: string) {
-  if (!dsn) return
+export function register() {
+  if (process.env.NEXT_RUNTIME !== 'nodejs' || !process.env.SENTRY_DSN) return
   Sentry.init({
-    dsn,
-    release,
-    environment: process.env.NODE_ENV ?? 'development',
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.VERCEL_ENV ?? 'development',
     // v11 substituiu sendDefaultPii por dataCollection: desliga tudo que possa carregar PII.
     dataCollection: {
       userInfo: false,
@@ -15,12 +14,12 @@ export function initSentry(dsn: string | undefined, release: string) {
       urlQueryParams: false,
       genAI: { inputs: false, outputs: false },
       databaseQueryData: false,
-      queues: false,
       stackFrameVariables: false,
+      queues: false,
     },
     tracesSampleRate: 0.1,
     beforeSend: (event) => scrubEvent(event),
   })
 }
 
-export { Sentry, scrubEvent }
+export const onRequestError = Sentry.captureRequestError

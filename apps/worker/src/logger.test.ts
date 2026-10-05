@@ -17,4 +17,19 @@ describe('logger', () => {
     expect(out).toContain('c1')
     expect(out).not.toMatch(/52998224725|5561999998888|segredo/)
   })
+
+  it('serializer de err remove params/query e mascara PII na mensagem, detail e causa', () => {
+    const { lines, stream } = capture()
+    const log = createLogger('error', stream)
+    const cause = Object.assign(new Error('duplicate key'), { detail: 'Key (email)=(joao@x.com) already exists' })
+    const err = Object.assign(new Error('Failed query: insert into t values ($1)\nparams: 52998224725', { cause }), {
+      params: ['52998224725'],
+      query: 'insert into t values ($1)',
+    })
+    log.error({ err }, 'falhou')
+    const out = lines.join('')
+    expect(out).toContain('falhou')
+    expect(out).toContain('[CPF]')
+    expect(out).not.toMatch(/52998224725|joao@x\.com|"params"|"query"/)
+  })
 })

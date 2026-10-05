@@ -25,6 +25,16 @@ describe('verifySignature (rigor)', () => {
   it('rejeita segredo vazio', () => expect(verifySignature(body, sign(body, ''), '')).toBe(false))
 })
 
+describe('verifySignature (bytes)', () => {
+  it('aceita Buffer e assina os bytes brutos, inclusive não-UTF-8', () => {
+    const raw = Buffer.from([0x7b, 0xff, 0xfe, 0x7d])
+    const h = `sha256=${createHmac('sha256', secret).update(raw).digest('hex')}`
+    expect(verifySignature(raw, h, secret)).toBe(true)
+    expect(verifySignature(Buffer.from(body), sign(body), secret)).toBe(true)
+    expect(verifySignature(Buffer.from(body + ' '), sign(body), secret)).toBe(false)
+  })
+})
+
 describe('verifyChallenge', () => {
   it('devolve o challenge com token correto', () => {
     const p = new URLSearchParams({ 'hub.mode': 'subscribe', 'hub.verify_token': 'tok', 'hub.challenge': '42' })

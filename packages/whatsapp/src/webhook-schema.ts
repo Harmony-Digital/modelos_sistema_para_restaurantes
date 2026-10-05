@@ -60,28 +60,32 @@ export type InboundMessage = {
 
 export type StatusUpdate = { wamid: string; status: string; timestamp: Date; errorCode: number | null }
 
+// Postgres rejeita NUL em text; remove de tudo que vira texto persistido.
+const clean = (v: string | null | undefined): string | null => (v == null ? null : v.replaceAll('\u0000', ''))
+
 const toDate = (unixSeconds: string) => new Date(Number(unixSeconds) * 1000)
 
-function toInbound(m: z.infer<typeof message>, profileName: string | null): InboundMessage {
+function toInbound(m: z.infer<typeof message>, rawProfileName: string | null): InboundMessage {
+  const profileName = clean(rawProfileName)
   const base = { wamid: m.id, waId: m.from, profileName, timestamp: toDate(m.timestamp) }
   switch (m.type) {
     case 'text':
-      return { ...base, tipo: 'texto', texto: m.text?.body ?? null, mediaId: null }
+      return { ...base, tipo: 'texto', texto: clean(m.text?.body), mediaId: null }
     case 'button':
-      return { ...base, tipo: 'texto', texto: m.button?.text ?? null, mediaId: null }
+      return { ...base, tipo: 'texto', texto: clean(m.button?.text), mediaId: null }
     case 'interactive':
       return {
         ...base,
         tipo: 'texto',
-        texto: m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title ?? null,
+        texto: clean(m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title),
         mediaId: null,
       }
     case 'audio':
       return { ...base, tipo: 'audio', texto: null, mediaId: m.audio?.id ?? null }
     case 'image':
-      return { ...base, tipo: 'imagem', texto: m.image?.caption ?? null, mediaId: m.image?.id ?? null }
+      return { ...base, tipo: 'imagem', texto: clean(m.image?.caption), mediaId: m.image?.id ?? null }
     case 'document':
-      return { ...base, tipo: 'documento', texto: m.document?.caption ?? null, mediaId: m.document?.id ?? null }
+      return { ...base, tipo: 'documento', texto: clean(m.document?.caption), mediaId: m.document?.id ?? null }
     default:
       return { ...base, tipo: 'outro', texto: null, mediaId: null }
   }
