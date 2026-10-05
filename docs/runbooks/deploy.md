@@ -10,7 +10,10 @@ Ordem recomendada: 1 → 6, 8 → 10, e só então 7 (Meta): o webhook só deve 
    - Sign In / Providers → "Allow new users to sign up" = **off** (cadastro público desativado; espelha `enable_signup = false` do `supabase/config.toml`). **Mantenha o provedor Email habilitado**: desativá-lo quebra o login.
    - Multi-Factor → ativar **TOTP**.
    - Password: tamanho mínimo **12** caracteres.
-   - URL Configuration → Site URL = domínio da Vercel (`https://<domínio>`).
+   - URL Configuration → Site URL = domínio do painel (`https://<domínio>`); Redirect URLs incluindo `https://<domínio>/auth/confirm`.
+   - Email Templates → **Invite user**: colar o HTML de `supabase/templates/invite.html`.
+   - A validade do OTP/link de e-mail (Authentication → Sign In / Providers → Email, "Email OTP Expiration") deve ser **3600 s (1 hora)**, o valor citado no e-mail de convite e em `/auth/erro`; se usar outro, altere o texto.
+   - Scanners de link de e-mail corporativo (ex.: Outlook Safe Links) podem consumir o link de uso único num GET. Se o convidado cair em "Link inválido" de imediato, reenvie o convite; uma página intermediária de "clique para confirmar" é um acompanhamento conhecido.
 4. Project Settings → **Data API** → Exposed schemas: **remover `public` e `graphql_public`** (deixar a lista vazia; se o painel permitir, desligar a Data API). O app não usa PostgREST/GraphQL: todo acesso a dados é via Postgres com os roles `web_app`/`worker_app`. Auth e Storage não dependem dessa lista. Localmente, o `supabase/config.toml` já tem `[api] enabled = false` e `schemas = []`.
 5. Repetir tudo para o projeto de **staging**.
 
@@ -156,7 +159,7 @@ Ambiente completo e isolado da produção, usado na homologação e em todo rele
 4. **Verificar staging**: painel mostra IA Online; enviar uma mensagem do número de teste e receber resposta; Sentry sem erros novos.
 5. **Migrations em produção**: `DATABASE_URL=<admin de produção> pnpm db:migrate` (migrations devem ser compatíveis com a versão anterior do código, pois web e worker sobem depois).
 6. **Aprovar o deploy do worker** no GitHub (environment `production`) e acompanhar a verificação pós-deploy do workflow.
-7. **Promover a web na Vercel** (deploy de produção da `main`, ou Promote to Production do deploy verificado).
+7. **Promover a web na Vercel** — o deploy automático de produção da `main` deve estar **desligado** (Project → Settings → Environments → Production: desativar "Auto-assign Custom Production Domains", ou usar Ignored Build Step para `main`); produção só por **Promote**, depois da migration (Promote to Production do deploy verificado).
 8. Conferir em produção: IA Online, uma conversa de teste, Sentry.
 
 ## 11. Rollback

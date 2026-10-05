@@ -398,4 +398,29 @@ describe('processConversation', () => {
     ])
     expect(await db.select().from(schema.aiRuns)).toHaveLength(0)
   })
+
+  it('falha retentável paga seguida de exceção: gasto da primeira chamada contabilizado e erro original propagado', async () => {
+    const rid = await setup()
+    const conv = await receive(rid, ['como está o tempo?'])
+    let n = 0
+    const llm: LlmClient = {
+      async completeJson() {
+        n += 1
+        if (n === 1) {
+          return {
+            ok: false as const, error: 'upstream', retryable: true, status: 502, model: 'fake/m',
+            usage: { tokensIn: 100, tokensOut: 0, tokensCache: 0, costUsd: '0.000200' }, latencyMs: 1,
+          }
+        }
+        throw new Error('falha de rede')
+      },
+    }
+    await expect(processConversation(deps(llm, fakeWa()), conv)).rejects.toThrow('falha de rede')
+    expect(n).toBe(2)
+    const counters = await db.select().from(schema.budgetCounters).orderBy(schema.budgetCounters.periodo)
+    expect(counters.map((c) => [c.reservado, c.gasto])).toEqual([
+      ['0.000000', '0.000200'],
+      ['0.000000', '0.000200'],
+    ])
+  })
 })
