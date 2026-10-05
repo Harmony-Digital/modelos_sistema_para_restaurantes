@@ -20,13 +20,25 @@ export async function confirmEmailLink(
 
 /**
  * Sessão iniciada por `verifyOtp`. O GoTrue registra esse login em `amr` com
- * método `otp` (verificado localmente; não existe método `invite`). Atenção:
+ * método `otp` com `timestamp` (segundos); só vale na última hora (não existe método `invite`). Atenção:
  * `otp` também ocorre em magic link/OTP por e-mail, então isto sozinho não prova
  * convite; use `podeDefinirSenha`, que também confere o nível de MFA.
  */
-export function isInviteSession(claims: { amr?: unknown } | null | undefined): boolean {
+export const JANELA_CONVITE_S = 3600
+
+export function isInviteSession(
+  claims: { amr?: unknown } | null | undefined,
+  now: number = Date.now(),
+): boolean {
   const amr = claims?.amr
-  return Array.isArray(amr) && amr.some((e) => typeof e === 'object' && e !== null && (e as { method?: unknown }).method === 'otp')
+  if (!Array.isArray(amr)) return false
+  const agoraS = now / 1000
+  // O login por link precisa ser recente: sessão antiga com `otp` não troca senha.
+  return amr.some((e) => {
+    if (typeof e !== 'object' || e === null) return false
+    const { method, timestamp } = e as { method?: unknown; timestamp?: unknown }
+    return method === 'otp' && typeof timestamp === 'number' && agoraS - timestamp >= 0 - 60 && agoraS - timestamp <= JANELA_CONVITE_S
+  })
 }
 
 /**
@@ -36,7 +48,8 @@ export function isInviteSession(claims: { amr?: unknown } | null | undefined): b
 export function podeDefinirSenha(
   claims: { amr?: unknown } | null | undefined,
   aal: { currentLevel: string | null; nextLevel: string | null },
+  now: number = Date.now(),
 ): boolean {
-  if (!isInviteSession(claims)) return false
+  if (!isInviteSession(claims, now)) return false
   return !(aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2')
 }
