@@ -17,12 +17,12 @@ describe('LoginForm', () => {
     render(<LoginForm semAcesso={false} />)
     await user.click(screen.getByRole('button', { name: 'Entrar' }))
     expect(signIn).not.toHaveBeenCalled()
-    expect(screen.getByLabelText('E-mail', { exact: false })).toHaveFocus()
+    expect(screen.getByLabelText(/E-mail/)).toHaveFocus()
   })
 
   it('senha errada: erro no campo Senha com foco nele', async () => {
     const user = userEvent.setup()
-    signIn.mockResolvedValue({ error: { message: 'Invalid login credentials' } })
+    signIn.mockResolvedValue({ error: { code: 'invalid_credentials', message: 'Invalid login credentials' } })
     render(<LoginForm semAcesso={false} />)
     await user.type(screen.getByLabelText(/E-mail/), 'dono@restaurante.com.br')
     await user.type(screen.getByLabelText(/^Senha/), 'errada123')
@@ -31,6 +31,18 @@ describe('LoginForm', () => {
     expect(senha).toHaveAttribute('aria-invalid', 'true')
     expect(senha).toHaveAccessibleDescription(/E-mail ou senha incorretos/)
     expect(senha).toHaveFocus()
+    expect(replace).not.toHaveBeenCalled()
+  })
+
+  it('erro que não é de credencial (limite/rede): aviso geral, sem culpar a senha', async () => {
+    const user = userEvent.setup()
+    signIn.mockResolvedValue({ error: { code: 'over_request_rate_limit', message: 'rate limit' } })
+    render(<LoginForm semAcesso={false} />)
+    await user.type(screen.getByLabelText(/E-mail/), 'dono@restaurante.com.br')
+    await user.type(screen.getByLabelText(/^Senha/), 'Restaurante2026')
+    await user.click(screen.getByRole('button', { name: 'Entrar' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Não foi possível entrar agora')
+    expect(screen.getByLabelText(/^Senha/)).not.toHaveAttribute('aria-invalid', 'true')
     expect(replace).not.toHaveBeenCalled()
   })
 

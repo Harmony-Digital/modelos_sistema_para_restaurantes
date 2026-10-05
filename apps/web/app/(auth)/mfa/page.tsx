@@ -38,6 +38,11 @@ export default function MfaPage() {
     if (estado.tipo === 'carregando' || enviando) return
     setErro('')
     setErroCodigo('')
+    if (codigo.length !== 6) {
+      setErroCodigo('Digite os 6 dígitos do código.')
+      codigoRef.current?.focus()
+      return
+    }
     setEnviando(true)
     const supabase = createClient()
     const challenge = await supabase.auth.mfa.challenge({ factorId: estado.factorId })

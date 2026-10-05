@@ -2,7 +2,7 @@
 import { AlertTriangle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { z } from 'zod'
-import { Field, PasswordInput, SubmitButton, TextInput, useZodForm } from '@/components/form'
+import { Field, FormError, PasswordInput, SubmitButton, TextInput, useZodForm } from '@/components/form'
 import { createClient } from '@/lib/supabase/client'
 import { email, senhaLogin } from '@/lib/validation'
 
@@ -15,6 +15,10 @@ export function LoginForm({ semAcesso }: { semAcesso: boolean }) {
 
   const onSubmit = form.handleSubmit(async ({ email, senha }) => {
     const { error } = await createClient().auth.signInWithPassword({ email, password: senha })
+    if (error && error.code !== 'invalid_credentials') {
+      form.setError('root.server', { type: 'server', message: 'Não foi possível entrar agora. Tente de novo em instantes.' })
+      return
+    }
     if (error) {
       form.setError('senha', { type: 'server', message: 'E-mail ou senha incorretos. Confira e tente de novo.' }, { shouldFocus: true })
       return
@@ -31,6 +35,7 @@ export function LoginForm({ semAcesso }: { semAcesso: boolean }) {
           Este usuário não tem acesso ao painel. Fale com o dono do restaurante.
         </p>
       )}
+      <FormError form={form} />
       <Field id="email" label="E-mail" error={errors.email?.message} required>
         {(a) => <TextInput {...a} type="email" autoComplete="email" placeholder="Ex.: gerente@restaurante.com.br" {...form.register('email')} />}
       </Field>
