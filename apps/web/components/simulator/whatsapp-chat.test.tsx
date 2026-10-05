@@ -100,4 +100,27 @@ describe('WhatsAppChat', () => {
     expect(botao).toHaveFocus()
     document.removeEventListener('keydown', aoEscape)
   })
+
+  it('painel da lista: re-render do pai não rouba o foco e Tab circula dentro do painel', async () => {
+    const user = userEvent.setup()
+    const lista: SimMessage = {
+      id: 'l1', de: 'restaurante', tipo: 'lista', texto: 'Qual unidade?', botao: 'Ver unidades', hora: '10:02',
+      secoes: [{ titulo: 'Unidades', itens: [{ id: 'u1', titulo: 'Asa Sul' }, { id: 'u2', titulo: 'Lago Sul' }] }],
+    }
+    const { rerender } = render(<WhatsAppChat {...base} mensagens={[lista]} />)
+    await user.click(screen.getByRole('button', { name: 'Ver unidades' }))
+    const painel = screen.getByRole('dialog', { name: 'Ver unidades' })
+    await user.tab()
+    const segunda = within(painel).getByRole('button', { name: 'Lago Sul' })
+    expect(segunda).toHaveFocus()
+    const nova: SimMessage = { id: 'm9', de: 'restaurante', tipo: 'texto', texto: 'Olá', hora: '10:03' }
+    rerender(<WhatsAppChat {...base} mensagens={[lista, nova]} digitando />)
+    expect(segunda).toHaveFocus()
+    await user.tab()
+    expect(within(painel).getByRole('button', { name: 'Cancelar' })).toHaveFocus()
+    await user.tab()
+    expect(within(painel).getByRole('button', { name: /Asa Sul/ })).toHaveFocus()
+    await user.tab({ shift: true })
+    expect(within(painel).getByRole('button', { name: 'Cancelar' })).toHaveFocus()
+  })
 })

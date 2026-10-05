@@ -72,7 +72,7 @@ export function WhatsAppChat(props: {
           value={texto}
           onChange={(e) => { setTexto(e.target.value); ajustarAltura(e.target) }}
           onKeyDown={(e) => {
-            if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return
+            if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing || e.keyCode === 229) return
             e.preventDefault()
             enviar()
           }}

@@ -6,7 +6,14 @@ import { WA } from './bubbles'
 import { WhatsAppIcon } from './whatsapp-icon'
 
 // o conteúdo do simulador só é baixado na primeira abertura; o botão flutuante é estático
-const SimulatorDialog = dynamic(() => import('./simulator-dialog'), { ssr: false })
+const SimulatorDialog = dynamic(() => import('./simulator-dialog'), {
+  ssr: false,
+  loading: () => (
+    <div role="status" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 text-sm text-white">
+      Carregando…
+    </div>
+  ),
+})
 
 export function SimulatorLauncher({ restaurante }: { restaurante: string }) {
   const [aberto, setAberto] = useState(false)

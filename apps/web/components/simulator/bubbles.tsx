@@ -37,18 +37,31 @@ type Secoes = Extract<SimMessage, { tipo: 'lista' }>['secoes']
 function ListaSheet(props: { titulo: string; secoes: Secoes; onFechar: () => void; onEscolher: (itemId: string, titulo: string) => void }) {
   const tituloId = useId()
   const painel = useRef<HTMLDivElement>(null)
-  const { onFechar } = props
+  const fechar = useRef(props.onFechar)
+  fechar.current = props.onFechar
   useEffect(() => {
-    painel.current?.querySelector<HTMLButtonElement>('button')?.focus()
+    const el = painel.current
+    const focaveis = () => Array.from(el?.querySelectorAll<HTMLButtonElement>('button') ?? [])
+    focaveis()[0]?.focus()
     // captura em window: roda antes do Esc do Radix (document), mantendo o simulador aberto
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      e.stopPropagation()
-      onFechar()
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        fechar.current()
+        return
+      }
+      if (e.key !== 'Tab') return
+      const fs = focaveis()
+      const primeiro = fs[0]
+      const ultimo = fs[fs.length - 1]
+      if (!primeiro || !ultimo) return
+      const ativo = document.activeElement
+      if (e.shiftKey && (ativo === primeiro || !el?.contains(ativo))) { e.preventDefault(); ultimo.focus() }
+      else if (!e.shiftKey && (ativo === ultimo || !el?.contains(ativo))) { e.preventDefault(); primeiro.focus() }
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [onFechar])
+  }, [])
   return (
     <div
       ref={painel}
@@ -79,7 +92,7 @@ function ListaSheet(props: { titulo: string; secoes: Secoes; onFechar: () => voi
           </ul>
         </section>
       ))}
-      <button type="button" onClick={onFechar} className="mt-2 min-h-11 w-full rounded-lg text-[15px] font-medium" style={{ color: WA.lida }}>
+      <button type="button" onClick={props.onFechar} className="mt-2 min-h-11 w-full rounded-lg text-[15px] font-medium" style={{ color: WA.lida }}>
         Cancelar
       </button>
     </div>
