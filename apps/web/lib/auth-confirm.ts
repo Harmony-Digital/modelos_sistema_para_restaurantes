@@ -25,6 +25,8 @@ export async function confirmEmailLink(
  * convite; use `podeDefinirSenha`, que também confere o nível de MFA.
  */
 export const JANELA_CONVITE_S = 3600
+/** Tolerância a relógio adiantado do servidor de auth em relação ao app. */
+export const TOLERANCIA_RELOGIO_S = 60
 
 export function isInviteSession(
   claims: { amr?: unknown } | null | undefined,
@@ -37,7 +39,7 @@ export function isInviteSession(
   return amr.some((e) => {
     if (typeof e !== 'object' || e === null) return false
     const { method, timestamp } = e as { method?: unknown; timestamp?: unknown }
-    return method === 'otp' && typeof timestamp === 'number' && agoraS - timestamp >= 0 - 60 && agoraS - timestamp <= JANELA_CONVITE_S
+    return method === 'otp' && typeof timestamp === 'number' && agoraS - timestamp >= -TOLERANCIA_RELOGIO_S && agoraS - timestamp <= JANELA_CONVITE_S
   })
 }
 
