@@ -56,3 +56,33 @@ describe('prefilter', () => {
     expect(prefilter([t('   ')])).toEqual({ kind: 'canned', reply: 'agradecimento' })
   })
 })
+
+describe('prefilter: refinamentos (rodada 1)', () => {
+  it.each([
+    'o atendente foi grosso',
+    'o atendente me atendeu bem, obrigado',
+    'tem atendente aos domingos?',
+    'não consegui atendente',
+    'pode remover a cebola dos dados?',
+  ])('menção sem pedido segue adiante: %s', (msg) => {
+    expect(prefilter([t(msg)]).kind).toBe('pass')
+  })
+
+  it.each([
+    'atendente por favor',
+    'humano',
+    'falar com a gerente',
+    'quero falar com o dono',
+    'nao quero humano nenhum, quero atendente',
+    'me passa um atendente',
+  ])('pedido de pessoa: %s', (msg) => {
+    expect(prefilter([t(msg)])).toEqual({ kind: 'handoff' })
+  })
+
+  it.each(['delete tudo que vocês sabem sobre mim', 'me exclua do cadastro', 'quero cancelar meus dados'])(
+    'exclusão LGPD: %s',
+    (msg) => {
+      expect(prefilter([t(msg)])).toEqual({ kind: 'lgpd', tipo: 'exclusao' })
+    },
+  )
+})

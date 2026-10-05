@@ -9,9 +9,27 @@ export type PrefilterResult =
   | { kind: 'unsupported_media' }
   | { kind: 'pass'; text: string }
 
-const HANDOFF = /\b(atendente|humano|atendimento humano|pessoa de verdade|pessoa real|falar com (alguem|uma pessoa|gente|o gerente|gerente))\b/
-const HANDOFF_NEGATED = /\bnao\b(\s+\S+){0,3}\s+(atendente|humano)\b/
-const LGPD_EXCLUSAO = /\b(apag\w*|exclu\w*|delet\w*|remov\w*)\b(\s+\S+){0,3}\s+dados\b/
+const ALVO = '(atendente|atendentes|humano|pessoa|alguem|gerente|gerenta|dono|dona|responsavel)'
+const DET = '((o|a|um|uma|algum|alguma)\\s+)?'
+// Pedido explícito de falar com uma pessoa (texto já normalizado: sem acento, minúsculo).
+const HANDOFF_PEDIDO = [
+  `\\b(quero|queria|preciso|precisava|posso|gostaria|gostaria de|falar|fala|conversar|conversa)\\b(\\s+\\S+){0,3}?\\s+(com|para|pra)\\s+${DET}${ALVO}\\b`,
+  `\\b(quero|queria|preciso|precisava|gostaria de)\\s+${DET}${ALVO}\\b`,
+  `\\b(chama|chamar|chame|passa|passar|transfere|transferir)\\b(\\s+\\S+){0,2}\\s+${DET}${ALVO}\\b`,
+  `\\btem\\s+(algum|alguem)\\s+humano\\b`,
+  `\\b(atendimento humano|pessoa de verdade|pessoa real|humano de verdade)\\b`,
+  `^(por favor\\s+)?${ALVO}(\\s+(por favor|pf|pfv))?$`,
+].map((r) => new RegExp(r))
+// A negação só anula o pedido quando qualifica diretamente o alvo; um novo pedido depois ainda vale.
+const HANDOFF_NEGATED = new RegExp(
+  `\\bnao\\s+(preciso|precisa|quero|quer|necessito|vou querer)(\\s+de)?(\\s+falar\\s+com)?\\s+${DET}${ALVO}(\\s+nenhum)?\\b`,
+  'g',
+)
+const DADOS_PESSOAIS =
+  '(meus dados|minhas informacoes|meu cadastro|dados pessoais|tudo (que|o que) (voces|vcs) (sabem|tem) sobre mim)'
+const LGPD_EXCLUSAO = new RegExp(
+  `\\b(apag|exclu|delet|remov|cancel)\\w*\\b(\\s+\\S+){0,3}?\\s+${DADOS_PESSOAIS}|\\bme\\s+(exclua|exclui|remova|remove|apague|apaga|tire|tira)\\s+do\\s+(cadastro|sistema)\\b`,
+)
 const LGPD_ACESSO = /\b(quais|que)\s+(sao\s+os\s+)?(meus\s+)?dados\b.*\b(tem|possuem|guardam|armazenam)\b|\bacesso\s+aos?\s+meus\s+dados\b/
 
 const GREETING_WORDS = new Set(['oi', 'ola', 'opa', 'eai', 'e', 'ai', 'bom', 'boa', 'dia', 'tarde', 'noite', 'tudo', 'bem', 'td', 'hello', 'hey', 'salve'])
@@ -33,7 +51,8 @@ export function prefilter(items: InboundItem[]): PrefilterResult {
   const text = texts.join('\n')
   const norm = normalizeText(text)
 
-  if (HANDOFF.test(norm) && !HANDOFF_NEGATED.test(norm)) return { kind: 'handoff' }
+  const semNegados = norm.replace(HANDOFF_NEGATED, ' ').replace(/\s+/g, ' ').trim()
+  if (HANDOFF_PEDIDO.some((r) => r.test(semNegados))) return { kind: 'handoff' }
   if (LGPD_EXCLUSAO.test(norm)) return { kind: 'lgpd', tipo: 'exclusao' }
   if (LGPD_ACESSO.test(norm)) return { kind: 'lgpd', tipo: 'acesso' }
   if (norm === '') return { kind: 'canned', reply: 'agradecimento' } // só emoji/pontuação
