@@ -43,9 +43,12 @@ O simulador usa a IA de verdade e precisa de `OPENROUTER_API_KEY` com crédito e
 pnpm check                              # lint, tipos, testes (apaga o banco local de teste)
 pnpm --filter @atd/web e2e              # pare o worker local antes: o e2e sobe o próprio, com IA falsa
 ```
-Depois do `pnpm check`, prepare o banco de novo (seção 1).
+Depois do `pnpm check`, prepare o banco de novo (seção 1): `pnpm db:migrate`, o **bootstrap** do restaurante (o `pnpm check` apaga o banco, então ele sempre faz falta aqui) e o `demo:s1`.
 
 ## Se o simulador não responder
 - O worker está rodando? O Início mostra "IA: Online".
 - Erro do OpenRouter aparece em **Ver detalhes** (com a causa). Crédito zerado ou modelo sem ZDR: ver `docs/homologacao/etapa-02b.md`, "Se a triagem falhar".
-- Limite de gastos de IA atingido: a resposta é o aviso de modo econômico. Ajuste o limite em **Mais**.
+- Limite de gastos de IA atingido: a resposta é o aviso de modo econômico. A tela de limites chega na Etapa 08; por enquanto, ajuste direto na tabela `budget_limits` do banco local no SQL Editor do Supabase Studio local (http://127.0.0.1:54323) ou com `psql postgresql://postgres:postgres@127.0.0.1:54322/postgres`:
+  ```sql
+  update budget_limits set limite_usd = 5 where escopo = 'ia' and periodo = 'dia';
+  ```
