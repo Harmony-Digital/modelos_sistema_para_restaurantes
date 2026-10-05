@@ -12,7 +12,7 @@ import { processConversation, type ProcessDeps } from './process-conversation.ts
 
 const falha = vi.hoisted(() => ({ carregar: false }))
 vi.mock('@atd/db', async (importOriginal) => {
-  const orig = await importOriginal<DbModule>()
+  const orig = await importOriginal<typeof DbModule>()
   return {
     ...orig,
     carregarContextoS1: (...args: Parameters<typeof orig.carregarContextoS1>) => {
