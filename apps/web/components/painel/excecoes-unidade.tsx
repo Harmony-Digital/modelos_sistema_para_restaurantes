@@ -19,7 +19,7 @@ export function ExcecoesUnidade(props: {
   excecoes: (DiaEspecial & { inicial: Valores })[]
   somenteLeitura: boolean
 }) {
-  const [editando, setEditando] = useState<Valores | null>(null)
+  const [editando, setEditando] = useState<{ valores: Valores; existente: boolean } | null>(null)
   const [apagando, setApagando] = useState<DiaEspecial | null>(null)
 
   return (
@@ -28,7 +28,7 @@ export function ExcecoesUnidade(props: {
         <div className="flex items-center justify-between gap-3">
           <h2 id="titulo-excecoes" className="font-display text-lg font-semibold">Datas especiais</h2>
           {!props.somenteLeitura && (
-            <Button onClick={() => setEditando(VAZIA)}>
+            <Button onClick={() => setEditando({ valores: VAZIA, existente: false })}>
               <CalendarPlus aria-hidden="true" className="size-4" /> Nova exceção
             </Button>
           )}
@@ -45,7 +45,7 @@ export function ExcecoesUnidade(props: {
                 </div>
                 {!props.somenteLeitura && (
                   <>
-                    <Button variant="ghost" size="icon" aria-label={`Editar exceção de ${e.dataBr}`} onClick={() => setEditando(e.inicial)}>
+                    <Button variant="ghost" size="icon" aria-label={`Editar exceção de ${e.dataBr}`} onClick={() => setEditando({ valores: e.inicial, existente: true })}>
                       <Pencil aria-hidden="true" className="size-4" />
                     </Button>
                     <Button variant="ghost" size="icon" aria-label={`Apagar exceção de ${e.dataBr}`} onClick={() => setApagando(e)}>
@@ -73,7 +73,7 @@ export function ExcecoesUnidade(props: {
                 <Badge variant="secondary">Exceção cadastrada</Badge>
               ) : (
                 !props.somenteLeitura && (
-                  <Button variant="outline" onClick={() => setEditando({ data: f.dataBr, fechado: false, turnos: [], motivo: f.feriado ?? '' })}>
+                  <Button variant="outline" onClick={() => setEditando({ valores: { data: f.dataBr, fechado: false, turnos: [], motivo: f.feriado ?? '' }, existente: false })}>
                     Definir exceção
                   </Button>
                 )
@@ -90,7 +90,12 @@ export function ExcecoesUnidade(props: {
         descricao="Vale só para a data escolhida e vence a regra semanal e a de feriados."
       >
         {editando && (
-          <ExcecaoForm inicial={editando} acao={(v) => salvarExcecaoAction(props.unitId, v)} onSalvo={() => setEditando(null)} />
+          <ExcecaoForm
+            inicial={editando.valores}
+            dataFixa={editando.existente}
+            acao={(v) => salvarExcecaoAction(props.unitId, v)}
+            onSalvo={() => setEditando(null)}
+          />
         )}
       </FolhaFormulario>
 

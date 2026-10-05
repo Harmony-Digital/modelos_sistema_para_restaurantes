@@ -7,7 +7,13 @@ import { Button } from '@/components/ui/button'
 import type { ActionResult } from '@/lib/action-result'
 import { excecaoSchema, type ExcecaoForm as Valores } from '@/lib/schemas/unidades'
 
-export function ExcecaoForm(props: { inicial: Valores; acao: (valores: Valores) => Promise<ActionResult<null>>; onSalvo?: () => void }) {
+export function ExcecaoForm(props: {
+  inicial: Valores
+  acao: (valores: Valores) => Promise<ActionResult<null>>
+  onSalvo?: () => void
+  /** Editando uma exceção existente: trocar a data criaria outra e manteria a antiga. */
+  dataFixa?: boolean
+}) {
   const form = useZodForm(excecaoSchema, { defaultValues: props.inicial })
   const { errors, isSubmitting } = form.formState
   const fechado = form.watch('fechado')
@@ -28,8 +34,8 @@ export function ExcecaoForm(props: { inicial: Valores; acao: (valores: Valores) 
   return (
     <form noValidate onSubmit={onSubmit} className="flex flex-col gap-4">
       <FormError form={form} />
-      <Field id="data" label="Data" hint="dd/mm/aaaa" error={errors.data?.message} required>
-        {(a) => <DateInput {...a} {...form.register('data')} />}
+      <Field id="data" label="Data" hint={props.dataFixa ? 'Para mudar a data, apague e crie outra.' : 'dd/mm/aaaa'} error={errors.data?.message} required>
+        {(a) => <DateInput {...a} readOnly={props.dataFixa} {...form.register('data')} />}
       </Field>
       <Controller
         name="fechado"
