@@ -1,0 +1,19 @@
+services:
+  worker:
+    image: ${WORKER_IMAGE}:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      APP_VERSION: ${IMAGE_TAG:-latest}
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 512m
+    cpus: 1.0
+    stop_grace_period: 40s   # > timeout do boss.stop (30 s)
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+    # Sem "ports": o worker só faz conexões de saída.

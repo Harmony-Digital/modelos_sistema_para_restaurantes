@@ -1,0 +1,9 @@
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+.git
+.env*
+supabase/.temp
+apps/web/test-results
+apps/web/playwright-report
