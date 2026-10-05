@@ -28,6 +28,7 @@ describe('acessibilidade dos primitivos', () => {
   })
   it('Switch tem área de toque ampliada', () => {
     render(<Switch aria-label="Ativo" />)
-    expect(screen.getByRole('switch').className).toMatch(/after:-inset-3/)
+    expect(screen.getByRole('switch').className).toMatch(/after:-inset-x-3/)
+    expect(screen.getByRole('switch').className).toMatch(/after:-inset-y-4/)
   })
 })
