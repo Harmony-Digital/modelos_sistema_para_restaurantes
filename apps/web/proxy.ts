@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { copySessionTo } from './lib/session-copy.ts'
 
 const PUBLIC_PATHS = ['/login', '/privacidade']
 
@@ -33,13 +34,8 @@ export async function proxy(request: NextRequest) {
   if (!hasSession && !isPublic) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
-    const redirect = NextResponse.redirect(url)
     // Preserva cookies/cabeçalhos de sessão renovados por setAll.
-    response.cookies.getAll().forEach((c) => redirect.cookies.set(c))
-    response.headers.forEach((v, k) => {
-      if (k !== 'x-middleware-next' && !k.startsWith('x-middleware-')) redirect.headers.set(k, v)
-    })
-    return redirect
+    return copySessionTo(NextResponse.redirect(url), response)
   }
   return response
 }
