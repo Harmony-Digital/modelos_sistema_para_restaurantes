@@ -1,5 +1,5 @@
 'use client'
-import { Moon, Sun } from 'lucide-react'
+import { Check, Moon, Sun } from 'lucide-react'
 import { useRef } from 'react'
 import type { Tema } from '@/lib/theme'
 import { cn } from '@/lib/utils'
@@ -19,7 +19,7 @@ export function ThemeForm(props: { atual: Tema; action: (fd: FormData) => void |
           <label
             key={valor}
             className={cn(
-              'flex min-h-20 cursor-pointer flex-col gap-1 rounded-md border bg-card p-3 transition-colors',
+              'group flex min-h-20 cursor-pointer flex-col gap-1 rounded-md border bg-card p-3 transition-colors',
               'has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-ring has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
               'border-input',
             )}
@@ -32,7 +32,11 @@ export function ThemeForm(props: { atual: Tema; action: (fd: FormData) => void |
               onChange={() => form.current?.requestSubmit()}
               className="sr-only"
             />
-            <span className="flex items-center gap-2 font-semibold text-foreground"><Icon aria-hidden="true" className="size-4" />{label}</span>
+            <span className="flex items-center gap-2 font-semibold text-foreground">
+              <Icon aria-hidden="true" className="size-4" />
+              {label}
+              <Check aria-hidden="true" className="ml-auto hidden size-4 text-link group-has-[:checked]:block" />
+            </span>
             <span className="text-xs text-muted-foreground">{hint}</span>
           </label>
         ))}
