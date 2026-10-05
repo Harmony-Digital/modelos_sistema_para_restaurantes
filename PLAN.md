@@ -7,6 +7,7 @@
 
 ## Onde paramos
 
+- **05/10/2026** — Plano 02-C escrito (`docs/plans/etapa-02c-painel-simulador.md`, 15 tarefas: banco do painel com RLS/auditoria e initplan por unidade, telas Unidades/Respostas/Início/Restaurante, simulador ligado ao pipeline real com canal sem Meta e relógio simulado, e2e com worker real e OpenRouter falso). Próximo: revisão do dono e execução.
 - **05/10/2026** — Plano 02-B (dados por unidade, feriados, resolução/composição, triage-v2, lacunas, localização/lista, evals; camada 2 com 101 casos) implementado. Pendente: chave do OpenRouter para escolher o modelo de triagem (`docs/homologacao/etapa-02b.md`). Leva final de correções aplicada (`pnpm check` com 661 testes). Próximo: plano 02-C.
 - **05/10/2026** — Homologação local do 02-A aprovada pelo dono, com dois ajustes: cartões da Início sem vazar no celular e quadro **Gastos** (IA e WhatsApp, hoje e no mês). Repositório publicado em `Harmony-Digital/modelos_sistema_para_restaurantes` (branches `main`, `etapa-01-fundacao`, `etapa-02-s1`); PRs abertos para a `main` — mesclar primeiro o da Etapa 01. Próximo: plano 02-B.
 - **05/10/2026** — Plano 02-A (design system, navegação, formulários, convite/definir senha, Devolver à IA, casca do simulador) implementado; projeto Playwright `celular` com 15 testes verdes e docs da Etapa 01 fechados. Revisão final da branch feita (sem críticos) e leva de correção aplicada (`d10cfff..9ec0da2`; `pnpm check` com 427 testes). Próximo: plano 02-B (dados por unidade, feriados, resolução, triage-v2, lacunas, evals).
@@ -77,7 +78,7 @@ Spec aprovada: [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-
 - [x] Ajustes da homologação do 02-A: cartões da tela Início sem vazar no celular; quadro **Gastos** com IA e WhatsApp (API oficial), hoje e no mês — 05/10/2026 (ver commit "Mostra gastos de IA e do WhatsApp…")
 - [x] Plano 02-B (05/10/2026; commits 06803a8..até o commit desta leva final de correções; `pnpm check` verde com 661 testes em 73 arquivos; camada 2 com 101 casos) — dados + RLS por unidade, feriados, resolução/composição, triage-v2, lacunas, localização/lista, evals — plano escrito em [docs/plans/etapa-02b-s1-resolucao.md](docs/plans/etapa-02b-s1-resolucao.md) (14 tarefas; código puro validado antes: 166 testes, 101 casos de avaliação)
 - [ ] Escolha do modelo de triagem — camada 1 dos evals (precisa da OPENROUTER_API_KEY; confirmar ZDR do endpoint e o schema com tipo nulo no provedor)
-- [ ] Plano 02-C — telas Unidades/Respostas/Início, simulador ligado ao pipeline real, E2E
+- [ ] Plano 02-C — telas Unidades/Respostas/Início, simulador ligado ao pipeline real, E2E — plano escrito em [docs/plans/etapa-02c-painel-simulador.md](docs/plans/etapa-02c-painel-simulador.md) (15 tarefas; código puro do simulador e do TOTP validado antes: 11 testes)
 - [ ] Homologação do dono (simulador + celular)
 
 ## Etapa 03 — Avisos de presença (S2)
