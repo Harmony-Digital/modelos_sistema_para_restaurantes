@@ -40,8 +40,7 @@ describe('loadEnv', () => {
       WA_ID_PEPPER: key32,
       WHATSAPP_APP_SECRET: 'segredo',
       WHATSAPP_VERIFY_TOKEN: 'verifica',
-      WHATSAPP_ACCESS_TOKEN: 'token',
-      WHATSAPP_PHONE_NUMBER_ID: '123',
+            WHATSAPP_PHONE_NUMBER_ID: '123',
       NEXT_PUBLIC_SUPABASE_URL: 'http://localhost:54321',
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'pk-key',
       SENTRY_DSN: '',
@@ -58,13 +57,30 @@ describe('loadEnv', () => {
       WA_ID_PEPPER: key32,
       WHATSAPP_APP_SECRET: 'segredo',
       WHATSAPP_VERIFY_TOKEN: 'verifica',
-      WHATSAPP_ACCESS_TOKEN: 'token',
-      WHATSAPP_PHONE_NUMBER_ID: '123',
+            WHATSAPP_PHONE_NUMBER_ID: '123',
       NEXT_PUBLIC_SUPABASE_URL: 'http://localhost:54321',
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'pk-key',
       SENTRY_DSN: 'not-a-url',
       RESTAURANT_ID: 'not-a-uuid',
     })
     expect(fn).toThrowError(/SENTRY_DSN/)
+  })
+
+  it('web não exige token de envio do WhatsApp; worker exige', () => {
+    const web = {
+      DATABASE_URL: 'postgresql://u:p@localhost:54322/postgres',
+      PHONE_ENC_KEY: key32,
+      WA_ID_PEPPER: key32,
+      WHATSAPP_APP_SECRET: 'segredo',
+      WHATSAPP_VERIFY_TOKEN: 'verifica',
+      WHATSAPP_PHONE_NUMBER_ID: '123',
+      NEXT_PUBLIC_SUPABASE_URL: 'http://localhost:54321',
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'pk-key',
+    }
+    const env = loadEnv(webEnvSchema, { ...web, WHATSAPP_ACCESS_TOKEN: 'nao-deve-vazar' })
+    expect(env).not.toHaveProperty('WHATSAPP_ACCESS_TOKEN')
+    expect(() =>
+      loadEnv(workerEnvSchema, { ...web, OPENROUTER_API_KEY: 'sk-or-x', AI_TRIAGE_MODELS: 'a/m' }),
+    ).toThrowError(/WHATSAPP_ACCESS_TOKEN/)
   })
 })

@@ -23,11 +23,16 @@ export const secretsEnvSchema = z.object({
   WA_ID_PEPPER: base64Key32,
 })
 
-export const whatsappEnvSchema = z.object({
+/** Webhook (web): validar assinatura, desafio e o número de destino. Não envia mensagens. */
+export const whatsappWebhookEnvSchema = z.object({
   WHATSAPP_APP_SECRET: z.string().min(1),
   WHATSAPP_VERIFY_TOKEN: z.string().min(1),
-  WHATSAPP_ACCESS_TOKEN: z.string().min(1),
   WHATSAPP_PHONE_NUMBER_ID: z.string().regex(/^\d+$/),
+})
+
+/** Worker: tudo do webhook + o que é preciso para enviar pela Graph API. */
+export const whatsappEnvSchema = whatsappWebhookEnvSchema.extend({
+  WHATSAPP_ACCESS_TOKEN: z.string().min(1),
   WHATSAPP_GRAPH_VERSION: z.string().regex(/^v\d+\.\d+$/).default('v24.0'),
 })
 
@@ -45,7 +50,7 @@ const common = z.object({
 export const webEnvSchema = common
   .extend(dbEnvSchema.shape)
   .extend(secretsEnvSchema.shape)
-  .extend(whatsappEnvSchema.shape)
+  .extend(whatsappWebhookEnvSchema.shape)
   .extend({
     NEXT_PUBLIC_SUPABASE_URL: z.url(),
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
