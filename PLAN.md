@@ -7,7 +7,7 @@
 
 ## Onde paramos
 
-- **05/10/2026** — Etapa 01 (arquitetura e stack) **definida e aprovada** em conversa; PRD v1.0, PLAN e CLAUDE.md escritos. Próximo passo: plano detalhado da Etapa 01 (tarefas bite-sized com testes) em `docs/plans/etapa-01-fundacao.md`, depois execução.
+- **05/10/2026** — Etapa 01 (arquitetura e stack) **definida e aprovada**; PRD v1.0, PLAN e CLAUDE.md escritos; **plano detalhado da Etapa 01 escrito** em [docs/plans/etapa-01-fundacao.md](docs/plans/etapa-01-fundacao.md) (21 tarefas). Próximo passo: revisão do plano pelo dono e escolha do modo de execução; depois Task 1.
 
 ## Ciclo de cada etapa
 
@@ -40,9 +40,9 @@ Ler CLAUDE.md → este arquivo → PRD.md → plano detalhado da etapa corrente.
 
 - [x] Arquitetura e stack definidas (PRD §2) — 05/10/2026
 - [x] PRD.md, PLAN.md, CLAUDE.md/AGENTS.md — 05/10/2026
-- [ ] Plano detalhado `docs/plans/etapa-01-fundacao.md`
+- [x] Plano detalhado `docs/plans/etapa-01-fundacao.md` (21 tarefas, TDD) — 05/10/2026
 - [ ] Monorepo: pnpm + Turborepo, `packages/config` (tsconfig strict, eslint, env Zod)
-- [ ] Supabase CLI local; extensões `pg_trgm`, `unaccent`, `pg_cron`
+- [ ] Supabase CLI local; extensões `pg_trgm`, `unaccent` (`pg_cron` entra na Etapa 08, com a retenção)
 - [ ] `packages/db`: schema base (restaurants, units, staff, customers, conversations, messages, ai_runs, budget_*, spend_ledger, audit_log, data_subject_requests, retention_settings, worker_heartbeats) + policies RLS + role `worker_app`
 - [ ] Cliente DB com contexto RLS **parametrizado**; testes de RLS por papel
 - [ ] `apps/web`: Next.js 16, auth Supabase com MFA, papéis, layout mínimo do painel, headers de segurança
@@ -103,7 +103,7 @@ Ler CLAUDE.md → este arquivo → PRD.md → plano detalhado da etapa corrente.
 - [ ] Teste de estresse do teto · Homologação
 
 ## Etapa 09 — Go-live
-- [ ] Revisão de segurança completa e teste de carga
+- [ ] Revisão de segurança completa e teste de carga (inclui CSP com nonce via `proxy.ts`)
 - [ ] Política, LIA e RIPD revisados pelo jurídico; runbook de incidente
 - [ ] Número oficial em produção; Guardrail OpenRouter em produção
 - [ ] Checklist de produção 100% · Homologação final

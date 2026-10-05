@@ -17,7 +17,7 @@ Atendimento ao cliente de um restaurante multiunidade **100% por IA via WhatsApp
 
 ## Stack (detalhes e motivos no PRD §2)
 
-TypeScript strict · pnpm + Turborepo · Next.js 16 (Vercel gru1) · Node 22 worker (Docker, VPS Hostinger, sem portas abertas) · Supabase Postgres sa-east-1 + Auth + Storage + Realtime · Drizzle ORM · pg-boss · `@openrouter/sdk` · Zod 4 · Tailwind v4 + shadcn/ui · Vitest · Playwright · Sentry.
+TypeScript strict · pnpm + Turborepo · Next.js 16 (Vercel gru1) · Node 24 worker (Docker, VPS Hostinger, sem portas abertas) · Supabase Postgres sa-east-1 + Auth + Storage + Realtime · Drizzle ORM · pg-boss · OpenRouter (cliente `fetch` próprio) · Zod 4 · Tailwind v4 + shadcn/ui · Vitest · Playwright · Sentry.
 
 **Não adicionar** NestJS, tRPC, Redis, outro ORM ou outro storage sem decisão registrada no PRD.
 
@@ -36,7 +36,7 @@ TypeScript strict · pnpm + Turborepo · Next.js 16 (Vercel gru1) · Node 22 wor
 - **Grounding:** preço, horário, endereço e disponibilidade só de dado aprovado no banco, via tool. Nada de conhecimento geral.
 - **LLM só age por tools** tipadas e validadas no código. Saída do LLM sempre validada com Zod.
 - **Orçamento:** nenhuma chamada paga sem reserva atômica bem-sucedida.
-- **LGPD:** redação de PII antes do LLM; `dataCollection: 'deny'` + ZDR em toda chamada; dado de saúde nunca persistido em campo estruturado; telefone cifrado; áudio descartado após transcrição; nada de PII em log/Sentry.
+- **LGPD:** redação de PII antes do LLM; `data_collection: 'deny'` + `zdr: true` em toda chamada; dado de saúde nunca persistido em campo estruturado; telefone cifrado; áudio descartado após transcrição; nada de PII em log/Sentry.
 - **Segurança:** RLS em toda tabela; toda Server Action verifica sessão + papel + unidade na DAL (nunca confiar só no `proxy.ts`); webhook só com HMAC válido; `service_role` e segredos nunca no browser; `set_config` sempre **parametrizado** (nunca `sql.raw` com dado).
 - **Banco:** dinheiro em centavos (`integer`) ou `numeric`, nunca `float`; `timestamptz`; toda consulta de caminho quente com índice e `EXPLAIN` revisado; migrations só via `drizzle-kit`, nunca editar migration já aplicada.
 - **Documentos enviados** nunca viram dado oficial sem aprovação humana.
@@ -50,4 +50,4 @@ TypeScript strict · pnpm + Turborepo · Next.js 16 (Vercel gru1) · Node 22 wor
 
 ## Onde paramos
 
-- **05/10/2026** — Arquitetura aprovada; PRD v1.0, PLAN e CLAUDE.md criados. Próximo: plano detalhado da Etapa 01 (`docs/plans/etapa-01-fundacao.md`).
+- **05/10/2026** — Arquitetura aprovada; PRD v1.0, PLAN e CLAUDE.md criados; plano da Etapa 01 escrito em `docs/plans/etapa-01-fundacao.md` (21 tarefas). Próximo: executar a partir da Task 1.

@@ -50,18 +50,18 @@ Atendimento ao cliente final de um restaurante com várias unidades, feito **do 
 
 | Tema | Decisão | Motivo |
 |---|---|---|
-| Linguagem | TypeScript strict em tudo | Uma linguagem, tipos do banco à tela |
+| Linguagem | TypeScript strict em tudo (**TS 6.0.x** — o typescript-eslint ainda não suporta TS 7) | Uma linguagem, tipos do banco à tela |
 | Monorepo | pnpm workspaces + Turborepo | Compartilhar domínio entre web e worker |
 | Web/painel + webhook | **Next.js 16 (App Router)** na **Vercel Pro, região gru1** | HTTPS/CDN/deploy por PR; webhook altamente disponível mesmo com worker fora |
 | Back-end | **Sem NestJS/tRPC.** Route Handler (webhook) + Server Actions com DAL (painel) + worker Node | Server Actions já dão RPC tipado; menos código e superfície |
-| Worker | Node 22 LTS em Docker na **VPS Hostinger KVM 4** existente | Processo sempre ligado; **nenhuma porta de entrada exposta** (só conexões de saída) |
+| Worker | **Node 24 LTS** em Docker na **VPS Hostinger KVM 4** existente | Processo sempre ligado; **nenhuma porta de entrada exposta** (só conexões de saída) |
 | Banco | **Supabase Postgres, região sa-east-1 (São Paulo)** | Empresa já usa; dados no Brasil |
-| Acesso a dados | **Drizzle ORM** + driver `postgres`; RLS declarada no schema (`pgPolicy`) | Tipado, SQL previsível, migrations versionadas |
+| Acesso a dados | **Drizzle ORM** + driver `postgres`; tabelas no schema TS; **RLS, roles, grants e funções em migrations SQL custom** (`drizzle-kit generate --custom`) | Tipado, SQL previsível; policies restritivas (aal2), helpers e grants do `worker_app` ficam legíveis em SQL puro |
 | Supabase no browser | `@supabase/ssr` **somente** Auth, upload ao Storage e Realtime | Dados do painel sempre via servidor (DAL) |
-| Fila | **pg-boss** (no próprio Postgres) | `sendDebounced`, policy `singleton` por conversa, retry/backoff, DLQ, cron, enfileirar na mesma transação |
+| Fila | **pg-boss 12** (no próprio Postgres) | Fila `conversation.process` com policy **`stately`** + `singletonKey = conversationId` + `startAfter: 4s` (agrupa rajadas e serializa por conversa), retry/backoff, DLQ, cron, enfileirar na mesma transação |
 | Redis | **Não usar** no MVP | Volume não justifica; menos um serviço/fornecedor com dado pessoal. Upstash só se métricas exigirem |
 | Storage | **Supabase Storage** (bucket privado, RLS em `storage.objects`, URL assinada) | Mesma região/auth; R2 não tem location hint na América do Sul (complica LGPD) e o egress aqui é irrisório |
-| IA | **OpenRouter** via `@openrouter/sdk` oficial | Fallback de modelos, `provider.dataCollection: 'deny'`, `usage.cost` por chamada, plugin de PDF, STT |
+| IA | **OpenRouter** via cliente fino próprio (`fetch` + Zod) sobre a API REST documentada, em `packages/ai` | Fallback de modelos (`models`), `provider: { data_collection: 'deny', zdr: true }`, `usage.cost` por chamada, plugin de PDF, STT; sem dependência dos nomes de campo do SDK, testável com `fetch` injetado (decisão de 05/10/2026 ao detalhar a Etapa 01) |
 | WhatsApp | Cliente próprio fino (fetch + Zod) em `packages/whatsapp` | Superfície pequena; HMAC sob nosso controle; menos supply chain |
 | Validação | Zod 4 | Env, webhook, Server Actions, saída do LLM |
 | UI | Tailwind v4 + shadcn/ui; **design system definido na Etapa 02** | |
@@ -81,7 +81,7 @@ Meta Cloud API ──webhook (X-Hub-Signature-256)──▶ apps/web — Next.js
                               Supabase Postgres sa-east-1 (RLS · pg-boss · pg_trgm · unaccent · pg_cron · Vault)
                               Supabase Storage (privado) · Supabase Auth (MFA) · Realtime Broadcast (privado)
                                                    ▲
-apps/worker — Node 22 @ VPS Hostinger (Docker, sem portas abertas)
+apps/worker — Node 24 @ VPS Hostinger (Docker, sem portas abertas)
    pré-filtro → (áudio→STT) → triagem → orçamento → contexto → resposta+tools → envio Meta → registro
    │                                   │
    └──────────── OpenRouter ◀──────────┘          Meta Graph API (envio)
@@ -159,7 +159,7 @@ Convenções:
 | Tabela | Campos | Índices / restrições |
 |---|---|---|
 | `customers` | id, wa_id_hash (HMAC-SHA256 do wa_id com pepper), telefone_cifrado (AES-256-GCM), nome_perfil, unidade_preferida_id, privacy_notice_sent_at, ultima_interacao_at, bloqueado_ate | único `(restaurant_id, wa_id_hash)`; `(ultima_interacao_at)` para retenção |
-| `conversations` | id, customer_id, estado (`ia`/`aguardando_humano`/`humano`/`encerrada`), atendente_id, unidade_contexto_id, resumo, falhas_consecutivas, window_expires_at, last_message_at | parcial `(estado, last_message_at DESC) WHERE estado <> 'encerrada'`; no máx. 1 conversa aberta por cliente (único parcial) |
+| `conversations` | id, customer_id, processed_up_to_id (último `messages.id` de entrada já processado), estado (`ia`/`aguardando_humano`/`humano`/`encerrada`), atendente_id, unidade_contexto_id, resumo, falhas_consecutivas, window_expires_at, last_message_at | parcial `(estado, last_message_at DESC) WHERE estado <> 'encerrada'`; no máx. 1 conversa aberta por cliente (único parcial) |
 | `messages` | id bigint, conversation_id, direcao (`in`/`out`), autor (`cliente`/`ia`/`humano`/`sistema`), wamid, tipo (`texto`/`audio`/`imagem`/`documento`/`outro`), texto, transcrito bool, midia_ref, status_envio, ai_run_id | **único `(wamid)`** (idempotência); `(conversation_id, created_at DESC)` |
 
 ### 3.6 IA, custos e limites
@@ -205,7 +205,7 @@ Após a chamada: `reservado -= $est, gasto += $real` (custo real de `usage.cost`
 1. `GET /api/whatsapp/webhook`: verificação `hub.verify_token` (comparação em tempo constante).
 2. `POST`: lê **corpo bruto**, valida `X-Hub-Signature-256` (HMAC-SHA256 com app secret, `timingSafeEqual`). Inválido ⇒ 401, nada gravado.
 3. Valida o payload com Zod; ignora eventos não suportados (registra métrica).
-4. Em **uma transação**: upsert de `customers`, obtém/abre `conversations`, `INSERT messages … ON CONFLICT (wamid) DO NOTHING`; se inseriu, `sendDebounced('conversation.process', {conversationId}, …, 4s, conversationId)`.
+4. Em **uma transação**: upsert de `customers`, obtém/abre `conversations`, `INSERT messages … ON CONFLICT (wamid) DO NOTHING`; se inseriu, `send('conversation.process', {conversationId}, { singletonKey: conversationId, startAfter: 4, db: tx })`. Com a policy `stately`, existe no máximo 1 job enfileirado e 1 ativo por conversa: mensagens da mesma rajada não criam job novo (o job pendente processa todas), e uma conversa nunca é processada em paralelo.
 5. Status de entrega (`sent`/`delivered`/`read`/`failed`) atualizam `messages.status_envio`.
 6. Responde 200 em < 500 ms. Nenhuma chamada de IA ou à Meta acontece na requisição.
 
@@ -243,7 +243,7 @@ Após a chamada: `reservado -= $est, gasto += $real` (custo real de `usage.cost`
 4. Conteúdo do cliente e de documentos é **dado, nunca instrução** (defesa contra prompt injection; delimitadores + instrução explícita + evals de injeção).
 5. Histórico curto (≈10 mensagens) + `conversations.resumo` atualizado periodicamente.
 6. Prompt estruturado para **prompt caching**: parte estática primeiro, dados variáveis no fim.
-7. Toda chamada ao OpenRouter com `provider: { dataCollection: 'deny' }` e ZDR; lista `models: [...]` de fallback.
+7. Toda chamada ao OpenRouter com `provider: { data_collection: 'deny', zdr: true }`; lista `models: [...]` de fallback.
 8. Modelos ficam em **configuração** (banco/env), não no código; escolhidos por **evals** (acerto, custo, latência) na etapa correspondente.
 9. Tom: português do Brasil, cordial, mensagens curtas próprias de WhatsApp; identifica-se como assistente virtual.
 
