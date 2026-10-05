@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -25,6 +25,21 @@ describe('FatoForm', () => {
     await user.type(screen.getByLabelText(/^Resposta/), 'Temos estacionamento gratuito.')
     await user.click(screen.getByRole('button', { name: 'Salvar informação' }))
     expect(acao).toHaveBeenCalledWith({ tema: 'Estacionamento', exemplos: [], texto: 'Temos estacionamento gratuito.', unitId: '', ativo: true })
+  })
+})
+
+describe('FatoForm: duplo envio', () => {
+  it('dois submits seguidos chamam a ação uma vez só', async () => {
+    let liberar: (v: { ok: true }) => void = () => {}
+    const acao = vi.fn().mockImplementation(() => new Promise((r) => { liberar = r }))
+    const { container } = render(<FatoForm inicial={{ tema: 'Wifi', exemplos: [], texto: 'Sim, temos.', unitId: '', ativo: true }} unidades={unidades} acao={acao} rotuloSalvar="Salvar informação" />)
+    const form = container.querySelector('form')!
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+    await waitFor(() => expect(acao).toHaveBeenCalled())
+    await new Promise((r) => setTimeout(r, 50))
+    liberar({ ok: true })
+    await waitFor(() => expect(acao).toHaveBeenCalledTimes(1))
   })
 })
 

@@ -1,4 +1,5 @@
 'use client'
+import { useRef } from 'react'
 import { Controller } from 'react-hook-form'
 import { toast } from 'sonner'
 import {
@@ -16,14 +17,22 @@ export function FatoForm(props: {
 }) {
   const form = useZodForm(fatoSchema, { defaultValues: props.inicial })
   const { errors, isSubmitting } = form.formState
+  // Guarda síncrona: duplo clique/Enter chega antes do re-render com pending e criaria fato duplicado.
+  const enviando = useRef(false)
   const onSubmit = form.handleSubmit(async (valores) => {
-    const r = await props.acao(valores)
-    if (!r.ok) {
-      applyServerErrors(form, r)
-      return
+    if (enviando.current) return
+    enviando.current = true
+    try {
+      const r = await props.acao(valores)
+      if (!r.ok) {
+        applyServerErrors(form, r)
+        return
+      }
+      toast.success('Informação salva. A IA já passa a responder com ela.')
+      props.onSalvo?.()
+    } finally {
+      enviando.current = false
     }
-    toast.success('Informação salva. A IA já passa a responder com ela.')
-    props.onSalvo?.()
   })
   return (
     <form noValidate onSubmit={onSubmit} className="flex flex-col gap-4">
