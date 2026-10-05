@@ -159,4 +159,23 @@ describe('RLS', () => {
     expect(del).toHaveLength(0)
     expect(await db.select().from(dataSubjectRequests)).toHaveLength(1)
   })
+
+  it('anon e authenticated não podem setval em sequences; worker_app ainda insere com identity', async () => {
+    const { restaurantId } = await seedRestaurant(db)
+    const dono = await seedStaff(db, sql, { restaurantId, papel: 'dono' })
+    await expect(
+      db.transaction(async (tx) => {
+        await tx.execute(dsql`set local role anon`)
+        return tx.execute(dsql`select setval('public.messages_id_seq', 1, false)`)
+      }),
+    ).rejects.toMatchObject(cause(/permission denied/))
+    await expect(
+      withUserContext(db, as(dono, 'aal2'), (tx) => tx.execute(dsql`select setval('public.messages_id_seq', 1, false)`)),
+    ).rejects.toMatchObject(cause(/permission denied/))
+    const [c] = await db.insert(customers).values({ restaurantId, waIdHash: 'h', telefoneCifrado: 'x' }).returning()
+    const [conv] = await db.insert(conversations).values({ restaurantId, customerId: c!.id }).returning()
+    await withRole(db, 'worker_app', (tx) =>
+      tx.insert(messages).values({ restaurantId, conversationId: conv!.id, direcao: 'out', autor: 'ia', tipo: 'texto', texto: 'ok' }),
+    )
+  })
 })
