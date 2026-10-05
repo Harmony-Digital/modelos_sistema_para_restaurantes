@@ -202,6 +202,8 @@ describe('processConversation', () => {
     expect((await db.select().from(schema.aiRuns)).map((r) => r.resultado)).toEqual(['erro', 'erro'])
     const [dia] = await db.select().from(schema.budgetCounters).orderBy(schema.budgetCounters.periodo)
     expect(dia!.reservado).toBe('0.000000') // reserva devolvida
+    expect(dia!.gasto).toBe('0.000000')
+    expect((await db.select().from(schema.aiRuns)).map((r) => r.costUsd)).toEqual(['0.000000', '0.000000'])
   })
 
   it('envio com falha temporária: lança; retentativa entrega sem nova chamada ao LLM', async () => {
@@ -298,5 +300,68 @@ describe('processConversation', () => {
     expect(run!.costUsd).toBe('0.005000')
     const [dia] = await db.select().from(schema.budgetCounters).orderBy(schema.budgetCounters.periodo)
     expect(dia!.gasto).toBe('0.005000')
+  })
+
+  it('humano assume durante a triagem: IA não responde, estado preservado, ai_run registrado (I5)', async () => {
+    const rid = await setup()
+    const conv = await receive(rid, ['como está o tempo?'])
+    const inner = fakeLlm([{ intent: 'fora_escopo', confianca: 0.95 }]).llm
+    const llm: LlmClient = {
+      async completeJson(p) {
+        await db.update(schema.conversations).set({ estado: 'humano' })
+        return inner.completeJson(p)
+      },
+    }
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    expect(wa.sent).toHaveLength(0)
+    const [c] = await db.select().from(schema.conversations)
+    const [m] = await db.select().from(schema.messages)
+    expect(c!.estado).toBe('humano')
+    expect(c!.processedUpToId).toBe(m!.id)
+    expect(await db.select().from(schema.aiRuns)).toHaveLength(1)
+    expect(await outMessages()).toHaveLength(0)
+  })
+
+  it('exceção após a reserva: reserva devolvida e job lança', async () => {
+    const rid = await setup()
+    const conv = await receive(rid, ['como está o tempo?'])
+    const llm: LlmClient = {
+      async completeJson() {
+        throw new Error('boom')
+      },
+    }
+    await expect(processConversation(deps(llm, fakeWa()), conv)).rejects.toThrow(/boom/)
+    const counters = await db.select().from(schema.budgetCounters)
+    expect(counters.map((c) => [c.reservado, c.gasto])).toEqual([
+      ['0.000000', '0.000000'],
+      ['0.000000', '0.000000'],
+    ])
+  })
+
+  it('humano assume entre decidir e entregar: resposta da IA cancelada, não enviada (I5)', async () => {
+    const rid = await setup()
+    const conv = await receive(rid, ['como está o tempo?'])
+    const { llm } = fakeLlm([{ intent: 'fora_escopo', confianca: 0.95 }])
+    const flaky = fakeWa((n) => (n === 1 ? { ok: false, retryable: true, code: 130429, message: 'rate' } : undefined))
+    await expect(processConversation(deps(llm, flaky), conv)).rejects.toThrow(/temporária/)
+    await db.update(schema.conversations).set({ estado: 'humano' })
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    const out = await outMessages()
+    expect(out.map((m) => [m.autor, m.statusEnvio])).toEqual([
+      ['sistema', 'enviado'],
+      ['ia', 'cancelado'],
+    ])
+    expect(wa.sent).toHaveLength(1)
+  })
+
+  it('aviso de privacidade recusado em definitivo: privacy_notice_sent_at permanece nulo', async () => {
+    const rid = await setup()
+    const conv = await receive(rid, ['oi'])
+    const wa = fakeWa(() => ({ ok: false, retryable: false, code: 131047, message: 'janela' }))
+    await processConversation(deps(fakeLlm([]).llm, wa), conv)
+    const [c] = await db.select().from(schema.customers)
+    expect(c!.privacyNoticeSentAt).toBeNull()
   })
 })

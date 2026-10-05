@@ -21,7 +21,7 @@ const boss = createBoss(env.DATABASE_URL, 'worker', (err) => {
   Sentry.captureException(err)
 })
 
-let heartbeat: ReturnType<typeof startHeartbeat>
+let heartbeat: ReturnType<typeof startHeartbeat> | undefined
 try {
   await boss.start()
   await ensureQueues(boss)
@@ -70,7 +70,7 @@ async function shutdown(signal: string) {
   stopping = true
   try {
     log.info({ signal }, 'encerrando: aguardando jobs em andamento')
-    heartbeat.stop()
+    heartbeat?.stop()
     await boss.stop({ graceful: true, timeout: 30_000 })
     await sql.end({ timeout: 5 })
     await Sentry.flush(2_000)

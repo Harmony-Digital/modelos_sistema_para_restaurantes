@@ -1,6 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm'
 import { periodStarts } from '@atd/core'
 import type { Db } from './client.ts'
+import type { Tx } from './rls.ts'
 import { budgetCounters, budgetLimits, spendLedger } from './schema/ops.ts'
 
 export type BudgetScope = 'ia' | 'whatsapp'
@@ -79,8 +80,9 @@ export async function reserveBudget(
   }
 }
 
-async function adjust(db: Db, r: Reservation, gastoUsd: string, tipo: 'liquidacao' | 'estorno', ref?: string) {
-  await db.transaction(async (tx) => {
+async function adjust(db: Db | Tx, r: Reservation, gastoUsd: string, tipo: 'liquidacao' | 'estorno', ref?: string) {
+  // com Tx, transaction() vira savepoint
+  await (db as Db).transaction(async (tx) => {
     // idempotência: o índice único parcial garante uma única baixa por reserva
     const inserted = await tx
       .insert(spendLedger)
@@ -112,11 +114,11 @@ async function adjust(db: Db, r: Reservation, gastoUsd: string, tipo: 'liquidaca
   })
 }
 
-export async function settleBudget(db: Db, r: Reservation, actualUsd: string, ref?: string) {
+export async function settleBudget(db: Db | Tx, r: Reservation, actualUsd: string, ref?: string) {
   assertUsd(actualUsd, false)
   return adjust(db, r, actualUsd, 'liquidacao', ref)
 }
 
-export function releaseBudget(db: Db, r: Reservation, ref?: string) {
+export function releaseBudget(db: Db | Tx, r: Reservation, ref?: string) {
   return adjust(db, r, '0', 'estorno', ref)
 }
