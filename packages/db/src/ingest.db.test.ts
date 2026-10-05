@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
 import type { PgBoss } from 'pg-boss'
-import { getTestBoss, getTestDb, resetDb, seedRestaurant } from './test-utils.ts'
+import { getTestBoss, getTestDb, resetDb, seedRestaurant, WEB_URL } from './test-utils.ts'
 import { applyStatus, ingestInbound, type IngestInput } from './ingest.ts'
+import { createDb } from './client.ts'
 import { createBoss, enqueueProcess, QUEUES } from './queue.ts'
 import { conversations, customers, messages } from './schema/conversation.ts'
 
@@ -19,7 +20,7 @@ const jobs = () => sql<{ singleton_key: string; secs: number }[]>`
 function input(restaurantId: string, over: Partial<IngestInput> = {}): IngestInput {
   return {
     restaurantId, waIdHash: 'hash-maria', telefoneCifrado: 'v1.cifra', profileName: 'Maria',
-    wamid: 'wamid.1', tipo: 'texto', texto: 'oi', mediaId: null, ...over,
+    wamid: 'wamid.1', tipo: 'texto', texto: 'oi', mediaId: null, timestamp: new Date(), ...over,
   }
 }
 
@@ -81,13 +82,47 @@ describe('ingestInbound', () => {
     expect(second.conversationId).not.toBe(first.conversationId)
   })
 
-  it('boss "web" (sem migrate/supervise) consegue enfileirar', async () => {
+  it('boss "web" como web_app (sem migrate/supervise/registro) consegue enfileirar', async () => {
     const { restaurantId } = await seedRestaurant(db)
-    const webBoss = createBoss(process.env.TEST_DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres', 'web')
+    const webBoss = createBoss(WEB_URL, 'web')
     await webBoss.start()
-    await ingestInbound(db, input(restaurantId), enqueueProcess(webBoss))
-    expect(await jobs()).toHaveLength(1)
-    await webBoss.stop({ graceful: false })
+    const web = createDb(WEB_URL, { max: 1 })
+    try {
+      await ingestInbound(web.db, input(restaurantId), enqueueProcess(webBoss))
+      expect(await jobs()).toHaveLength(1)
+    } finally {
+      await webBoss.stop({ graceful: false })
+      await web.sql.end()
+    }
+  })
+
+  it('reentrega de wamid com conversa encerrada não abre outra conversa nem enfileira', async () => {
+    const { restaurantId } = await seedRestaurant(db)
+    const first = await ingestInbound(db, input(restaurantId), enqueueProcess(boss))
+    await db.update(conversations).set({ estado: 'encerrada' }).where(eq(conversations.id, first.conversationId))
+    await sql`delete from pgboss.job`
+    const again = await ingestInbound(db, input(restaurantId), enqueueProcess(boss))
+    expect(again).toEqual({ inserted: false, conversationId: first.conversationId })
+    expect(await db.select().from(conversations)).toHaveLength(1)
+    expect(await jobs()).toHaveLength(0)
+  })
+
+  it('reentrega tardia não move window_expires_at', async () => {
+    const { restaurantId } = await seedRestaurant(db)
+    const first = await ingestInbound(db, input(restaurantId), enqueueProcess(boss))
+    const [before] = await db.select().from(conversations).where(eq(conversations.id, first.conversationId))
+    await ingestInbound(db, input(restaurantId, { timestamp: new Date(Date.now() + 3600_000) }), enqueueProcess(boss))
+    const [after] = await db.select().from(conversations).where(eq(conversations.id, first.conversationId))
+    expect(after!.windowExpiresAt).toEqual(before!.windowExpiresAt)
+  })
+
+  it('mensagem atrasada (timestamp antigo) não encurta a janela', async () => {
+    const { restaurantId } = await seedRestaurant(db)
+    const first = await ingestInbound(db, input(restaurantId), enqueueProcess(boss))
+    const [before] = await db.select().from(conversations).where(eq(conversations.id, first.conversationId))
+    await ingestInbound(db, input(restaurantId, { wamid: 'wamid.old', timestamp: new Date(Date.now() - 3600_000) }), enqueueProcess(boss))
+    const [after] = await db.select().from(conversations).where(eq(conversations.id, first.conversationId))
+    expect(after!.windowExpiresAt).toEqual(before!.windowExpiresAt)
   })
 })
 

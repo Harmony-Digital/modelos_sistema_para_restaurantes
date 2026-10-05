@@ -12,6 +12,8 @@ export type IngestInput = {
   tipo: 'texto' | 'audio' | 'imagem' | 'documento' | 'outro'
   texto: string | null
   mediaId: string | null
+  /** Horário da mensagem segundo a Meta. */
+  timestamp: Date
 }
 
 /** Transação única do webhook: cliente → conversa → mensagem idempotente → job (I7). */
@@ -34,17 +36,29 @@ export function ingestInbound(db: Db, input: IngestInput, enqueue: Enqueue) {
       })
       .returning({ id: customers.id })
 
+    // O upsert do cliente serializa transações do mesmo cliente; aqui a reentrega já é visível.
+    const [existing] = await tx
+      .select({ conversationId: messages.conversationId })
+      .from(messages)
+      .where(eq(messages.wamid, input.wamid))
+    if (existing) return { inserted: false, conversationId: existing.conversationId }
+
+    const ts = sql`${input.timestamp.toISOString()}::timestamptz`
     const [conversation] = await tx
       .insert(conversations)
       .values({
         restaurantId: input.restaurantId,
         customerId: customer!.id,
-        windowExpiresAt: sql`now() + interval '24 hours'`,
+        windowExpiresAt: sql`${ts} + interval '24 hours'`,
+        lastMessageAt: ts,
       })
       .onConflictDoUpdate({
         target: conversations.customerId,
         targetWhere: sql`estado <> 'encerrada'`,
-        set: { lastMessageAt: sql`now()`, windowExpiresAt: sql`now() + interval '24 hours'` },
+        set: {
+          lastMessageAt: sql`greatest(${conversations.lastMessageAt}, ${ts})`,
+          windowExpiresAt: sql`greatest(coalesce(${conversations.windowExpiresAt}, '-infinity'::timestamptz), ${ts} + interval '24 hours')`,
+        },
       })
       .returning({ id: conversations.id })
 

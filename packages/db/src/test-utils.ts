@@ -52,10 +52,44 @@ export async function seedStaff(
   return userId
 }
 
+const LOCAL_HOST = '127.0.0.1:54322'
+export const WORKER_URL = `postgresql://worker_app:worker_dev@${LOCAL_HOST}/postgres`
+export const WEB_URL = `postgresql://web_app:web_dev@${LOCAL_HOST}/postgres`
+
+let pgbossReady: Promise<void> | undefined
+/** Fidelidade de produção: pgboss pertence a worker_app e web_app só tem os grants padrão. Só no Supabase local. */
+function setupPgbossRoles(): Promise<void> {
+  pgbossReady ??= (async () => {
+    const url = process.env.TEST_DATABASE_URL ?? DEFAULT_URL
+    if (!url.includes(LOCAL_HOST)) throw new Error('setupPgbossRoles só roda contra o Supabase local')
+    const { sql } = getTestDb()
+    await sql.begin(async (tx) => {
+      await tx`select pg_advisory_xact_lock(913)`
+      await tx.unsafe(`alter role worker_app with password 'worker_dev'`)
+      await tx.unsafe(`alter role web_app with password 'web_dev'`)
+      const [o] = await tx<{ owner: string }[]>`
+        select pg_get_userbyid(nspowner) as owner from pg_namespace where nspname = 'pgboss'`
+      const [t] = await tx<{ owner: string | null }[]>`
+        select (select tableowner from pg_tables where schemaname = 'pgboss' and tablename = 'job') as owner`
+      if (o?.owner !== 'worker_app' || (t?.owner && t.owner !== 'worker_app')) {
+        await tx.unsafe(`drop schema if exists pgboss cascade`)
+        await tx.unsafe(`create schema pgboss authorization worker_app`)
+        await tx.unsafe(`grant usage on schema pgboss to web_app`)
+        await tx.unsafe(
+          `alter default privileges for role worker_app in schema pgboss grant select, insert, update on tables to web_app`,
+        )
+      }
+    })
+  })()
+  return pgbossReady
+}
+export { setupPgbossRoles }
+
 let bossPromise: Promise<PgBoss> | undefined
 export function getTestBoss() {
   bossPromise ??= (async () => {
-    const boss = createBoss(process.env.TEST_DATABASE_URL ?? DEFAULT_URL, 'worker')
+    await setupPgbossRoles()
+    const boss = createBoss(WORKER_URL, 'worker')
     await boss.start()
     await ensureQueues(boss)
     return boss
