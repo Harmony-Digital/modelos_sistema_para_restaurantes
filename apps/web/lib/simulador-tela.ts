@@ -43,7 +43,7 @@ const lista = z.object({
 })
 const localizacao = z.object({ lat: z.number(), lng: z.number(), nome: z.string(), endereco: z.string() })
 
-function horaDe(criadaEm: string, timezone: string, offsetSegundos: number | null) {
+export function horaDe(criadaEm: string, timezone: string, offsetSegundos: number | null) {
   const instante = new Date(Date.parse(criadaEm) + (offsetSegundos ?? 0) * 1000)
   return hhmm(agoraLocal(instante, timezone).minuto)
 }

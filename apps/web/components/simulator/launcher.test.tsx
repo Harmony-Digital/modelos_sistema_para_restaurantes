@@ -70,6 +70,9 @@ describe('SimulatorLauncher', () => {
     await user.type(screen.getByRole('textbox', { name: 'Mensagem' }), 'oi{Enter}')
     expect(await screen.findByRole('alert')).toHaveTextContent('Esta conversa foi encerrada')
     expect(within(screen.getByRole('log')).queryByText('oi')).toBeNull()
+    // o polling (1 s) não apaga o erro da ação
+    await new Promise((r) => setTimeout(r, 1600))
+    expect(screen.getByRole('alert')).toHaveTextContent('Esta conversa foi encerrada')
   })
 
   it('Novo cliente recomeça a conversa', async () => {
@@ -112,5 +115,16 @@ describe('SimulatorLauncher', () => {
     expect(within(painel).getByText(/US\$ 0,000100/)).toBeInTheDocument()
     expect(within(painel).getByText(/812 ms/)).toBeInTheDocument()
     expect(within(painel).getByText('Respondeu 1 de 2 perguntas com dado cadastrado')).toBeInTheDocument()
+  })
+
+  it('Ver detalhes com falha mostra a mensagem e deixa tentar de novo', async () => {
+    const acoes = acoesFalsas({ detalhes: vi.fn(async () => ({ ok: false as const, formError: 'x' })) })
+    const user = await abrir(acoes)
+    await waitFor(() => expect(acoes.abrir).toHaveBeenCalled())
+    await user.click(screen.getByRole('button', { name: 'Ver detalhes' }))
+    const painel = await screen.findByRole('region', { name: 'Detalhes da IA' })
+    expect(await within(painel).findByText('Não foi possível carregar os detalhes.')).toBeInTheDocument()
+    await user.click(within(painel).getByRole('button', { name: 'Tentar de novo' }))
+    await waitFor(() => expect(acoes.detalhes).toHaveBeenCalledTimes(2))
   })
 })

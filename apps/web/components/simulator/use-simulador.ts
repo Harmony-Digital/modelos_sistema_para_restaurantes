@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ActionResult } from '@/lib/action-result'
 import {
-  AVISO_SIMULACAO, avisoDoEstado, paraSimMessage, rotuloRelogio,
+  AVISO_SIMULACAO, avisoDoEstado, horaDe, paraSimMessage, rotuloRelogio,
   type DetalheTela, type MensagemTela, type RespostaSimulador,
 } from '@/lib/simulador-tela'
 import type { SimMessage } from './types'
@@ -27,8 +27,10 @@ export function useSimulador(acoes: AcoesSimulador, aberto: boolean, timezone: s
   const [estado, setEstado] = useState<RespostaSimulador['estado']>('ia')
   const [digitando, setDigitando] = useState(false)
   const [offset, setOffset] = useState<number | null>(null)
-  const [erro, setErro] = useState<string | null>(null)
-  const [detalhes, setDetalhes] = useState<DetalheTela[] | null>(null)
+  // o polling só limpa o erro que ele mesmo gerou; erro de ação fica até a próxima ação bem-sucedida
+  const [erroPolling, setErroPolling] = useState<string | null>(null)
+  const [erroAcao, setErroAcao] = useState<string | null>(null)
+  const [detalhes, setDetalhes] = useState<DetalheTela[] | 'erro' | null>(null)
   const conversa = useRef<string | null>(null)
   const cursor = useRef(0)
 
@@ -64,10 +66,10 @@ export function useSimulador(acoes: AcoesSimulador, aberto: boolean, timezone: s
         if (!vivo || conversa.current !== c) return
         if (r.ok && r.data) {
           aplicar(r.data, c === null)
-          setErro(null)
-        } else if (!r.ok) setErro(erroDe(r))
+          setErroPolling(null)
+        } else if (!r.ok) setErroPolling(erroDe(r))
       } catch {
-        if (vivo) setErro(ERRO_GERAL)
+        if (vivo) setErroPolling(ERRO_GERAL)
       } finally {
         ocupado = false
       }
@@ -82,17 +84,21 @@ export function useSimulador(acoes: AcoesSimulador, aberto: boolean, timezone: s
 
   const enviar = useCallback(async (texto: string, interativoId: string | null) => {
     const c = conversa.current
-    if (!c) return
+    if (!c) {
+      setErroAcao(ERRO_GERAL)
+      return
+    }
     const id = `tmp-${crypto.randomUUID()}`
-    const hora = paraSimMessage({ id: 0, direcao: 'in', tipo: 'texto', texto, payload: null, criadaEm: new Date().toISOString() }, timezone, offset)
-    setOtimistas((os) => [...os, { ...hora, id, status: 'enviando' } as SimMessage])
+    const provisoria: SimMessage = { id, de: 'cliente', tipo: 'texto', texto, hora: horaDe(new Date().toISOString(), timezone, offset), status: 'enviando' }
+    setOtimistas((os) => [...os, provisoria])
     const desfazer = (mensagem: string) => {
       setOtimistas((os) => os.filter((o) => o.id !== id))
-      setErro(mensagem)
+      setErroAcao(mensagem)
     }
     try {
       const r = await acoes.enviar(c, texto, interativoId)
       if (!r.ok) desfazer(erroDe(r))
+      else setErroAcao(null)
     } catch {
       desfazer(ERRO_GERAL)
     }
@@ -104,10 +110,10 @@ export function useSimulador(acoes: AcoesSimulador, aberto: boolean, timezone: s
       if (r.ok && r.data) {
         aplicar(r.data, true)
         setDetalhes(null)
-        setErro(null)
-      } else if (!r.ok) setErro(erroDe(r))
+        setErroAcao(null)
+      } else if (!r.ok) setErroAcao(erroDe(r))
     } catch {
-      setErro(ERRO_GERAL)
+      setErroAcao(ERRO_GERAL)
     }
   }, [acoes, aplicar])
 
@@ -119,6 +125,7 @@ export function useSimulador(acoes: AcoesSimulador, aberto: boolean, timezone: s
       const r = await acoes.relogio(c, local)
       if (!r.ok) return erroDe(r)
       setOffset(r.data?.relogioOffsetSegundos ?? null)
+      setErroAcao(null)
       return null
     } catch {
       return ERRO_GERAL
@@ -131,10 +138,12 @@ export function useSimulador(acoes: AcoesSimulador, aberto: boolean, timezone: s
     setDetalhes(null)
     try {
       const r = await acoes.detalhes(c)
-      if (r.ok) setDetalhes(r.data ?? [])
-      else setErro(erroDe(r))
+      if (r.ok) {
+        setDetalhes(r.data ?? [])
+        setErroAcao(null)
+      } else setDetalhes('erro')
     } catch {
-      setErro(ERRO_GERAL)
+      setDetalhes('erro')
     }
   }, [acoes])
 
@@ -148,7 +157,7 @@ export function useSimulador(acoes: AcoesSimulador, aberto: boolean, timezone: s
   return {
     mensagens,
     digitando: digitando || otimistas.length > 0,
-    erro,
+    erro: erroAcao ?? erroPolling,
     relogio: rotuloRelogio(offset, timezone, new Date()),
     offset,
     detalhes,

@@ -11,7 +11,7 @@ export function SimuladorControles(props: {
   offset: number | null
   relogio: string | null
   erro: string | null
-  detalhes: DetalheTela[] | null
+  detalhes: DetalheTela[] | 'erro' | null
   onNovoCliente: () => void
   onRelogio: (local: string | null) => Promise<string | null>
   onDetalhes: () => void
@@ -81,8 +81,14 @@ export function SimuladorControles(props: {
       {painel === 'detalhes' && (
         <section aria-label="Detalhes da IA" className="flex max-h-56 flex-col gap-2 overflow-y-auto">
           {props.detalhes === null && <p role="status" className="text-xs text-muted-foreground">Carregando…</p>}
-          {props.detalhes?.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma chamada da IA nesta conversa ainda.</p>}
-          {props.detalhes && props.detalhes.length > 0 && (
+          {props.detalhes === 'erro' && (
+            <div className="flex flex-col items-start gap-2">
+              <p role="alert" className="text-xs text-destructive">Não foi possível carregar os detalhes.</p>
+              <Button type="button" variant="outline" onClick={props.onDetalhes}>Tentar de novo</Button>
+            </div>
+          )}
+          {Array.isArray(props.detalhes) && props.detalhes.length === 0 && <p className="text-xs text-muted-foreground">Nenhuma chamada da IA nesta conversa ainda.</p>}
+          {Array.isArray(props.detalhes) && props.detalhes.length > 0 && (
             <ul className="flex flex-col gap-2">
               {props.detalhes.map((d) => (
                 <li key={d.id} className="rounded-md border border-border p-2 text-xs">
