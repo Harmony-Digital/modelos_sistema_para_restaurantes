@@ -1,3 +1,4 @@
+import 'server-only'
 import { ehHostGoogleMaps, ehLinkCurtoMaps, extrairCoordenadas, type Coordenadas } from '@atd/core'
 
 const MAX_SALTOS = 3

@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { coordenadasDoLink } from './maps-link'
 
+// o pacote `server-only` lança fora do bundle de servidor do Next
+vi.mock('server-only', () => ({}))
+
 const redireciona = (...destinos: (string | null)[]) => {
   let i = 0
   return vi.fn(async () => new Response(null, { status: 302, headers: destinos[i] ? { location: destinos[i++]! } : {} })) as unknown as typeof fetch
