@@ -84,6 +84,7 @@ export const knowledgeFacts = pgTable(
   (t) => [
     foreignKey({ columns: [t.unitId, t.restaurantId], foreignColumns: [units.id, units.restaurantId], name: 'knowledge_facts_unit_fk' })
       .onDelete('cascade'),
+    uniqueIndex('knowledge_facts_id_restaurant_uq').on(t.id, t.restaurantId),
     index('knowledge_facts_search_idx').using('gin', t.search),
     index('knowledge_facts_restaurant_ativo_idx').on(t.restaurantId).where(sql`${t.ativo}`),
     check('knowledge_facts_tema_len', sql`char_length(${t.tema}) between 1 and 120`),
@@ -119,7 +120,9 @@ export const knowledgeGaps = pgTable(
     primeiraVez: timestamp('primeira_vez', { withTimezone: true }).notNull().defaultNow(),
     ultimaVez: timestamp('ultima_vez', { withTimezone: true }).notNull().defaultNow(),
     status: gapStatus('status').notNull().default('aberta'),
-    factId: uuid('fact_id').references(() => knowledgeFacts.id, { onDelete: 'set null' }),
+    // FK composta (fact_id, restaurant_id) vive na migration custom s1_fact_fk:
+    // o drizzle não expressa `on delete set null (fact_id)`.
+    factId: uuid('fact_id'),
     ...timestamps,
   },
   (t) => [

@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { getTestDb, resetDb, seedRestaurant, seedStaff } from './test-utils.ts'
 import { withRole, withUserContext, type JwtClaims } from './rls.ts'
-import { knowledgeFacts, knowledgeGaps, staff, unitHours, units } from './schema/index.ts'
+import { knowledgeFacts, knowledgeGaps, staff, unitHourExceptions, unitHours, units } from './schema/index.ts'
 
 const { db, sql } = getTestDb()
 beforeEach(() => resetDb(sql))
@@ -97,5 +97,59 @@ describe('RLS por unidade (S1)', () => {
     ).rejects.toMatchObject({ cause: { code: '23505', constraint_name: 'knowledge_gaps_aberta_uq' } })
     await db.update(knowledgeGaps).set({ status: 'respondida' })
     await db.insert(knowledgeGaps).values({ restaurantId: c.restaurantId, chaveNormalizada: 'info:wifi' })
+  })
+
+  it('painel não aponta lacuna para fato de outro restaurante; apagar o fato zera só fact_id', async () => {
+    const c = await cenario()
+    const outro = await seedRestaurant(db)
+    const [fatoOutro] = await db.insert(knowledgeFacts)
+      .values({ restaurantId: outro.restaurantId, tema: 'Wifi', texto: 'Temos wifi.' }).returning()
+    const [fato] = await db.insert(knowledgeFacts)
+      .values({ restaurantId: c.restaurantId, tema: 'Wifi', texto: 'Temos wifi.' }).returning()
+    const [gap] = await db.insert(knowledgeGaps)
+      .values({ restaurantId: c.restaurantId, chaveNormalizada: 'info:wifi' }).returning()
+    await expect(
+      withUserContext(db, as(c.dono), (tx) =>
+        tx.update(knowledgeGaps).set({ factId: fatoOutro!.id }).where(eq(knowledgeGaps.id, gap!.id))),
+    ).rejects.toMatchObject({ cause: { code: '23503', constraint_name: 'knowledge_gaps_fact_fk' } })
+    await withUserContext(db, as(c.dono), (tx) =>
+      tx.update(knowledgeGaps).set({ factId: fato!.id }).where(eq(knowledgeGaps.id, gap!.id)))
+    await db.delete(knowledgeFacts).where(eq(knowledgeFacts.id, fato!.id))
+    const [depois] = await db.select().from(knowledgeGaps).where(eq(knowledgeGaps.id, gap!.id))
+    expect(depois!.factId).toBeNull()
+    expect(depois!.restaurantId).toBe(c.restaurantId)
+  })
+
+  it('gerente restrito não vê fato, exceção nem lacuna de outra unidade', async () => {
+    const c = await cenario()
+    await db.insert(knowledgeFacts).values([
+      { restaurantId: c.restaurantId, unitId: c.u1, tema: 'Varanda', texto: 'Tem varanda.' },
+      { restaurantId: c.restaurantId, unitId: c.u2, tema: 'Piscina', texto: 'Tem piscina.' },
+    ])
+    const fatos = await withUserContext(db, as(c.gerenteU1), (tx) => tx.select().from(knowledgeFacts))
+    expect(fatos.map((f) => f.tema)).toEqual(['Varanda'])
+
+    for (const unitId of [c.u1, c.u2]) {
+      await db.insert(unitHourExceptions).values({ restaurantId: c.restaurantId, unitId, data: '2026-12-25', fechado: true })
+    }
+    const exc = await withUserContext(db, as(c.gerenteU1), (tx) => tx.select().from(unitHourExceptions))
+    expect(exc.map((e) => e.unitId)).toEqual([c.u1])
+
+    await db.insert(knowledgeGaps).values([
+      { restaurantId: c.restaurantId, unitId: c.u1, chaveNormalizada: 'info:a' },
+      { restaurantId: c.restaurantId, unitId: c.u2, chaveNormalizada: 'info:b' },
+    ])
+    const gaps = await withUserContext(db, as(c.gerenteU1), (tx) => tx.select().from(knowledgeGaps))
+    expect(gaps.map((g) => g.chaveNormalizada)).toEqual(['info:a'])
+  })
+
+  it('worker_app não altera status da lacuna; authenticated não tem MAINTAIN', async () => {
+    const c = await cenario()
+    await db.insert(knowledgeGaps).values({ restaurantId: c.restaurantId, chaveNormalizada: 'info:wifi' })
+    await expect(
+      withRole(db, 'worker_app', (tx) => tx.update(knowledgeGaps).set({ status: 'respondida' })),
+    ).rejects.toMatchObject(denied)
+    const r = await sql`select has_table_privilege('authenticated','public.units','MAINTAIN') as m`
+    expect(r[0]!.m).toBe(false)
   })
 })

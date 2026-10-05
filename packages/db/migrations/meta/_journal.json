@@ -92,6 +92,20 @@
       "when": 1791226633463,
       "tag": "0012_s1_seguranca",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1791227022505,
+      "tag": "0013_s1_fact_tenant",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791227024441,
+      "tag": "0014_s1_fact_fk",
+      "breakpoints": true
     }
   ]
 }
