@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { cookies } from 'next/headers'
 import { DM_Sans, JetBrains_Mono, Sora } from 'next/font/google'
-import { dataThemeFor, parseTema, THEME_COOKIE } from '@/lib/theme'
+import { dataThemeFor, parseTema, THEME_COOKIE, themeColorFor } from '@/lib/theme'
 import './globals.css'
 
 const sora = Sora({ subsets: ['latin'], display: 'swap', variable: '--font-sora' })
@@ -9,13 +9,9 @@ const dmSans = DM_Sans({ subsets: ['latin'], display: 'swap', variable: '--font-
 const jetbrains = JetBrains_Mono({ subsets: ['latin'], display: 'swap', variable: '--font-jetbrains' })
 
 export const metadata: Metadata = { title: 'Atendimento IA', robots: { index: false, follow: false } }
-export const viewport: Viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  themeColor: [
-    { media: '(prefers-color-scheme: dark)', color: '#0F1322' },
-    { media: '(prefers-color-scheme: light)', color: '#FAF8F4' },
-  ],
+export async function generateViewport(): Promise<Viewport> {
+  const tema = parseTema((await cookies()).get(THEME_COOKIE)?.value)
+  return { width: 'device-width', initialScale: 1, themeColor: themeColorFor(tema) }
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
