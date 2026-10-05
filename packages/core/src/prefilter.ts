@@ -9,12 +9,15 @@ export type PrefilterResult =
   | { kind: 'unsupported_media' }
   | { kind: 'pass'; text: string }
 
+const ALVO_FORTE = '(atendente|atendentes|humano|gerente|gerenta|dono|dona|responsavel)'
+// "pessoa"/"alguem" são comuns em pedidos ("uma pessoa pra cada pizza"): só valem após falar/chamar/passar.
 const ALVO = '(atendente|atendentes|humano|pessoa|alguem|gerente|gerenta|dono|dona|responsavel)'
 const DET = '((o|a|um|uma|algum|alguma)\\s+)?'
 // Pedido explícito de falar com uma pessoa (texto já normalizado: sem acento, minúsculo).
 const HANDOFF_PEDIDO = [
-  `\\b(quero|queria|preciso|precisava|posso|gostaria|gostaria de|falar|fala|conversar|conversa)\\b(\\s+\\S+){0,3}?\\s+(com|para|pra)\\s+${DET}${ALVO}\\b`,
-  `\\b(quero|queria|preciso|precisava|gostaria de)\\s+${DET}${ALVO}\\b`,
+  `\\b(quero|queria|preciso|precisava|posso|gostaria|gostaria de|falar|fala|conversar|conversa)\\b(\\s+\\S+){0,3}?\\s+(com|para|pra)\\s+${DET}${ALVO_FORTE}\\b`,
+  `\\b(falar|fala|conversar|conversa)\\b(\\s+\\S+){0,2}?\\s+(com|para|pra)\\s+${DET}(pessoa|alguem)\\b`,
+  `\\b(quero|queria|preciso|precisava|gostaria de)(\\s+de)?\\s+${DET}${ALVO_FORTE}\\b`,
   `\\b(chama|chamar|chame|passa|passar|transfere|transferir)\\b(\\s+\\S+){0,2}\\s+${DET}${ALVO}\\b`,
   `\\btem\\s+(algum|alguem)\\s+humano\\b`,
   `\\b(atendimento humano|pessoa de verdade|pessoa real|humano de verdade)\\b`,
@@ -28,7 +31,7 @@ const HANDOFF_NEGATED = new RegExp(
 const DADOS_PESSOAIS =
   '(meus dados|minhas informacoes|meu cadastro|dados pessoais|tudo (que|o que) (voces|vcs) (sabem|tem) sobre mim)'
 const LGPD_EXCLUSAO = new RegExp(
-  `\\b(apag|exclu|delet|remov|cancel)\\w*\\b(\\s+\\S+){0,3}?\\s+${DADOS_PESSOAIS}|\\bme\\s+(exclua|exclui|remova|remove|apague|apaga|tire|tira)\\s+do\\s+(cadastro|sistema)\\b`,
+  `\\b(apag|exclu|delet|remov)\\w*\\b(\\s+\\S+){0,3}?\\s+${DADOS_PESSOAIS}|\\bcancel\\w*(\\s+\\S+)?\\s+${DADOS_PESSOAIS}|\\bme\\s+(exclua|exclui|remova|remove|apague|apaga|tire|tira)\\s+do\\s+(cadastro|sistema)\\b`,
 )
 const LGPD_ACESSO = /\b(quais|que)\s+(sao\s+os\s+)?(meus\s+)?dados\b.*\b(tem|possuem|guardam|armazenam)\b|\bacesso\s+aos?\s+meus\s+dados\b/
 

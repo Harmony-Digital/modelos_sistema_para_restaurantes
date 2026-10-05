@@ -86,3 +86,25 @@ describe('prefilter: refinamentos (rodada 1)', () => {
     },
   )
 })
+
+describe('prefilter: refinamentos (rodada 2)', () => {
+  it.each([
+    'cancela meu pedido, meus dados estao certos',
+    'quero cancelar o pedido, meus dados estão errados',
+    'quero alguem pra levar o pedido',
+    'quero uma pessoa pra cada pizza',
+  ])('não é LGPD nem handoff: %s', (msg) => {
+    expect(prefilter([t(msg)]).kind).toBe('pass')
+  })
+
+  it.each(['preciso de atendente', 'preciso de um atendente', 'precisava de atendente', 'preciso de humano'])(
+    'preciso de: %s',
+    (msg) => {
+      expect(prefilter([t(msg)])).toEqual({ kind: 'handoff' })
+    },
+  )
+
+  it('cancelar meus dados continua exclusão', () => {
+    expect(prefilter([t('quero cancelar meus dados')])).toEqual({ kind: 'lgpd', tipo: 'exclusao' })
+  })
+})
