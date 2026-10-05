@@ -5,10 +5,12 @@ import { carregarUnidadesPainel } from '@atd/db'
 import { salvarDadosUnidadeAction, salvarHorariosAction } from '@/app/(painel)/unidades/actions'
 import { Abas } from '@/components/painel/abas'
 import { DadosUnidadeForm } from '@/components/painel/dados-unidade-form'
+import { ExcecoesUnidade } from '@/components/painel/excecoes-unidade'
 import { HorariosForm } from '@/components/painel/horarios-form'
 import { SeloUnidade } from '@/components/painel/selo-unidade'
 import { TopBar } from '@/components/shell/top-bar'
 import { requireStaff } from '@/lib/dal'
+import { excecoesCadastradas, feriadosComComportamento } from '@/lib/feriados-unidade'
 import { seloDaUnidade } from '@/lib/selo-unidade'
 import { getDb } from '@/lib/server/db'
 import { valoresDadosUnidade } from '@/lib/unidade-form'
@@ -51,7 +53,17 @@ export default async function UnidadePage(props: { params: Promise<{ id: string 
         {aba === 'horarios' && (
           <HorariosForm unitId={u.id} inicial={{ semanal: u.semanal }} acao={salvarHorariosAction.bind(null, u.id)} somenteLeitura={somenteLeitura} />
         )}
-        {aba === 'excecoes' && <p className="text-sm text-muted-foreground">Exceções: Task 8.</p>}
+        {aba === 'excecoes' && (
+          <ExcecoesUnidade
+            unitId={u.id}
+            somenteLeitura={somenteLeitura}
+            feriados={feriadosComComportamento(u, restaurante.politicaFeriado, restaurante.timezone, new Date())}
+            excecoes={excecoesCadastradas(u, restaurante.timezone, new Date(), restaurante.politicaFeriado).map((e) => {
+              const x = u.excecoes[e.data]!
+              return { ...e, inicial: { data: e.dataBr, fechado: x.fechado, turnos: x.turnos, motivo: x.motivo ?? '' } }
+            })}
+          />
+        )}
       </main>
     </>
   )
