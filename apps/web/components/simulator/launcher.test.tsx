@@ -84,6 +84,25 @@ describe('SimulatorLauncher', () => {
     expect(acoes.novoCliente).toHaveBeenCalledTimes(1)
   })
 
+  it('mensagem enviada logo após "Novo cliente" vai para a conversa nova', async () => {
+    const NOVA = '00000000-0000-4000-8000-000000000002'
+    let liberar!: () => void
+    const acoes = acoesFalsas({
+      novoCliente: vi.fn(() => new Promise<{ ok: true; data: RespostaSimulador }>((res) => {
+        liberar = () => res({ ok: true, data: resp([], { conversationId: NOVA }) })
+      })),
+    })
+    const user = await abrir(acoes)
+    await waitFor(() => expect(acoes.abrir).toHaveBeenCalled())
+    await user.click(screen.getByRole('button', { name: 'Novo cliente' }))
+    await user.type(screen.getByRole('textbox', { name: 'Mensagem' }), 'oi{Enter}')
+    expect(acoes.enviar).not.toHaveBeenCalled()
+    liberar()
+    await waitFor(() => expect(acoes.enviar).toHaveBeenCalledWith(NOVA, 'oi', null))
+    expect(acoes.enviar).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
   it('Simular data e hora aplica e volta ao relógio real', async () => {
     const acoes = acoesFalsas()
     const user = await abrir(acoes)

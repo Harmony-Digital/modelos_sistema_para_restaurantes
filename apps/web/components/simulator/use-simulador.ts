@@ -33,6 +33,8 @@ export function useSimulador(acoes: AcoesSimulador, aberto: boolean, timezone: s
   const [detalhes, setDetalhes] = useState<DetalheTela[] | 'erro' | null>(null)
   const conversa = useRef<string | null>(null)
   const cursor = useRef(0)
+  // troca em andamento por "Novo cliente": envios aguardam para não cair na conversa encerrada
+  const troca = useRef<Promise<void> | null>(null)
 
   const aplicar = useCallback((r: RespostaSimulador, recomecar: boolean) => {
     if (recomecar) {
@@ -83,6 +85,7 @@ export function useSimulador(acoes: AcoesSimulador, aberto: boolean, timezone: s
   }, [aberto, acoes, aplicar])
 
   const enviar = useCallback(async (texto: string, interativoId: string | null) => {
+    if (troca.current) await troca.current
     const c = conversa.current
     if (!c) {
       setErroAcao(ERRO_GERAL)
@@ -105,15 +108,23 @@ export function useSimulador(acoes: AcoesSimulador, aberto: boolean, timezone: s
   }, [acoes, timezone, offset])
 
   const novoCliente = useCallback(async () => {
+    const atual = (async () => {
+      try {
+        const r = await acoes.novoCliente()
+        if (r.ok && r.data) {
+          aplicar(r.data, true)
+          setDetalhes(null)
+          setErroAcao(null)
+        } else if (!r.ok) setErroAcao(erroDe(r))
+      } catch {
+        setErroAcao(ERRO_GERAL)
+      }
+    })()
+    troca.current = atual
     try {
-      const r = await acoes.novoCliente()
-      if (r.ok && r.data) {
-        aplicar(r.data, true)
-        setDetalhes(null)
-        setErroAcao(null)
-      } else if (!r.ok) setErroAcao(erroDe(r))
-    } catch {
-      setErroAcao(ERRO_GERAL)
+      await atual
+    } finally {
+      if (troca.current === atual) troca.current = null
     }
   }, [acoes, aplicar])
 
