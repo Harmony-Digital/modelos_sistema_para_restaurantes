@@ -422,5 +422,6 @@ describe('processConversation', () => {
       ['0.000000', '0.000200'],
       ['0.000000', '0.000200'],
     ])
+    expect(await db.select().from(schema.aiRuns)).toHaveLength(0)
   })
 })
