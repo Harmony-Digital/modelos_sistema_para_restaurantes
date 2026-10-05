@@ -19,6 +19,28 @@ describe('RLS', () => {
     expect(rows.map((r) => r.relname)).toEqual([])
   })
 
+  it('toda tabela de public tem mfa_required RESTRICTIVE (authenticated) e app_roles (web_app, worker_app)', async () => {
+    const tables = await sql<{ t: string }[]>`
+      select c.relname as t from pg_class c join pg_namespace n on n.oid = c.relnamespace
+       where n.nspname = 'public' and c.relkind in ('r','p') order by 1`
+    const policies = await sql<{ t: string; name: string; permissive: string; roles: string[]; cmd: string }[]>`
+      select tablename as t, policyname as name, permissive, roles::text[] as roles, cmd
+        from pg_policies where schemaname = 'public'`
+    expect(tables.length).toBeGreaterThan(0)
+    const missing: string[] = []
+    for (const { t } of tables) {
+      const mfa = policies.find((p) => p.t === t && p.name === 'mfa_required')
+      if (!mfa || mfa.permissive !== 'RESTRICTIVE' || mfa.cmd !== 'ALL' || mfa.roles.join() !== 'authenticated') {
+        missing.push(`${t}: mfa_required`)
+      }
+      const app = policies.find((p) => p.t === t && p.name === 'app_roles')
+      if (!app || app.permissive !== 'PERMISSIVE' || [...app.roles].sort().join() !== 'web_app,worker_app') {
+        missing.push(`${t}: app_roles`)
+      }
+    }
+    expect(missing).toEqual([])
+  })
+
   it('dono sem MFA (aal1) não vê nada; com aal2 vê o próprio restaurante', async () => {
     const { restaurantId } = await seedRestaurant(db)
     const dono = await seedStaff(db, sql, { restaurantId, papel: 'dono' })
