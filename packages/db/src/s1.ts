@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, isNull, sql } from 'drizzle-orm'
+import { and, asc, eq, gte, inArray, isNull, or, sql } from 'drizzle-orm'
 import {
   agoraLocal, MODELOS_S1, somarDias, validarModelo,
   type ChaveModelo, type ContextoS1, type Lacuna, type Turno, type UnidadeS1,
@@ -26,19 +26,25 @@ export async function carregarContextoS1(db: Db | Tx, restaurantId: string, agor
   const us = await db.select().from(units)
     .where(and(eq(units.restaurantId, restaurantId), eq(units.ativo, true)))
     .orderBy(asc(units.ordem), asc(units.nome))
-  const hs = await db
+  const idsAtivos = us.map((u) => u.id)
+  // filtra por unit_id (índices únicos começam por unit_id); sem unidade ativa não há o que consultar
+  const hs = idsAtivos.length === 0 ? [] : await db
     .select({ unitId: unitHours.unitId, weekday: unitHours.weekday, abre: unitHours.abre, fecha: unitHours.fecha })
     .from(unitHours)
-    .where(eq(unitHours.restaurantId, restaurantId))
+    .where(and(eq(unitHours.restaurantId, restaurantId), inArray(unitHours.unitId, idsAtivos)))
     .orderBy(asc(unitHours.unitId), asc(unitHours.weekday), asc(unitHours.abre))
-  const exs = await db
+  const exs = idsAtivos.length === 0 ? [] : await db
     .select({ unitId: unitHourExceptions.unitId, data: unitHourExceptions.data, fechado: unitHourExceptions.fechado, turnos: unitHourExceptions.turnos, motivo: unitHourExceptions.motivo })
     .from(unitHourExceptions)
-    .where(and(eq(unitHourExceptions.restaurantId, restaurantId), gte(unitHourExceptions.data, ontem)))
+    .where(and(eq(unitHourExceptions.restaurantId, restaurantId), inArray(unitHourExceptions.unitId, idsAtivos), gte(unitHourExceptions.data, ontem)))
   const fatos = await db
     .select({ id: knowledgeFacts.id, tema: knowledgeFacts.tema, exemplos: knowledgeFacts.exemplos, texto: knowledgeFacts.texto, unitId: knowledgeFacts.unitId })
     .from(knowledgeFacts)
-    .where(and(eq(knowledgeFacts.restaurantId, restaurantId), eq(knowledgeFacts.ativo, true)))
+    .where(and(
+      eq(knowledgeFacts.restaurantId, restaurantId),
+      eq(knowledgeFacts.ativo, true),
+      idsAtivos.length === 0 ? isNull(knowledgeFacts.unitId) : or(isNull(knowledgeFacts.unitId), inArray(knowledgeFacts.unitId, idsAtivos)),
+    ))
     .orderBy(asc(knowledgeFacts.tema))
     .limit(MAX_FATOS)
   const modelos = await db
@@ -73,14 +79,16 @@ export async function carregarContextoS1(db: Db | Tx, restaurantId: string, agor
     timezone: r.timezone,
     politicaFeriado: r.politica,
     unidades,
-    fatos: fatos.filter((f) => f.unitId === null || porId.has(f.unitId)),
+    fatos,
     modelos: personalizados,
   }
 }
 
 /** Uma lacuna aberta por (restaurante, chave, unidade): soma ocorrência ou cria. */
 export async function registrarLacunas(tx: Tx, p: { restaurantId: string; lacunas: readonly Lacuna[]; pergunta: string }): Promise<void> {
-  for (const l of p.lacunas) {
+  // ordem estável evita deadlock entre transações concorrentes
+  const ordenadas = [...p.lacunas].sort((a, b) => a.chave.localeCompare(b.chave) || (a.unitId ?? '').localeCompare(b.unitId ?? ''))
+  for (const l of ordenadas) {
     const filtro = and(
       eq(knowledgeGaps.restaurantId, p.restaurantId),
       eq(knowledgeGaps.chaveNormalizada, l.chave),
