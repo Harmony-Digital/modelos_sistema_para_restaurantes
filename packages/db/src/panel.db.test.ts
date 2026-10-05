@@ -4,6 +4,7 @@ import { getPanelStatus } from './panel.ts'
 import { getStaffContext } from './staff.ts'
 import { budgetCounters, workerHeartbeats } from './schema/ops.ts'
 import { periodStarts } from '@atd/core'
+import { conversations, customers } from './schema/index.ts'
 
 const { db, sql } = getTestDb()
 beforeEach(() => resetDb(sql))
@@ -35,5 +36,17 @@ describe('painel', () => {
     expect(sA.workerLastSeen).toBeInstanceOf(Date)
     expect(sA.gastoIaHojeUsd).toBeNull()
     expect(sD.gastoIaHojeUsd).toBe('0.123400')
+  })
+
+  it('status: "aguardando atendente" conta aguardando_humano e humano, não ia/encerrada', async () => {
+    const { restaurantId } = await seedRestaurant(db)
+    const atendente = await seedStaff(db, sql, { restaurantId, papel: 'atendente' })
+    for (const estado of ['aguardando_humano', 'humano', 'ia', 'encerrada'] as const) {
+      const [c] = await db.insert(customers).values({ restaurantId, waIdHash: crypto.randomUUID(), telefoneCifrado: 'x' }).returning()
+      await db.insert(conversations).values({ restaurantId, customerId: c!.id, estado })
+    }
+    const s = await getPanelStatus(db, { sub: atendente, role: 'authenticated', aal: 'aal1' })
+    expect(s.aguardandoHumano).toBe(2)
+    expect(s.conversasAbertas).toBe(3)
   })
 })
