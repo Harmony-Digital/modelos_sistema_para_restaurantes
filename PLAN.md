@@ -43,18 +43,19 @@ Ler CLAUDE.md → este arquivo → PRD.md → plano detalhado da etapa corrente.
 - [x] Arquitetura e stack definidas (PRD §2) — 05/10/2026
 - [x] PRD.md, PLAN.md, CLAUDE.md/AGENTS.md — 05/10/2026
 - [x] Plano detalhado `docs/plans/etapa-01-fundacao.md` (21 tarefas, TDD) — 05/10/2026
-- [x] Monorepo: pnpm + Turborepo, `packages/config` (tsconfig strict, eslint, env Zod) — 05/10/2026, commits 683bf9c..bcbf374; 240 testes verdes (`pnpm check`)
-- [x] Supabase CLI local; extensões `pg_trgm`, `unaccent` (`pg_cron` entra na Etapa 08, com a retenção) — 05/10/2026, commits bcbf374..36456bb; 240 testes verdes (`pnpm check`)
-- [x] `packages/db`: schema base (restaurants, units, staff, customers, conversations, messages, ai_runs, budget_*, spend_ledger, audit_log, data_subject_requests, retention_settings, worker_heartbeats) + policies RLS + role `worker_app` — 05/10/2026, commits 36456bb..123cb85, 3b77dc8, 4e51dec; 240 testes verdes (`pnpm check`)
-- [x] Cliente DB com contexto RLS **parametrizado**; testes de RLS por papel — 05/10/2026, commits 123cb85..50140d5; testes de RLS por papel; 240 testes verdes (`pnpm check`)
-- [x] `apps/web`: Next.js 16, auth Supabase com MFA, papéis, layout mínimo do painel, headers de segurança — 05/10/2026, commits fcc5504..463142a; e2e 4/4; 240 testes verdes (`pnpm check`)
-- [x] `packages/whatsapp`: HMAC, schemas Zod do webhook, cliente de envio (texto) — 05/10/2026, commits 9a4ea51..1f7453f; 240 testes verdes (`pnpm check`)
-- [x] Webhook: verificação GET, POST com HMAC → transação (customer, conversation, message idempotente, `sendDebounced`) — 05/10/2026, commits d0b918e..8c64115; 240 testes verdes (`pnpm check`)
-- [x] `apps/worker`: pg-boss (filas, singleton, DLQ), heartbeat, shutdown gracioso, Dockerfile não-root — 05/10/2026, commits a02f4f1..41c9e58; 240 testes verdes (`pnpm check`)
-- [x] `packages/core`: pré-filtro (humano, saudação, flood, LGPD, mídia não suportada), redação de PII, orçamento atômico (+ teste concorrente) — 05/10/2026, commits 4e51dec..9a4ea51 (pré-filtro, PII, orçamento + teste concorrente); 240 testes verdes (`pnpm check`)
-- [x] `packages/ai`: cliente OpenRouter (`dataCollection: 'deny'`, fallback, registro de `usage.cost`), triagem com `json_schema`, resposta fixa de fora de escopo — 05/10/2026, commits 1f7453f..d0b918e; pendente: smoke test real com a key do OpenRouter e ZDR; 240 testes verdes (`pnpm check`)
-- [x] Aviso LGPD na primeira interação + página pública de política (rascunho) — 05/10/2026, commits 463142a..47c0e04 (/privacidade) e 8c64115..fcc5504 (aviso no worker); 240 testes verdes (`pnpm check`)
-- [x] Sentry (web + worker) com scrub de PII — 05/10/2026, commits 47c0e04..023cce5; 240 testes verdes (`pnpm check`)
+- [x] Monorepo: pnpm + Turborepo, `packages/config` (tsconfig strict, eslint, env Zod) — 05/10/2026, commits 683bf9c..bcbf374
+- [x] Supabase CLI local; extensões `pg_trgm`, `unaccent` (`pg_cron` entra na Etapa 08, com a retenção) — 05/10/2026, commits bcbf374..36456bb
+- [x] `packages/db`: schema base (restaurants, units, staff, customers, conversations, messages, ai_runs, budget_*, spend_ledger, audit_log, data_subject_requests, retention_settings, worker_heartbeats) + policies RLS + role `worker_app` — 05/10/2026, commits `36456bb..123cb85` (schema, Tasks 4–5), `50140d5..4e51dec` (RLS e roles, Task 7), `339de6f..9a4ea51` (orçamento, Task 10)
+- [x] Cliente DB com contexto RLS **parametrizado**; testes de RLS por papel — 05/10/2026, commits `123cb85..50140d5` (cliente com contexto parametrizado); `50140d5..4e51dec` (policies RLS e testes por papel)
+- [x] `apps/web`: Next.js 16, auth Supabase com MFA, papéis, layout mínimo do painel, headers de segurança — 05/10/2026, commits `fcc5504..463142a` (e2e 4/4); bootstrap e /privacidade `463142a..47c0e04`
+- [x] `packages/whatsapp`: HMAC, schemas Zod do webhook, cliente de envio (texto) — 05/10/2026, commits 9a4ea51..1f7453f
+- [x] Webhook: verificação GET, POST com HMAC → transação (customer, conversation, message idempotente, `sendDebounced`) — 05/10/2026, commits `d0b918e..a02f4f1` (ingestão, Task 13) e `41c9e58..8c64115` (rota, Task 15)
+- [x] `apps/worker`: pg-boss (filas, singleton, DLQ), heartbeat, shutdown gracioso, Dockerfile não-root — 05/10/2026, commits a02f4f1..41c9e58
+- [x] `packages/core`: pré-filtro (humano, saudação, flood, LGPD, mídia não suportada), redação de PII, orçamento atômico (+ teste concorrente) — 05/10/2026, commits 4e51dec..9a4ea51 (pré-filtro, PII, orçamento + teste concorrente)
+- [x] `packages/ai`: cliente OpenRouter (`dataCollection: 'deny'`, fallback, registro de `usage.cost`), triagem com `json_schema`, resposta fixa de fora de escopo — 05/10/2026, commits `1f7453f..d0b918e` (testes unitários com fetch falso)
+- [ ] Smoke test real + roteamento ZDR dos modelos de triagem — pendente: precisa da key do OpenRouter
+- [x] Aviso LGPD na primeira interação + página pública de política (rascunho) — 05/10/2026, commits 463142a..47c0e04 (/privacidade) e 8c64115..fcc5504 (aviso no worker)
+- [x] Sentry (web + worker) com scrub de PII — 05/10/2026, commits 47c0e04..023cce5
 - [ ] CI GitHub Actions (lint, typecheck, test, build); deploy Vercel; imagem GHCR + deploy VPS — workflows escritos (commits 434f157, d28f8d9..77dab37); pendente: CI verde no GitHub, deploy Vercel, imagem GHCR e deploy na VPS (dependem da nuvem)
 - [ ] Hardening VPS (UFW, fail2ban, unattended-upgrades, usuário de deploy) — script e runbook escritos (commits d28f8d9..77dab37); pendente: executar na VPS
 - [ ] Homologação do dono — pendente: roteiro em [docs/homologacao/etapa-01.md](docs/homologacao/etapa-01.md) pronto; depende de staging + número de teste Meta + key OpenRouter

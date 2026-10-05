@@ -8,10 +8,11 @@ Roteiro para o dono executar em **staging**, com o número de teste da Meta. Pre
 - Número de teste da Meta configurado e webhook apontando para o staging.
 - Chave do OpenRouter configurada, com `AI_TRIAGE_MODELS` definido.
 - Bootstrap feito (restaurante, dono e atendente de teste cadastrados).
+- Para o e2e local: o banco precisa ter exatamente uma linha em `restaurants` (bootstrap ou `insert into restaurants (nome) values ('Dev')`).
 
 ## Roteiro
 
-| # | Ação | Esperado | Resultado | Evidência |
+| # | Ação no WhatsApp/painel | Esperado | Resultado | Evidência |
 |---|---|---|---|---|
 | 1 | Enviar "oi" de um número novo | Aviso de privacidade (com link) + saudação; sem custo de IA | | |
 | 2 | Enviar "como está o tempo hoje?" | Resposta "só consigo ajudar com assuntos do …"; 1 linha em `ai_runs` com intent `fora_escopo` | | |
