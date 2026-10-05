@@ -15,6 +15,7 @@ export function WhatsAppChat(props: {
 }) {
   const [texto, setTexto] = useState('')
   const fim = useRef<HTMLDivElement>(null)
+  const campo = useRef<HTMLTextAreaElement>(null)
   useEffect(() => { fim.current?.scrollIntoView?.({ block: 'end' }) }, [props.mensagens.length, props.digitando])
 
   const enviar = () => {
@@ -22,11 +23,17 @@ export function WhatsAppChat(props: {
     if (!t) return
     props.onEnviar(t)
     setTexto('')
+    if (campo.current) campo.current.style.height = 'auto'
+  }
+  const ajustarAltura = (el: HTMLTextAreaElement) => {
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`
   }
 
   return (
     <div className="flex h-full flex-col" style={{ background: WA.fundo, color: WA.texto }}>
-      <div className="flex h-14 shrink-0 items-center gap-3 px-2" style={{ background: WA.barra }}>
+      <div className="shrink-0 pt-[env(safe-area-inset-top)] md:pt-0" style={{ background: WA.barra }}>
+      <div className="flex h-14 items-center gap-3 px-2">
         <ArrowLeft aria-hidden="true" className="size-5" />
         <span aria-hidden="true" className="flex size-9 items-center justify-center rounded-full text-sm font-semibold" style={{ background: '#6B7C85' }}>
           {props.restaurante.slice(0, 1).toUpperCase()}
@@ -35,7 +42,10 @@ export function WhatsAppChat(props: {
           <h2 className="truncate text-base font-medium leading-tight" style={{ color: WA.texto }}>{props.restaurante}</h2>
           <p className="text-xs" style={{ color: WA.meta }}>{props.digitando ? 'digitando…' : 'online'}</p>
         </div>
-        <Video aria-hidden="true" className="size-5" /><Phone aria-hidden="true" className="ml-3 size-5" /><MoreVertical aria-hidden="true" className="ml-2 size-5" />
+        <span aria-hidden="true" className="hidden items-center md:flex">
+          <Video className="size-5" /><Phone className="ml-3 size-5" /><MoreVertical className="ml-2 size-5" />
+        </span>
+      </div>
       </div>
 
       <div
@@ -54,13 +64,19 @@ export function WhatsAppChat(props: {
         className="flex shrink-0 items-end gap-2 px-2 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
         onSubmit={(e) => { e.preventDefault(); enviar() }}
       >
-        <input
+        <textarea
+          ref={campo}
+          rows={1}
           aria-label="Mensagem"
           placeholder="Mensagem"
           value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-          autoFocus
-          className="h-11 flex-1 rounded-full px-4 text-[15px] outline-none placeholder:opacity-80"
+          onChange={(e) => { setTexto(e.target.value); ajustarAltura(e.target) }}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter' || e.shiftKey || e.nativeEvent.isComposing) return
+            e.preventDefault()
+            enviar()
+          }}
+          className="max-h-[7.5rem] min-h-11 flex-1 resize-none rounded-3xl px-4 py-2.5 text-base leading-6 outline-none placeholder:opacity-80"
           style={{ background: WA.barra, color: WA.texto }}
         />
         <button

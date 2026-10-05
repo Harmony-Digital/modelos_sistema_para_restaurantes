@@ -1,6 +1,6 @@
 'use client'
 import { Check, CheckCheck, Clock3, List, MapPin } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { SimMessage, SimStatus } from './types'
 
 export const WA = {
@@ -10,9 +10,17 @@ export const WA = {
 
 function Status({ s }: { s?: SimStatus | undefined }) {
   if (!s) return null
-  if (s === 'enviando') return <Clock3 aria-label="Enviando" className="size-3.5" />
-  if (s === 'enviada') return <Check aria-label="Enviada" className="size-4" />
-  return <CheckCheck aria-label={s === 'lida' ? 'Lida' : 'Entregue'} className="size-4" style={{ color: s === 'lida' ? WA.lida : WA.meta }} />
+  const rotulo = { enviando: 'Enviando', enviada: 'Enviada', entregue: 'Entregue', lida: 'Lida' }[s]
+  return (
+    <>
+      {s === 'enviando' && <Clock3 aria-hidden="true" className="size-3.5" />}
+      {s === 'enviada' && <Check aria-hidden="true" className="size-4" />}
+      {(s === 'entregue' || s === 'lida') && (
+        <CheckCheck aria-hidden="true" className="size-4" style={{ color: s === 'lida' ? WA.lida : WA.meta }} />
+      )}
+      <span className="sr-only">{rotulo}</span>
+    </>
+  )
 }
 
 function Hora({ hora, status }: { hora: string; status?: SimStatus | undefined }) {
@@ -23,9 +31,65 @@ function Hora({ hora, status }: { hora: string; status?: SimStatus | undefined }
   )
 }
 
+type Secoes = Extract<SimMessage, { tipo: 'lista' }>['secoes']
+
+/** Painel de opções: foco entra ao abrir, Esc fecha só o painel, Cancelar visível. */
+function ListaSheet(props: { titulo: string; secoes: Secoes; onFechar: () => void; onEscolher: (itemId: string, titulo: string) => void }) {
+  const tituloId = useId()
+  const painel = useRef<HTMLDivElement>(null)
+  const { onFechar } = props
+  useEffect(() => {
+    painel.current?.querySelector<HTMLButtonElement>('button')?.focus()
+    // captura em window: roda antes do Esc do Radix (document), mantendo o simulador aberto
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.stopPropagation()
+      onFechar()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [onFechar])
+  return (
+    <div
+      ref={painel}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={tituloId}
+      className="fixed inset-x-0 bottom-0 z-10 max-h-[70%] overflow-y-auto rounded-t-2xl p-4"
+      style={{ background: WA.barra }}
+    >
+      <p id={tituloId} className="sr-only">{props.titulo}</p>
+      {props.secoes.map((sec, i) => (
+        <section key={i}>
+          <h3 className="mb-2 text-sm font-semibold" style={{ color: '#00A884' }}>{sec.titulo}</h3>
+          <ul>
+            {sec.itens.map((it) => (
+              <li key={it.id}>
+                <button
+                  type="button"
+                  onClick={() => props.onEscolher(it.id, it.titulo)}
+                  className="flex min-h-12 w-full flex-col items-start justify-center border-b py-2 text-left"
+                  style={{ borderColor: '#2A3942', color: WA.texto }}
+                >
+                  <span>{it.titulo}</span>
+                  {it.descricao && <span className="text-sm" style={{ color: WA.meta }}>{it.descricao}</span>}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+      <button type="button" onClick={onFechar} className="mt-2 min-h-11 w-full rounded-lg text-[15px] font-medium" style={{ color: WA.lida }}>
+        Cancelar
+      </button>
+    </div>
+  )
+}
+
 export function Bubble(props: { m: SimMessage; onEscolher: (mensagemId: string, itemId: string, titulo: string) => void }) {
   const { m } = props
   const [listaAberta, setListaAberta] = useState(false)
+  const botaoRef = useRef<HTMLButtonElement>(null)
   if (m.tipo === 'aviso') {
     return (
       <p className="mx-auto my-2 max-w-[85%] rounded-lg px-3 py-1.5 text-center text-xs" style={{ background: '#182229', color: WA.meta }}>
@@ -65,6 +129,7 @@ export function Bubble(props: { m: SimMessage; onEscolher: (mensagemId: string, 
         <div className="w-64">
           <p className="whitespace-pre-wrap">{m.texto}<Hora hora={m.hora} /></p>
           <button
+            ref={botaoRef}
             type="button"
             onClick={() => setListaAberta(true)}
             className="mt-2 flex w-full items-center justify-center gap-2 border-t pt-2 text-[15px] font-medium"
@@ -73,28 +138,12 @@ export function Bubble(props: { m: SimMessage; onEscolher: (mensagemId: string, 
             <List aria-hidden="true" className="size-4" />{m.botao}
           </button>
           {listaAberta && (
-            <div role="dialog" aria-label={m.botao} className="fixed inset-x-0 bottom-0 z-10 rounded-t-2xl p-4" style={{ background: WA.barra }}>
-              {m.secoes.map((sec) => (
-                <section key={sec.titulo}>
-                  <h3 className="mb-2 text-sm font-semibold" style={{ color: '#00A884' }}>{sec.titulo}</h3>
-                  <ul>
-                    {sec.itens.map((it) => (
-                      <li key={it.id}>
-                        <button
-                          type="button"
-                          onClick={() => { setListaAberta(false); props.onEscolher(m.id, it.id, it.titulo) }}
-                          className="flex min-h-12 w-full flex-col items-start justify-center border-b py-2 text-left"
-                          style={{ borderColor: '#2A3942', color: WA.texto }}
-                        >
-                          <span>{it.titulo}</span>
-                          {it.descricao && <span className="text-sm" style={{ color: WA.meta }}>{it.descricao}</span>}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ))}
-            </div>
+            <ListaSheet
+              titulo={m.botao}
+              secoes={m.secoes}
+              onFechar={() => { setListaAberta(false); botaoRef.current?.focus() }}
+              onEscolher={(itemId, titulo) => { setListaAberta(false); botaoRef.current?.focus(); props.onEscolher(m.id, itemId, titulo) }}
+            />
           )}
         </div>
       )}
