@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { cookies } from 'next/headers'
 import { DM_Sans, JetBrains_Mono, Sora } from 'next/font/google'
 import { dataThemeFor, parseTema, THEME_COOKIE, themeColorFor } from '@/lib/theme'
+import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
 const sora = Sora({ subsets: ['latin'], display: 'swap', variable: '--font-sora' })
@@ -18,7 +19,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const tema = parseTema((await cookies()).get(THEME_COOKIE)?.value)
   return (
     <html lang="pt-BR" data-theme={dataThemeFor(tema)} className={`${sora.variable} ${dmSans.variable} ${jetbrains.variable}`}>
-      <body className="min-h-dvh">{children}</body>
+      <body className="min-h-dvh">{children}
+        <Toaster position="top-center" theme={tema === 'claro' ? 'light' : 'dark'} richColors closeButton />
+      </body>
     </html>
   )
 }
