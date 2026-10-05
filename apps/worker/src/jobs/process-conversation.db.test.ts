@@ -364,4 +364,38 @@ describe('processConversation', () => {
     const [c] = await db.select().from(schema.customers)
     expect(c!.privacyNoticeSentAt).toBeNull()
   })
+
+  it('aviso falha temporariamente e chega nova mensagem: um único aviso no total', async () => {
+    const rid = await setup()
+    const conv = await receive(rid, ['oi'])
+    const flaky = fakeWa((n) => (n === 1 ? { ok: false, retryable: true, code: 130429, message: 'rate' } : undefined))
+    await expect(processConversation(deps(fakeLlm([]).llm, flaky), conv)).rejects.toThrow(/temporária/)
+    await receive(rid, ['obrigado'])
+    const wa = fakeWa()
+    await processConversation(deps(fakeLlm([]).llm, wa), conv)
+    const out = await outMessages()
+    expect(out.filter((m) => m.replyKey === 'avisoPrivacidade')).toHaveLength(1)
+    expect(wa.sent.filter((s) => /política de privacidade/.test(s.text))).toHaveLength(1)
+    const [c] = await db.select().from(schema.customers)
+    expect(c!.privacyNoticeSentAt).not.toBeNull()
+  })
+
+  it('falha no commit após triagem paga: contabiliza o gasto e propaga o erro original', async () => {
+    const rid = await setup()
+    const conv = await receive(rid, ['como está o tempo?'])
+    const inner = fakeLlm([{ intent: 'fora_escopo', confianca: 0.95 }]).llm
+    const llm: LlmClient = {
+      async completeJson(p) {
+        const r = await inner.completeJson(p)
+        return r.ok ? { ...r, model: 'fake/\u0000m' } : r // NUL em text: o INSERT de ai_runs falha
+      },
+    }
+    await expect(processConversation(deps(llm, fakeWa()), conv)).rejects.toThrow()
+    const counters = await db.select().from(schema.budgetCounters).orderBy(schema.budgetCounters.periodo)
+    expect(counters.map((c) => [c.reservado, c.gasto])).toEqual([
+      ['0.000000', '0.000200'],
+      ['0.000000', '0.000200'],
+    ])
+    expect(await db.select().from(schema.aiRuns)).toHaveLength(0)
+  })
 })

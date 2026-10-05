@@ -64,6 +64,7 @@ export const messages = pgTable(
     transcrito: boolean('transcrito').notNull().default(false),
     midiaRef: jsonb('midia_ref'),
     statusEnvio: text('status_envio'),
+    replyKey: text('reply_key'),
     aiRunId: bigint('ai_run_id', { mode: 'number' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

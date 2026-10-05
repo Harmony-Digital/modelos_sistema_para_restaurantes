@@ -115,16 +115,31 @@ async function decide(deps: ProcessDeps, conversationId: string): Promise<Outcom
 
   const decision = await classify(deps, ctx, pending)
   const lastNotice = ctx.customer.privacyNoticeSentAt?.getTime() ?? 0
-  const needsNotice = now.getTime() - lastNotice > PRIVACY_RENOTICE_MS
+  const [noticePending] = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(and(eq(messages.conversationId, conversationId), eq(messages.replyKey, 'avisoPrivacidade'), eq(messages.statusEnvio, 'pendente')))
+    .limit(1)
+  const needsNotice = !noticePending && now.getTime() - lastNotice > PRIVACY_RENOTICE_MS
   if (needsNotice) decision.replies.unshift('avisoPrivacidade')
   try {
-    await commit(db, ctx, upTo, decision)
+    return await commit(db, ctx, upTo, decision)
   } catch (err) {
-    // a transação desfez a liquidação: devolve a reserva (idempotente)
-    if (decision.budget) await releaseBudget(db, decision.budget.reservation, `conversa:${conversationId}`)
+    // a transação desfez a liquidação: contabiliza o que já foi gasto (ou devolve a reserva)
+    if (decision.budget) await compensate(deps, decision.budget.reservation, decision.budget.spentMicros, conversationId)
     throw err
   }
-  return 'replied'
+}
+
+// Nunca mascara o erro original: falha da compensação é só registrada.
+async function compensate(deps: ProcessDeps, reservation: Reservation, spentMicros: number, conversationId: string) {
+  const ref = `conversa:${conversationId}`
+  try {
+    if (spentMicros > 0) await settleBudget(deps.db, reservation, fmt(spentMicros), ref)
+    else await releaseBudget(deps.db, reservation, ref)
+  } catch (err) {
+    deps.log.error({ err, conversationId }, 'falha ao compensar a reserva de orçamento')
+  }
 }
 
 async function classify(deps: ProcessDeps, ctx: Ctx, pending: InboundItem[]): Promise<Decision> {
@@ -198,7 +213,8 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string): Promis
       runs.push(toRun(result, fallbackModel))
     }
   } catch (err) {
-    await releaseBudget(db, reservation, `conversa:${ctx.conv.id}`)
+    const spent = runs.reduce((acc, r) => acc + micros(String(r.costUsd ?? '0')), 0)
+    await compensate(deps, reservation, spent, ctx.conv.id)
     throw err
   }
 
@@ -222,10 +238,10 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string): Promis
   return { replies: ['emBreve'], autor: 'ia', falhas: 'zerar', runs, budget }
 }
 
-async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision) {
+async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outcome> {
   const restaurantId = ctx.restaurant.id
   const conversationId = ctx.conv.id
-  await db.transaction(async (tx) => {
+  return db.transaction(async (tx): Promise<Outcome> => {
     // trava a conversa: serializa jobs concorrentes e a tomada humana (I5)
     const [cur] = await tx
       .select({ estado: conversations.estado, processedUpToId: conversations.processedUpToId })
@@ -245,10 +261,10 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision) {
       if (d.budget.spentMicros > 0) await settleBudget(tx, d.budget.reservation, fmt(d.budget.spentMicros), ref)
       else await releaseBudget(tx, d.budget.reservation, ref)
     }
-    if (alreadyDone) return
+    if (alreadyDone) return 'nothing'
     if (humanOwns) {
       await tx.update(conversations).set({ processedUpToId: upTo }).where(eq(conversations.id, conversationId))
-      return
+      return 'human_state'
     }
 
     for (const key of d.replies) {
@@ -262,6 +278,7 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision) {
         texto: renderReply(key, { restaurante: ctx.restaurant.nome, politicaUrl: ctx.restaurant.politicaUrl }),
         statusEnvio: 'pendente',
         aiRunId: isNotice ? null : lastRunId,
+        replyKey: key,
       })
     }
 
@@ -279,6 +296,7 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision) {
     if (d.audit) {
       await tx.insert(auditLog).values({ restaurantId, atorTipo: d.autor, acao: d.audit, entidade: 'conversation', entidadeId: conversationId })
     }
+    return d.replies.length > 0 ? 'replied' : 'nothing'
   })
 }
 
@@ -290,17 +308,15 @@ async function deliver(deps: ProcessDeps, conversationId: string) {
     .select({
       id: messages.id,
       autor: messages.autor,
+      replyKey: messages.replyKey,
       texto: messages.texto,
       telefoneCifrado: customers.telefoneCifrado,
       customerId: customers.id,
       estado: conversations.estado,
-      restaurante: restaurants.nome,
-      politicaUrl: restaurants.politicaUrl,
     })
     .from(messages)
     .innerJoin(conversations, eq(conversations.id, messages.conversationId))
     .innerJoin(customers, eq(customers.id, conversations.customerId))
-    .innerJoin(restaurants, eq(restaurants.id, conversations.restaurantId))
     .where(and(eq(messages.conversationId, conversationId), eq(messages.direcao, 'out'), eq(messages.statusEnvio, 'pendente')))
     .orderBy(asc(messages.id))
   if (pendingOut.length === 0) return
@@ -318,7 +334,7 @@ async function deliver(deps: ProcessDeps, conversationId: string) {
     const r = await deps.wa.sendText(to, m.texto ?? '')
     if (r.ok) {
       await db.update(messages).set({ wamid: r.wamid, statusEnvio: 'enviado' }).where(eq(messages.id, m.id))
-      if (m.autor === 'sistema' && m.texto === renderReply('avisoPrivacidade', { restaurante: m.restaurante, politicaUrl: m.politicaUrl })) {
+      if (m.replyKey === 'avisoPrivacidade') {
         await db.update(customers).set({ privacyNoticeSentAt: deps.now?.() ?? new Date() }).where(eq(customers.id, m.customerId))
       }
     } else if (!r.retryable) {
