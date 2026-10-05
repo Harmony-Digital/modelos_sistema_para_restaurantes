@@ -9,10 +9,19 @@ PUBKEY="${2:?informe a chave pública SSH do deploy (CI)}"
 ADMIN_PUBKEY="${3:?informe a chave pública SSH do admin (humano)}"
 export DEBIAN_FRONTEND=noninteractive
 
+# Acrescenta a chave se ainda não estiver lá. Se o arquivo não terminar em \n, completa antes:
+# senão a chave nova seria colada no fim da última linha e nenhuma das duas funcionaria.
+add_key() {
+  local f="$1" key="$2"
+  grep -qxF "$key" "$f" && return 0
+  if [ -s "$f" ] && [ -n "$(tail -c1 "$f")" ]; then echo >> "$f"; fi
+  printf '%s\n' "$key" >> "$f"
+}
+
 # Anti-lockout: garante a chave do admin no root ANTES de mexer no sshd
 install -d -m 700 /root/.ssh
 touch /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys
-grep -qxF "$ADMIN_PUBKEY" /root/.ssh/authorized_keys || printf '%s\n' "$ADMIN_PUBKEY" >> /root/.ssh/authorized_keys
+add_key /root/.ssh/authorized_keys "$ADMIN_PUBKEY"
 if ! grep -qE '^(ssh-|ecdsa-|sk-)' /root/.ssh/authorized_keys; then
   echo "ERRO: root sem chave autorizada; abortando antes de alterar o sshd." >&2
   exit 1
@@ -33,7 +42,7 @@ id "$DEPLOY_USER" >/dev/null 2>&1 || adduser --disabled-password --gecos "" "$DE
 usermod -aG docker "$DEPLOY_USER"
 install -d -m 700 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "/home/$DEPLOY_USER/.ssh"
 touch "/home/$DEPLOY_USER/.ssh/authorized_keys"
-grep -qxF "$PUBKEY" "/home/$DEPLOY_USER/.ssh/authorized_keys" || printf '%s\n' "$PUBKEY" >> "/home/$DEPLOY_USER/.ssh/authorized_keys"
+add_key "/home/$DEPLOY_USER/.ssh/authorized_keys" "$PUBKEY"
 chown "$DEPLOY_USER:$DEPLOY_USER" "/home/$DEPLOY_USER/.ssh/authorized_keys"
 chmod 600 "/home/$DEPLOY_USER/.ssh/authorized_keys"
 install -d -m 750 -o "$DEPLOY_USER" -g "$DEPLOY_USER" /opt/atendimento
