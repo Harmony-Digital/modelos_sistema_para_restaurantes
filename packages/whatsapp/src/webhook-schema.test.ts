@@ -35,4 +35,35 @@ describe('parseWebhook', () => {
   it('payload que não é da Meta lança', () => {
     expect(() => parseWebhook({ foo: 1 }, '111')).toThrow()
   })
+
+  const wrap = (value: unknown, field = 'messages') => ({ field, value })
+  const meta = { phone_number_id: '111' }
+  const envelope = (...changes: unknown[]) => ({ object: 'whatsapp_business_account', entry: [{ id: 'W', changes }] })
+  const txt = (id: string) => ({ from: '1', id, timestamp: '1759680000', type: 'text', text: { body: 'oi' } })
+
+  it('ignora change sem metadata (account_update) e mantém a mensagem', () => {
+    const body = envelope(wrap({ event: 'X' }, 'account_update'), wrap({ metadata: meta, messages: [txt('a')] }))
+    expect(parseWebhook(body, '111').inbound.map((m) => m.wamid)).toEqual(['a'])
+  })
+  it('pula mensagem malformada e devolve a válida', () => {
+    const body = envelope(wrap({ metadata: meta, messages: [{ id: 'bad', timestamp: '1', type: 'text' }, txt('ok')] }))
+    expect(parseWebhook(body, '111').inbound.map((m) => m.wamid)).toEqual(['ok'])
+  })
+  it('pula item com timestamp não numérico', () => {
+    const body = envelope(
+      wrap({ metadata: meta, messages: [{ ...txt('bad'), timestamp: 'abc' }, txt('ok')], statuses: [{ id: 's', status: 'sent', timestamp: 'abc' }] }),
+    )
+    const r = parseWebhook(body, '111')
+    expect(r.inbound.map((m) => m.wamid)).toEqual(['ok'])
+    expect(r.statuses).toEqual([])
+  })
+  it('status sem errors tem errorCode null', () => {
+    const body = envelope(wrap({ metadata: meta, statuses: [{ id: 's', status: 'sent', timestamp: '1759680001' }] }))
+    expect(parseWebhook(body, '111').statuses[0]!.errorCode).toBeNull()
+  })
+  it('interactive button_reply vira texto', () => {
+    const m = { from: '1', id: 'i', timestamp: '1759680000', type: 'interactive', interactive: { type: 'button_reply', button_reply: { id: 'b', title: 'Sim' } } }
+    const [r] = parseWebhook(envelope(wrap({ metadata: meta, messages: [m] })), '111').inbound
+    expect([r!.tipo, r!.texto]).toEqual(['texto', 'Sim'])
+  })
 })

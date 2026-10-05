@@ -39,4 +39,11 @@ describe('sendText', () => {
     const body = JSON.parse(String((f.mock.calls[0]! as unknown as [string, RequestInit])[1].body))
     expect(body.text.body).toHaveLength(4096)
   })
+  it('não parte par substituto ao cortar', async () => {
+    const f = vi.fn(async () => json(200, { messages: [{ id: 'w' }] }))
+    await make(f).sendText('1', 'a'.repeat(4095) + '😀' + 'bbb')
+    const body = JSON.parse(String((f.mock.calls[0]! as unknown as [string, RequestInit])[1].body))
+    expect(body.text.body).toHaveLength(4095)
+    expect(body.text.body.isWellFormed()).toBe(true)
+  })
 })

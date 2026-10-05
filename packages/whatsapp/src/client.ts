@@ -3,8 +3,15 @@ export type SendResult =
   | { ok: false; retryable: boolean; code: number | null; message: string }
 
 // Códigos de throttling da Cloud API: tentar de novo com backoff
-const RETRYABLE_CODES = new Set([4, 80007, 130429, 131048, 131056, 133016])
+const RETRYABLE_CODES = new Set([4, 80007, 130429, 131016, 131048, 131056, 133016])
 const MAX_TEXT = 4096
+
+// Corta em MAX_TEXT unidades sem partir um par substituto (emoji)
+function truncate(text: string): string {
+  if (text.length <= MAX_TEXT) return text
+  const code = text.charCodeAt(MAX_TEXT - 1)
+  return text.slice(0, code >= 0xd800 && code <= 0xdbff ? MAX_TEXT - 1 : MAX_TEXT)
+}
 
 export function createWhatsAppClient(cfg: {
   accessToken: string
@@ -41,7 +48,7 @@ export function createWhatsAppClient(cfg: {
 
   return {
     sendText(to: string, text: string) {
-      return post({ to, type: 'text', text: { preview_url: false, body: text.slice(0, MAX_TEXT) } })
+      return post({ to, type: 'text', text: { preview_url: false, body: truncate(text) } })
     },
   }
 }

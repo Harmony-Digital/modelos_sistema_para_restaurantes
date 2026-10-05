@@ -17,6 +17,14 @@ describe('verifySignature', () => {
   })
 })
 
+describe('verifySignature (rigor)', () => {
+  it('rejeita hex com lixo no final ou nibble ímpar', () => {
+    expect(verifySignature(body, sign(body) + 'zz', secret)).toBe(false)
+    expect(verifySignature(body, sign(body) + 'a', secret)).toBe(false)
+  })
+  it('rejeita segredo vazio', () => expect(verifySignature(body, sign(body, ''), '')).toBe(false))
+})
+
 describe('verifyChallenge', () => {
   it('devolve o challenge com token correto', () => {
     const p = new URLSearchParams({ 'hub.mode': 'subscribe', 'hub.verify_token': 'tok', 'hub.challenge': '42' })

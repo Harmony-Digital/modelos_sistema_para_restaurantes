@@ -2,23 +2,40 @@ import { z } from 'zod'
 
 const media = z.looseObject({ id: z.string(), caption: z.string().optional() })
 
+const unixSeconds = z.string().regex(/^\d+$/)
+
 const message = z.looseObject({
   id: z.string(),
   from: z.string(),
-  timestamp: z.string(),
+  timestamp: unixSeconds,
   type: z.string(),
   text: z.object({ body: z.string() }).optional(),
   audio: media.optional(),
   image: media.optional(),
   document: media.optional(),
   button: z.looseObject({ text: z.string() }).optional(),
+  interactive: z
+    .looseObject({
+      button_reply: z.looseObject({ title: z.string() }).optional(),
+      list_reply: z.looseObject({ title: z.string() }).optional(),
+    })
+    .optional(),
 })
 
 const status = z.looseObject({
   id: z.string(),
   status: z.string(),
-  timestamp: z.string(),
+  timestamp: unixSeconds,
   errors: z.array(z.looseObject({ code: z.number() })).optional(),
+})
+
+const messagesValue = z.looseObject({
+  metadata: z.looseObject({ phone_number_id: z.string() }),
+  contacts: z
+    .array(z.looseObject({ wa_id: z.string(), profile: z.looseObject({ name: z.string() }).optional() }))
+    .optional(),
+  messages: z.array(z.unknown()).optional(),
+  statuses: z.array(z.unknown()).optional(),
 })
 
 const payload = z.object({
@@ -26,17 +43,7 @@ const payload = z.object({
   entry: z.array(
     z.object({
       id: z.string(),
-      changes: z.array(
-        z.object({
-          field: z.string(),
-          value: z.looseObject({
-            metadata: z.looseObject({ phone_number_id: z.string() }),
-            contacts: z.array(z.looseObject({ wa_id: z.string(), profile: z.looseObject({ name: z.string() }).optional() })).optional(),
-            messages: z.array(message).optional(),
-            statuses: z.array(status).optional(),
-          }),
-        }),
-      ),
+      changes: z.array(z.object({ field: z.string(), value: z.record(z.string(), z.unknown()) })),
     }),
   ),
 })
@@ -62,6 +69,13 @@ function toInbound(m: z.infer<typeof message>, profileName: string | null): Inbo
       return { ...base, tipo: 'texto', texto: m.text?.body ?? null, mediaId: null }
     case 'button':
       return { ...base, tipo: 'texto', texto: m.button?.text ?? null, mediaId: null }
+    case 'interactive':
+      return {
+        ...base,
+        tipo: 'texto',
+        texto: m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title ?? null,
+        mediaId: null,
+      }
     case 'audio':
       return { ...base, tipo: 'audio', texto: null, mediaId: m.audio?.id ?? null }
     case 'image':
@@ -79,12 +93,24 @@ export function parseWebhook(body: unknown, phoneNumberId: string) {
   const statuses: StatusUpdate[] = []
   for (const entry of parsed.entry) {
     for (const change of entry.changes) {
-      const v = change.value
-      if (change.field !== 'messages' || v.metadata.phone_number_id !== phoneNumberId) continue
+      if (change.field !== 'messages') continue
+      const value = messagesValue.safeParse(change.value)
+      if (!value.success || value.data.metadata.phone_number_id !== phoneNumberId) continue
+      const v = value.data
       const names = new Map((v.contacts ?? []).map((c) => [c.wa_id, c.profile?.name ?? null]))
-      for (const m of v.messages ?? []) inbound.push(toInbound(m, names.get(m.from) ?? null))
-      for (const s of v.statuses ?? []) {
-        statuses.push({ wamid: s.id, status: s.status, timestamp: toDate(s.timestamp), errorCode: s.errors?.[0]?.code ?? null })
+      for (const raw of v.messages ?? []) {
+        const m = message.safeParse(raw)
+        if (m.success) inbound.push(toInbound(m.data, names.get(m.data.from) ?? null))
+      }
+      for (const raw of v.statuses ?? []) {
+        const s = status.safeParse(raw)
+        if (!s.success) continue
+        statuses.push({
+          wamid: s.data.id,
+          status: s.data.status,
+          timestamp: toDate(s.data.timestamp),
+          errorCode: s.data.errors?.[0]?.code ?? null,
+        })
       }
     }
   }
