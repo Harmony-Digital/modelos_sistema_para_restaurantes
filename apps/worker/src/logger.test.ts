@@ -29,7 +29,19 @@ describe('logger', () => {
     log.error({ err }, 'falhou')
     const out = lines.join('')
     expect(out).toContain('falhou')
-    expect(out).toContain('[CPF]')
+    expect(out).toContain('[EMAIL]')
+    expect(out).toContain('params: [redigido]')
     expect(out).not.toMatch(/52998224725|joao@x\.com|"params"|"query"/)
+  })
+
+  it('err do drizzle: params com texto livre não vaza em message, stack nem cause', () => {
+    const { lines, stream } = capture()
+    const log = createLogger('error', stream)
+    const m = 'Failed query: insert into t values ($1)\nparams: oi, moro na Rua X, sou a Maria Silva,hash'
+    const cause = new Error(m)
+    log.error({ err: new Error(m, { cause }) }, 'falhou')
+    const out = lines.join('')
+    expect(out).toContain('params: [redigido]')
+    expect(out).not.toMatch(/Maria Silva|Rua X/)
   })
 })

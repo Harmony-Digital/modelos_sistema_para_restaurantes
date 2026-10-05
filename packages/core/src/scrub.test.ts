@@ -31,4 +31,18 @@ describe('scrubEvent', () => {
     expect(ev.contexts).toEqual({ job: { id: 'j1' }, runtime: { name: 'node' } })
     expect(ev.breadcrumbs).toEqual([{ message: 'ligou [TELEFONE]', data: { url: '/x' } }, { message: 'ok' }])
   })
+
+  it('corta params de erros do drizzle (texto livre de clientes) e remove arguments de breadcrumbs', () => {
+    const msg = 'Failed query: insert into messages values ($1,$2)\nparams: oi, moro na Rua X, sou a Maria Silva,hash\n    at foo (x.ts:1:1)'
+    const ev = scrubEvent({
+      message: msg,
+      exception: { values: [{ value: msg }] },
+      breadcrumbs: [{ message: msg, data: { arguments: ['Maria Silva'], url: '/x' } }],
+    })
+    const out = JSON.stringify(ev)
+    expect(out).not.toMatch(/Maria Silva|Rua X/)
+    expect(ev.message).toContain('params: [redigido]')
+    expect(ev.message).toContain('at foo')
+    expect(ev.breadcrumbs?.[0]?.data).toEqual({ url: '/x' })
+  })
 })

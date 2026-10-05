@@ -20,8 +20,16 @@ export async function handleWebhookPost(deps: WebhookDeps, raw: Buffer | string,
   if (!verifySignature(raw, signature, deps.appSecret)) return { status: 401, body: 'assinatura inválida' }
 
   let events: ReturnType<typeof parseWebhook>
+  let json: unknown
   try {
-    events = parseWebhook(JSON.parse(typeof raw === 'string' ? raw : raw.toString('utf8')), deps.phoneNumberId)
+    json = JSON.parse(typeof raw === 'string' ? raw : raw.toString('utf8'))
+  } catch {
+    // O erro original cita trechos do corpo: reportar só um erro genérico.
+    deps.onInvalidPayload?.(new Error('payload do webhook fora do formato'))
+    return { status: 200, body: 'ignorado' }
+  }
+  try {
+    events = parseWebhook(json, deps.phoneNumberId)
   } catch (e) {
     // Assinado pela Meta mas fora do formato esperado: registrar e não pedir reentrega.
     deps.onInvalidPayload?.(e)

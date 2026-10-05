@@ -1,5 +1,6 @@
 import pino from 'pino'
 import { redactPii } from '@atd/core'
+import { stripQueryParams } from '@atd/core/scrub'
 
 const SENSITIVE = ['texto', 'text', 'body', 'telefone', 'phone', 'waId', 'to']
 const paths = SENSITIVE.flatMap((k) => [k, `*.${k}`, `*.*.${k}`])
@@ -14,7 +15,7 @@ export function serializeErr(err: unknown, depth = 0): unknown {
   delete s.parameters
   delete s.query
   for (const k of ['message', 'detail', 'stack'] as const) {
-    if (typeof s[k] === 'string') s[k] = redactPii(s[k])
+    if (typeof s[k] === 'string') s[k] = redactPii(stripQueryParams(s[k]))
   }
   const cause = (err as { cause?: unknown } | null)?.cause
   if (cause instanceof Error && depth < 5) s.cause = serializeErr(cause, depth + 1)

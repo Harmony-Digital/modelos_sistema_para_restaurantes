@@ -20,6 +20,7 @@ export function initSentry(dsn: string | undefined, release: string) {
     },
     tracesSampleRate: 0.1,
     beforeSend: (event) => scrubEvent(event),
+    beforeSendTransaction: (event) => scrubEvent(event),
   })
 }
 

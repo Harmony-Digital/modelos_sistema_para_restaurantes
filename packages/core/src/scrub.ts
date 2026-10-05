@@ -1,5 +1,12 @@
 import { redactPii } from './redact.ts'
 
+/** Mensagens do drizzle trazem "\nparams: <valores>" com texto de clientes: corta até os frames da stack (ou o fim). */
+export function stripQueryParams(s: string): string {
+  return s.replace(/\nparams:[\s\S]*?(?=\n\s+at |$)/g, '\nparams: [redigido]')
+}
+
+const mask = (s: string) => redactPii(stripQueryParams(s))
+
 export const SENSITIVE = new Set(['texto', 'text', 'body', 'telefone', 'phone', 'waId', 'to'])
 
 type Obj = Record<string, unknown>
@@ -30,11 +37,11 @@ export function scrubEvent<T extends ScrubInput>(event: T): T {
   }
   delete out.user
   if (out.extra) out.extra = dropSensitive(out.extra)
-  if (typeof out.message === 'string') out.message = redactPii(out.message)
+  if (typeof out.message === 'string') out.message = mask(out.message)
   if (out.exception?.values) {
     out.exception = {
       ...out.exception,
-      values: out.exception.values.map((v) => (typeof v.value === 'string' ? { ...v, value: redactPii(v.value) } : v)),
+      values: out.exception.values.map((v) => (typeof v.value === 'string' ? { ...v, value: mask(v.value) } : v)),
     }
   }
   if (out.contexts) {
@@ -45,8 +52,8 @@ export function scrubEvent<T extends ScrubInput>(event: T): T {
   if (out.breadcrumbs) {
     out.breadcrumbs = out.breadcrumbs.map((b) => ({
       ...b,
-      ...(b.data ? { data: dropSensitive(b.data) } : {}),
-      ...(typeof b.message === 'string' ? { message: redactPii(b.message) } : {}),
+      ...(b.data ? { data: dropSensitive(Object.fromEntries(Object.entries(b.data).filter(([k]) => k !== 'arguments'))) } : {}),
+      ...(typeof b.message === 'string' ? { message: mask(b.message) } : {}),
     }))
   }
   return out

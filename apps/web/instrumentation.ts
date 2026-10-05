@@ -19,6 +19,7 @@ export function register() {
     },
     tracesSampleRate: 0.1,
     beforeSend: (event) => scrubEvent(event),
+    beforeSendTransaction: (event) => scrubEvent(event),
   })
 }
 
