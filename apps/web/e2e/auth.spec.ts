@@ -20,7 +20,7 @@ test('atendente entra sem MFA e não vê custos', async ({ page }) => {
   const { email, senha } = await criarMembro('atendente')
   await entrar(page, email, senha)
   await expect(page.getByText('Conversas abertas')).toBeVisible()
-  await expect(page.getByText('Gasto de IA hoje')).toHaveCount(0)
+  await expect(page.getByRole('table', { name: 'Gastos' })).toHaveCount(0)
 })
 
 test('dono sem MFA é obrigado a cadastrar o autenticador', async ({ page }) => {

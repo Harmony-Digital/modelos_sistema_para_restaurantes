@@ -22,20 +22,32 @@ describe('painel', () => {
     expect(await getStaffContext(db, { sub: '00000000-0000-0000-0000-000000000009', role: 'authenticated', aal: 'aal2' })).toBeNull()
   })
 
-  it('status: atendente não vê custo; dono com MFA vê', async () => {
+  it('status: atendente não vê custo; dono com MFA vê IA e WhatsApp, do dia e do mês', async () => {
     const { restaurantId } = await seedRestaurant(db)
     await db.insert(workerHeartbeats).values({ workerId: 'w1', versao: '1' })
-    await db.insert(budgetCounters).values({
-      restaurantId, escopo: 'ia', periodo: 'dia',
-      inicioPeriodo: periodStarts(new Date(), 'America/Sao_Paulo').dia, gasto: '0.123400',
-    })
+    const { dia, mes } = periodStarts(new Date(), 'America/Sao_Paulo')
+    await db.insert(budgetCounters).values([
+      { restaurantId, escopo: 'ia', periodo: 'dia', inicioPeriodo: dia, gasto: '0.123400' },
+      { restaurantId, escopo: 'ia', periodo: 'mes', inicioPeriodo: mes, gasto: '2.500000' },
+      { restaurantId, escopo: 'whatsapp', periodo: 'dia', inicioPeriodo: dia, gasto: '0.062500' },
+      { restaurantId, escopo: 'whatsapp', periodo: 'mes', inicioPeriodo: mes, gasto: '1.250000' },
+      // dia anterior não entra
+      { restaurantId, escopo: 'ia', periodo: 'dia', inicioPeriodo: '2000-01-01', gasto: '9.000000' },
+    ])
     const atendente = await seedStaff(db, sql, { restaurantId, papel: 'atendente' })
     const dono = await seedStaff(db, sql, { restaurantId, papel: 'dono' })
     const sA = await getPanelStatus(db, { sub: atendente, role: 'authenticated', aal: 'aal1' })
     const sD = await getPanelStatus(db, { sub: dono, role: 'authenticated', aal: 'aal2' })
     expect(sA.workerLastSeen).toBeInstanceOf(Date)
-    expect(sA.gastoIaHojeUsd).toBeNull()
-    expect(sD.gastoIaHojeUsd).toBe('0.123400')
+    expect(sA.gastos).toEqual({ ia: { dia: null, mes: null }, whatsapp: { dia: null, mes: null } })
+    expect(sD.gastos).toEqual({ ia: { dia: '0.123400', mes: '2.500000' }, whatsapp: { dia: '0.062500', mes: '1.250000' } })
+  })
+
+  it('status: sem gasto registrado, o dono vê null (exibido como zero)', async () => {
+    const { restaurantId } = await seedRestaurant(db)
+    const dono = await seedStaff(db, sql, { restaurantId, papel: 'dono' })
+    const s = await getPanelStatus(db, { sub: dono, role: 'authenticated', aal: 'aal2' })
+    expect(s.gastos).toEqual({ ia: { dia: null, mes: null }, whatsapp: { dia: null, mes: null } })
   })
 
   it('status: "aguardando atendente" conta aguardando_humano e humano, não ia/encerrada', async () => {
