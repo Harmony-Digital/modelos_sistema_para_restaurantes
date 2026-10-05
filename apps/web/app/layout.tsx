@@ -12,7 +12,7 @@ const jetbrains = JetBrains_Mono({ subsets: ['latin'], display: 'swap', variable
 export const metadata: Metadata = { title: 'Atendimento IA', robots: { index: false, follow: false } }
 export async function generateViewport(): Promise<Viewport> {
   const tema = parseTema((await cookies()).get(THEME_COOKIE)?.value)
-  return { width: 'device-width', initialScale: 1, themeColor: themeColorFor(tema) }
+  return { width: 'device-width', initialScale: 1, viewportFit: 'cover', themeColor: themeColorFor(tema) }
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

@@ -25,8 +25,8 @@ export function BottomNav() {
                 href={href}
                 aria-current={on ? 'page' : undefined}
                 className={cn(
-                  'relative flex min-h-16 flex-col items-center justify-center gap-1 text-xs font-medium transition-colors duration-150',
-                  on ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
+                  'relative flex min-h-16 focus-visible:outline-offset-[-2px] flex-col items-center justify-center gap-1 text-xs font-medium transition-colors duration-150',
+                  on ? 'text-link' : 'text-muted-foreground [@media(hover:hover)]:hover:text-foreground',
                 )}
               >
                 {on && <span aria-hidden="true" className="absolute top-0 h-0.5 w-10 rounded-full bg-primary" />}
