@@ -18,6 +18,7 @@ export const customers = pgTable(
     privacyNoticeSentAt: timestamp('privacy_notice_sent_at', { withTimezone: true }),
     ultimaInteracaoAt: timestamp('ultima_interacao_at', { withTimezone: true }).notNull().defaultNow(),
     bloqueadoAte: timestamp('bloqueado_ate', { withTimezone: true }),
+    simulado: boolean('simulado').notNull().default(false),
     ...timestamps,
   },
   (t) => [
@@ -40,6 +41,9 @@ export const conversations = pgTable(
     processedUpToId: bigint('processed_up_to_id', { mode: 'number' }).notNull().default(0),
     windowExpiresAt: timestamp('window_expires_at', { withTimezone: true }),
     lastMessageAt: timestamp('last_message_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Itens à espera da escolha de unidade pela lista: { itens, opcoes, expiraEm }. Só o worker escreve. */
+    pendente: jsonb('pendente'),
+    simulada: boolean('simulada').notNull().default(false),
     ...timestamps,
   },
   (t) => [
@@ -63,6 +67,7 @@ export const messages = pgTable(
     texto: text('texto'),
     transcrito: boolean('transcrito').notNull().default(false),
     midiaRef: jsonb('midia_ref'),
+    payload: jsonb('payload'),
     statusEnvio: text('status_envio'),
     replyKey: text('reply_key'),
     aiRunId: bigint('ai_run_id', { mode: 'number' }),

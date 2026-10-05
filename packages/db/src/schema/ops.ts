@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import {
-  bigint, check, date, index, integer, jsonb, numeric, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid,
+  bigint, boolean, check, date, index, integer, jsonb, numeric, pgTable, primaryKey, smallint, text, timestamp, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core'
 import {
   actorType, aiStage, budgetAction, budgetPeriod, budgetScope, dsrStatus, dsrType, ledgerKind, retentionAction,
@@ -30,6 +30,10 @@ export const aiRuns = pgTable(
     intent: text('intent'),
     resultado: text('resultado'),
     erro: text('erro'),
+    simulado: boolean('simulado').notNull().default(false),
+    /** Itens de S1 pedidos / respondidos com dado (indicador "% respondido pela IA"). */
+    itensValidos: smallint('itens_validos'),
+    itensRespondidos: smallint('itens_respondidos'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

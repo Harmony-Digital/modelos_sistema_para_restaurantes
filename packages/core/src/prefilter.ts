@@ -1,6 +1,6 @@
 import { normalizeText } from './normalize.ts'
 
-export type InboundItem = { tipo: 'texto' | 'audio' | 'imagem' | 'documento' | 'outro'; texto: string | null }
+export type InboundItem = { tipo: 'texto' | 'audio' | 'imagem' | 'documento' | 'outro' | 'localizacao' | 'lista'; texto: string | null }
 
 export type PrefilterResult =
   | { kind: 'handoff' }
