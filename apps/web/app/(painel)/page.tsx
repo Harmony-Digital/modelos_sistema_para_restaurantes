@@ -1,8 +1,10 @@
-import { getPanelStatus } from '@atd/db'
+import { getPanelStatus, listAwaitingHuman } from '@atd/db'
+import { AwaitingHuman } from '@/components/conversations/awaiting-human'
 import { StatCard } from '@/components/home/stat-card'
 import { TopBar } from '@/components/shell/top-bar'
 import { requireStaff } from '@/lib/dal'
 import { getDb } from '@/lib/server/db'
+import { returnToAiAction } from './actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +26,7 @@ export default async function InicioPage() {
             <StatCard label="Gasto de IA hoje" value={usd.format(Number(s.gastoIaHojeUsd ?? 0))} />
           )}
         </div>
-        {/* Task 11: <AwaitingHuman /> */}
+        <AwaitingHuman itens={await listAwaitingHuman(getDb(), session.claims)} action={returnToAiAction} />
       </main>
     </>
   )
