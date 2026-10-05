@@ -1,0 +1,1 @@
+CREATE INDEX "customers_simulado_idx" ON "customers" USING btree ("restaurant_id","created_at" DESC NULLS LAST) WHERE simulado;

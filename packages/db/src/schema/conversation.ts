@@ -24,6 +24,8 @@ export const customers = pgTable(
   (t) => [
     uniqueIndex('customers_restaurant_wa_id_hash_uq').on(t.restaurantId, t.waIdHash),
     index('customers_ultima_interacao_idx').on(t.ultimaInteracaoAt),
+    // simulador: "conversa aberta do usuário" varre só os clientes simulados do restaurante
+    index('customers_simulado_idx').on(t.restaurantId, t.createdAt.desc()).where(sql`simulado`),
   ],
 )
 

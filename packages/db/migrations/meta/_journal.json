@@ -120,6 +120,13 @@
       "when": 1791235019550,
       "tag": "0016_unidades_initplan",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1791237007236,
+      "tag": "0017_simulador_cliente",
+      "breakpoints": true
     }
   ]
 }

@@ -14,7 +14,7 @@ export function listAwaitingHuman(db: Db, claims: JwtClaims): Promise<AwaitingIt
       .select({ id: conversations.id, nome: customers.nomePerfil, estado: conversations.estado, desde: conversations.lastMessageAt })
       .from(conversations)
       .innerJoin(customers, eq(customers.id, conversations.customerId))
-      .where(inArray(conversations.estado, [...COM_HUMANO]))
+      .where(and(eq(conversations.simulada, false), inArray(conversations.estado, [...COM_HUMANO])))
       .orderBy(asc(conversations.lastMessageAt))
       .limit(50)
     return rows as AwaitingItem[]
@@ -26,7 +26,7 @@ export function returnToAi(db: Db, claims: JwtClaims, conversationId: string): P
     const [row] = await tx
       .update(conversations)
       .set({ estado: 'ia', atendenteId: null })
-      .where(and(eq(conversations.id, conversationId), inArray(conversations.estado, [...COM_HUMANO])))
+      .where(and(eq(conversations.id, conversationId), eq(conversations.simulada, false), inArray(conversations.estado, [...COM_HUMANO])))
       .returning({ id: conversations.id, restaurantId: conversations.restaurantId })
     if (row) {
       await tx.insert(auditLog).values({
@@ -39,7 +39,7 @@ export function returnToAi(db: Db, claims: JwtClaims, conversationId: string): P
       })
       return 'devolvida'
     }
-    const [existe] = await tx.select({ id: conversations.id }).from(conversations).where(eq(conversations.id, conversationId))
+    const [existe] = await tx.select({ id: conversations.id }).from(conversations).where(and(eq(conversations.id, conversationId), eq(conversations.simulada, false)))
     return existe ? 'ja_estava' : 'nao_encontrada'
   })
 }

@@ -61,4 +61,13 @@ describe('painel', () => {
     expect(s.aguardandoHumano).toBe(2)
     expect(s.conversasAbertas).toBe(3)
   })
+  it('status: conversa simulada não entra em abertas nem em aguardando atendente', async () => {
+    const { restaurantId } = await seedRestaurant(db)
+    const atendente = await seedStaff(db, sql, { restaurantId, papel: 'atendente' })
+    const [c] = await db.insert(customers).values({ restaurantId, waIdHash: 'sim:x:1', telefoneCifrado: 'simulado', simulado: true }).returning()
+    await db.insert(conversations).values({ restaurantId, customerId: c!.id, estado: 'aguardando_humano', simulada: true })
+    const s = await getPanelStatus(db, { sub: atendente, role: 'authenticated', aal: 'aal1' })
+    expect(s.aguardandoHumano).toBe(0)
+    expect(s.conversasAbertas).toBe(0)
+  })
 })
