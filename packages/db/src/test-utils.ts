@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { inject } from 'vitest'
 import { createDb } from './client.ts'
 import { restaurants, staff, units } from './schema/restaurant.ts'
 import type { Db } from './client.ts'
@@ -7,22 +8,78 @@ import { createBoss, ensureQueues } from './queue.ts'
 import type { PgBoss } from 'pg-boss'
 
 const DEFAULT_URL = 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+export const TEST_DB_PREFIX = 'atd_test_'
+export const TEMPLATE_DB = `${TEST_DB_PREFIX}template`
+
+declare module 'vitest' {
+  interface ProvidedContext {
+    /** Quantos bancos `atd_test_<n>` o global setup do projeto `db` clonou (0/ausente: usa o banco base). */
+    atdTestDbs: number
+  }
+}
+
+/** Banco base: onde o global setup cria o modelo e os clones. Fora do Vitest, é o próprio banco dos testes. */
+export function baseTestUrl() {
+  return process.env.TEST_DATABASE_URL ?? DEFAULT_URL
+}
+
+export function comBanco(url: string, nome: string, credenciais?: { user: string; password: string }) {
+  const u = new URL(url)
+  u.pathname = `/${nome}`
+  if (credenciais) {
+    u.username = credenciais.user
+    u.password = credenciais.password
+  }
+  return u.toString()
+}
+
+function bancosClonados(): number {
+  try {
+    return inject('atdTestDbs') ?? 0
+  } catch {
+    return 0 // fora de um worker do Vitest (script avulso)
+  }
+}
+
+/** Nome do banco deste processo: `atd_test_<VITEST_POOL_ID>` quando o global setup clonou; senão o do banco base. */
+export function testDbName(): string {
+  const clonados = bancosClonados()
+  const pool = Number(process.env.VITEST_POOL_ID)
+  if (!clonados || !pool) return new URL(baseTestUrl()).pathname.slice(1)
+  if (pool > clonados) {
+    throw new Error(`VITEST_POOL_ID=${pool} sem banco: o global setup clonou ${clonados} (ATD_DB_WORKERS)`)
+  }
+  return `${TEST_DB_PREFIX}${pool}`
+}
+
 let cached: ReturnType<typeof createDb> | undefined
 
 export function getTestDb() {
-  cached ??= createDb(process.env.TEST_DATABASE_URL ?? DEFAULT_URL, { max: 20 })
+  cached ??= createDb(comBanco(baseTestUrl(), testDbName()), { max: 20 })
   return cached
 }
 
+/**
+ * Limpa o banco do processo entre testes. DELETE (não TRUNCATE): TRUNCATE troca o relfilenode de cada
+ * tabela e índice e gera versões mortas em pg_class a cada teste; com o slot lógico do Analytics do
+ * Supabase segurando `catalog_xmin`, o vacuum não as remove e o reset fica cada vez mais lento.
+ * `session_replication_role = replica` desliga FKs/gatilhos só nesta transação, então a ordem não importa.
+ * Só toca tabelas com linha — a maioria fica vazia em cada teste.
+ */
 export async function resetDb(sql: postgres.Sql) {
-  const rows = await sql<{ t: string }[]>`
-    select format('%I.%I', schemaname, tablename) as t
-      from pg_tables where schemaname = 'public'`
-  const tables = rows.map((r) => r.t)
-  if (tables.length) await sql.unsafe(`truncate ${tables.join(', ')} restart identity cascade`)
-  await sql`delete from auth.users where email like '%@teste.local'`
-  const [boss] = await sql`select to_regclass('pgboss.job') as t`
-  if (boss?.t) await sql.unsafe('delete from pgboss.job')
+  await sql.begin(async (tx) => {
+    await tx`set local session_replication_role = replica`
+    const tabelas = await tx<{ t: string }[]>`
+      select format('%I.%I', schemaname, tablename) as t
+        from pg_tables
+       where schemaname = 'public' or (schemaname = 'pgboss' and tablename = 'job')`
+    if (!tabelas.length) return
+    const comLinhas = await tx.unsafe<{ t: string }[]>(
+      tabelas.map((r) => `select '${r.t.replaceAll("'", "''")}' as t where exists (select 1 from ${r.t})`).join(' union all '),
+    )
+    for (const { t } of comLinhas) await tx.unsafe(`delete from ${t}`)
+    await tx`delete from auth.users where email like '%@teste.local'`
+  })
 }
 
 export async function seedRestaurant(db: Db) {
@@ -53,20 +110,28 @@ export async function seedStaff(
 }
 
 const LOCAL_HOST = '127.0.0.1:54322'
-export const WORKER_URL = `postgresql://worker_app:worker_dev@${LOCAL_HOST}/postgres`
-export const WEB_URL = `postgresql://web_app:web_dev@${LOCAL_HOST}/postgres`
+const LOCAL_BASE = `postgresql://postgres:postgres@${LOCAL_HOST}/postgres`
+/** Roles de runtime apontando para o mesmo banco do processo (clone do worker ou o base). */
+export const WORKER_URL = comBanco(LOCAL_BASE, testDbName(), { user: 'worker_app', password: 'worker_dev' })
+export const WEB_URL = comBanco(LOCAL_BASE, testDbName(), { user: 'web_app', password: 'web_dev' })
+
+/** Senha das roles de runtime: ALTER ROLE é do cluster — o global setup roda uma vez, antes dos workers. */
+export async function setRuntimeRolePasswords(sql: Pick<postgres.Sql, 'unsafe'>) {
+  await sql.unsafe(`alter role worker_app with password 'worker_dev'`)
+  await sql.unsafe(`alter role web_app with password 'web_dev'`)
+}
 
 let pgbossReady: Promise<void> | undefined
 /** Fidelidade de produção: pgboss pertence a worker_app e web_app só tem os grants padrão. Só no Supabase local. */
 function setupPgbossRoles(): Promise<void> {
   pgbossReady ??= (async () => {
-    const url = process.env.TEST_DATABASE_URL ?? DEFAULT_URL
+    const url = baseTestUrl()
     if (!url.includes(LOCAL_HOST)) throw new Error('setupPgbossRoles só roda contra o Supabase local')
     const { sql } = getTestDb()
     await sql.begin(async (tx) => {
       await tx`select pg_advisory_xact_lock(913)`
-      await tx.unsafe(`alter role worker_app with password 'worker_dev'`)
-      await tx.unsafe(`alter role web_app with password 'web_dev'`)
+      // Com clones, o global setup já definiu as senhas; ALTER ROLE em paralelo (um por banco) colidiria.
+      if (!bancosClonados()) await setRuntimeRolePasswords(tx)
       const [o] = await tx<{ owner: string }[]>`
         select pg_get_userbyid(nspowner) as owner from pg_namespace where nspname = 'pgboss'`
       const [t] = await tx<{ owner: string | null }[]>`
