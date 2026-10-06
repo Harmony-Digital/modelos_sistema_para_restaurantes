@@ -33,7 +33,7 @@ export default async function InicioPage() {
             value={String(previstos)}
             hint={previstos === 1 ? 'pessoa avisou que vai' : 'pessoas avisaram que vão'}
             action={
-              <Link href="/previsao" className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 [@media(hover:hover)]:hover:underline">
+              <Link href="/agenda?aba=previsao" className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 [@media(hover:hover)]:hover:underline">
                 Ver previsão
               </Link>
             }
