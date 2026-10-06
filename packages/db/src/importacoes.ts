@@ -30,6 +30,8 @@ export type ImportacaoPainel = {
   /** próximo lote a ler (0 = nenhum) e total de lotes (null até o worker planejar): "Lendo n de m" */
   loteAtual: number
   lotesTotal: number | null
+  /** vários arquivos ainda recebendo arquivos (antes de "Ler arquivos": `enviado` sem hash do conjunto) */
+  recebendo: boolean
   /** só o rascunho do cardápio completo; os demais alvos vêm por `revisaoImportacao` */
   draft: RascunhoCardapio | null
   /** mensagem amigável (status `erro`) */
@@ -50,6 +52,7 @@ const colunas = {
   tamanho: sql<number>`coalesce(${knowledgeDocuments.tamanho}, (select sum(f.tamanho) from public.knowledge_document_files f where f.importacao_id = "knowledge_documents"."id")::int, 0)`,
   arquivos: sql<number>`(case when ${knowledgeDocuments.storagePath} is not null then 1 else (select count(*) from public.knowledge_document_files f where f.importacao_id = "knowledge_documents"."id") end)::int`,
   loteAtual: knowledgeDocuments.loteAtual, lotesTotal: knowledgeDocuments.lotesTotal,
+  recebendo: sql<boolean>`(${knowledgeDocuments.origem} = 'arquivo' and ${knowledgeDocuments.storagePath} is null and ${knowledgeDocuments.status} = 'enviado' and ${knowledgeDocuments.sha256} is null)`,
   draft: knowledgeDocuments.draft, erro: knowledgeDocuments.erro, criadoEm: knowledgeDocuments.createdAt,
   revisadoEm: knowledgeDocuments.revisadoAt,
 }

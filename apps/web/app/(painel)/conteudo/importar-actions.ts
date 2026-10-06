@@ -3,18 +3,14 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { lerCsvCardapio, rascunhoSchema, type RascunhoCardapio } from '@atd/core/s4'
 import {
-  aplicarRascunho, criarImportacao, enqueueIngest, lerImportacao, rejeitarImportacao,
-  type ItemIgnorado, type StatusImportacao,
+  aplicarRascunho, criarImportacao, lerImportacao, rejeitarImportacao, type ItemIgnorado, type StatusImportacao,
 } from '@atd/db'
 import { actionErrorFromZod, type ActionResult } from '@/lib/action-result'
 import { MENSAGEM_ERRO_PAINEL } from '@/lib/painel-erros'
 import { opcoesImportacaoSchema, type OpcoesImportacao } from '@/lib/schemas/cardapio'
 import { requireStaff } from '@/lib/dal'
-import { getBoss } from '@/lib/server/boss'
 import { getDb } from '@/lib/server/db'
-import {
-  arquivoDoForm, copiarParaCardapio, ERRO_SEM_ARQUIVO, ERRO_STORAGE, lerArquivoCardapio, sha256, subirArquivo,
-} from '@/lib/server/upload-arquivo'
+import { arquivoDoForm, copiarParaCardapio, ERRO_STORAGE, sha256 } from '@/lib/server/upload-arquivo'
 
 /** Importações são só de dono/gerente (RLS de knowledge_documents). */
 const GESTAO: ['dono', 'gerente'] = ['dono', 'gerente']
@@ -60,46 +56,15 @@ export async function importarCsvAction(fd: FormData): Promise<ActionResult<{ id
   return { ok: true, data: { id: r.valor.id, erros: [] } }
 }
 
-/**
- * PDF/foto do cardápio: validado e gravado no bucket `importacoes` como o arquivo de cardápio; a importação nasce
- * `enviado` e a leitura por IA vai para a fila. Mesmo arquivo já importado devolve a importação existente — fora de
- * `enviado` (lendo, em rascunho, aplicada) ela não volta para a fila e a tela segue o estado atual.
- */
-export async function importarArquivoAction(fd: FormData): Promise<ActionResult<{ id: string; status: StatusImportacao }>> {
-  const s = await requireStaff(GESTAO)
-  const arquivo = arquivoDoForm(fd.get('arquivo'))
-  if (!arquivo) return { ok: false, fieldErrors: { arquivo: ERRO_SEM_ARQUIVO } }
-  const a = await lerArquivoCardapio(arquivo)
-  if (!a.ok) return { ok: false, fieldErrors: { arquivo: a.erro } }
-  const enviado = await subirArquivo('importacoes', s.restaurantId, a)
-  if (!enviado.ok) return { ok: false, formError: ERRO_STORAGE }
-
-  const db = getDb()
-  const r = await criarImportacao(db, s.claims, {
-    storagePath: enviado.storagePath, mime: a.mime, tamanho: a.bytes.length, sha256: a.sha256, origem: 'arquivo',
-  })
-  if (!r.ok) return { ok: false, formError: r.erro === 'sem_permissao' ? SEM_PERMISSAO : MENSAGEM_ERRO_PAINEL[r.erro] }
-  const imp = await lerImportacao(db, s.claims, r.valor.id)
-  if (!imp) return NAO_ENCONTRADA
-  revalidar()
-  if (imp.status === 'enviado') {
-    try {
-      // singletonKey = id: reenviar o mesmo arquivo enquanto `enviado` não duplica o job
-      await enqueueIngest(await getBoss())(imp.id)
-    } catch {
-      return { ok: false, formError: 'Recebemos o arquivo, mas não foi possível começar a leitura agora. Envie de novo em instantes.' }
-    }
-  }
-  return { ok: true, data: { id: imp.id, status: imp.status } }
-}
-
-/** Para o acompanhamento da leitura (polling da tela). */
-export async function estadoImportacaoAction(id: string): Promise<ActionResult<{ status: StatusImportacao; erro: string | null }>> {
+/** Para o acompanhamento da leitura (polling da tela), com o progresso por lote dos vários arquivos. */
+export async function estadoImportacaoAction(
+  id: string,
+): Promise<ActionResult<{ status: StatusImportacao; erro: string | null; loteAtual: number; lotesTotal: number | null }>> {
   const s = await requireStaff(GESTAO)
   if (!idValido(id)) return NAO_ENCONTRADA
   const imp = await lerImportacao(getDb(), s.claims, id)
   if (!imp) return NAO_ENCONTRADA
-  return { ok: true, data: { status: imp.status, erro: imp.erro } }
+  return { ok: true, data: { status: imp.status, erro: imp.erro, loteAtual: imp.loteAtual, lotesTotal: imp.lotesTotal } }
 }
 
 /**

@@ -140,6 +140,21 @@ export function removerArquivo(
   }))
 }
 
+/** Arquivos da importação, em ordem (para a lista antes de "Ler arquivos"). Sem acesso ⇒ lista vazia (RLS). */
+export function arquivosImportacao(
+  db: Db,
+  claims: JwtClaims,
+  importacaoId: string,
+): Promise<{ ordem: number; mime: string; tamanho: number }[]> {
+  return withUserContext(db, claims, (tx) =>
+    tx
+      .select({ ordem: knowledgeDocumentFiles.ordem, mime: knowledgeDocumentFiles.mime, tamanho: knowledgeDocumentFiles.tamanho })
+      .from(knowledgeDocumentFiles)
+      .where(eq(knowledgeDocumentFiles.importacaoId, importacaoId))
+      .orderBy(asc(knowledgeDocumentFiles.ordem)),
+  )
+}
+
 /** Hash do conjunto: sha256 dos sha256 dos arquivos, ordenados e unidos por vírgula (a ordem de envio não importa). */
 export const hashDoConjunto = (shas: readonly string[]) => createHash('sha256').update([...shas].sort().join(',')).digest('hex')
 

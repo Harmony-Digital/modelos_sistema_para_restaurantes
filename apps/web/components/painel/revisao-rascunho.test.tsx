@@ -4,14 +4,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const acoes = {
   importarCsvAction: vi.fn(),
-  importarArquivoAction: vi.fn(),
   estadoImportacaoAction: vi.fn(),
   aplicarRascunhoAction: vi.fn(),
   descartarImportacaoAction: vi.fn(),
 }
 const push = vi.fn()
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() }
+const acoesAlvo = { aplicarImportacaoAction: vi.fn() }
 vi.mock('@/app/(painel)/conteudo/importar-actions', () => acoes)
+vi.mock('@/app/(painel)/conteudo/importar-alvo-actions', () => acoesAlvo)
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh: vi.fn() }) }))
 vi.mock('sonner', () => ({ toast }))
 const { RevisaoRascunho } = await import('./revisao-rascunho')
@@ -163,12 +164,34 @@ describe('RevisaoRascunho', () => {
     await user.click(within(dialogo).getByRole('button', { name: 'Descartar importação' }))
     await waitFor(() => expect(acoes.descartarImportacaoAction).toHaveBeenCalledWith(ID))
     expect(toast.success).toHaveBeenCalledWith('Importação descartada')
-    expect(push).toHaveBeenCalledWith('/conteudo?aba=cardapio&sub=importar')
+    expect(push).toHaveBeenCalledWith('/conteudo?aba=importar')
   })
 
   it('gerente sem acesso a todas as unidades não confirma', () => {
     render(<RevisaoRascunho {...base} podeAplicar={false} />)
     expect(screen.queryByRole('button', { name: 'Confirmar importação' })).not.toBeInTheDocument()
     expect(screen.getByText(/Só o dono, ou gerente com acesso a todas as unidades, confirma a importação/)).toBeInTheDocument()
+  })
+
+  it('preços diferentes lidos para o mesmo item: destaca o conflito para conferir', () => {
+    const r = { categorias: [{ nome: 'Carnes', itens: [item({ precoConflito: [8990, 9490] }), item({ nome: 'Costela', precoConflito: [4590] })] }] }
+    render(<RevisaoRascunho {...base} rascunho={r} />)
+    expect(within(grupo('Picanha')).getByText('Preços diferentes nos arquivos: R$ 89,90 e R$ 94,90. Confira o preço.')).toBeInTheDocument()
+    expect(within(grupo('Costela')).queryByText(/Preços diferentes/)).not.toBeInTheDocument()
+  })
+
+  it('vários arquivos (por alvo): confirma pela importação por alvo, sem a opção de arquivo de envio', async () => {
+    const user = userEvent.setup()
+    acoesAlvo.aplicarImportacaoAction.mockResolvedValue({ ok: true, data: { criados: 2, atualizados: 1, ignorados: 1 } })
+    render(<RevisaoRascunho {...base} origem="arquivo" porAlvo />)
+    expect(screen.queryByLabelText('Usar este arquivo como cardápio para enviar aos clientes')).not.toBeInTheDocument()
+    await user.dblClick(screen.getByRole('button', { name: 'Confirmar importação' }))
+    await waitFor(() => expect(acoesAlvo.aplicarImportacaoAction).toHaveBeenCalledTimes(1))
+    expect(acoes.aplicarRascunhoAction).not.toHaveBeenCalled()
+    const [id, entrada] = acoesAlvo.aplicarImportacaoAction.mock.calls[0]!
+    expect(id).toBe(ID)
+    expect(entrada).toMatchObject({ alvo: 'cardapio', modo: 'completo' })
+    expect(entrada.rascunho.categorias[0].itens[0]).toEqual(item())
+    expect(await screen.findByRole('status')).toHaveTextContent('Cardápio atualizado: 2 novos, 1 atualizados, 1 ignorado')
   })
 })

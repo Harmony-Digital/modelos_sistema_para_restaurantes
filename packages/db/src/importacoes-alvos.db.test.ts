@@ -8,7 +8,7 @@ import type { RascunhoCardapio } from '@atd/core/s4'
 import { getTestDb, resetDb, seedRestaurant, seedStaff } from './test-utils.ts'
 import { withRole, withUserContext, type JwtClaims } from './rls.ts'
 import {
-  anexarArquivo, aplicarImportacao, criarImportacaoArquivos, iniciarLeitura, proximoLote, removerArquivo, revisaoImportacao, salvarLote,
+  anexarArquivo, aplicarImportacao, arquivosImportacao, criarImportacaoArquivos, iniciarLeitura, proximoLote, removerArquivo, revisaoImportacao, salvarLote,
 } from './importacoes-alvos.ts'
 import { concluirIngestao, lerImportacao, listarImportacoes, marcarProcessando, rejeitarImportacao } from './importacoes.ts'
 import {
@@ -86,7 +86,9 @@ describe('banco: alvos, modo, lotes e arquivos', () => {
     // o painel continua listando (mime do primeiro arquivo, tamanho somado)
     await anexarArquivo(db, as(c.dono), id, arq(c, 1, 'application/pdf'))
     await anexarArquivo(db, as(c.dono), id, arq(c, 2))
-    expect(await lerImportacao(db, as(c.dono), id)).toMatchObject({ alvo: 'informacoes', modo: 'completo', mime: 'application/pdf', tamanho: 2003, arquivos: 2, loteAtual: 0, lotesTotal: null })
+    expect(await lerImportacao(db, as(c.dono), id)).toMatchObject({ alvo: 'informacoes', modo: 'completo', mime: 'application/pdf', tamanho: 2003, arquivos: 2, loteAtual: 0, lotesTotal: null, recebendo: true })
+    expect(await arquivosImportacao(db, as(c.dono), id)).toEqual([{ ordem: 1, mime: 'application/pdf', tamanho: 1001 }, { ordem: 2, mime: 'image/jpeg', tamanho: 1002 }])
+    expect(await arquivosImportacao(db, as(c.atendente, 'aal1'), id)).toEqual([])
     expect((await listarImportacoes(db, as(c.dono), { alvo: 'informacoes' })).map((i) => i.id)).toEqual([id])
     expect(await listarImportacoes(db, as(c.dono), { alvo: 'espacos' })).toEqual([])
   })
@@ -152,6 +154,7 @@ describe('banco: alvos, modo, lotes e arquivos', () => {
     expect(await iniciarLeitura(db, as(c.dono), id)).toEqual({ ok: true, valor: null })
     const [d] = await db.select().from(knowledgeDocuments).where(eq(knowledgeDocuments.id, id))
     expect(d).toMatchObject({ status: 'enviado', sha256: hashConjunto([sha(1), sha(2)]) })
+    expect(await lerImportacao(db, as(c.dono), id)).toMatchObject({ status: 'enviado', recebendo: false })
     expect(await iniciarLeitura(db, as(c.dono), id)).toEqual({ ok: false, erro: 'ja_iniciada' })
     expect(await anexarArquivo(db, as(c.dono), id, arq(c, 3))).toEqual({ ok: false, erro: 'ja_iniciada' })
     expect(await removerArquivo(db, as(c.dono), id, 1)).toEqual({ ok: false, erro: 'ja_iniciada' })

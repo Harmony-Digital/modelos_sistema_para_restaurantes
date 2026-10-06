@@ -4,11 +4,13 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import type { RascunhoCardapioImportacao } from '@atd/core/importacao'
 import { LIMITES_RASCUNHO, normalizeText, type RascunhoCardapio } from '@atd/core/s4'
 import { aplicarRascunhoAction, descartarImportacaoAction } from '@/app/(painel)/conteudo/importar-actions'
 import { Field, Select, TextInput } from '@/components/form'
 import { MaskedInput } from '@/components/form/masked-input'
 import { Confirmar } from '@/components/painel/confirmar'
+import { AvisoConflitoPreco, ResultadoImportacao, useConfirmarImportacao } from '@/components/painel/revisao-comum'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { chamarAcao } from '@/lib/action-result'
@@ -26,6 +28,8 @@ type ItemEdit = {
   outrosNomes: string[]
   unidade: string | null
   incluir: boolean
+  /** preços diferentes lidos nos arquivos (só para conferir; não vai no rascunho) */
+  precoConflito: number[]
 }
 type CategoriaEdit = { nome: string; itens: ItemEdit[] }
 /** Item já cadastrado (para mostrar o que a importação muda nele). */
@@ -43,12 +47,12 @@ type Resultado = { criados: number; atualizados: number; ignorados: Ignorado[] }
 const chave = (categoria: string, nome: string) => `${normalizeText(categoria)}|${normalizeText(nome)}`
 const rotuloTag = (t: string) => ROTULO_TAG[t as TagCardapio] ?? t
 
-function paraEdicao(r: RascunhoCardapio): CategoriaEdit[] {
+function paraEdicao(r: RascunhoCardapioImportacao): CategoriaEdit[] {
   return r.categorias.map((c) => ({
     nome: c.nome,
     itens: c.itens.map((i) => ({
       nome: i.nome, descricao: i.descricao ?? '', preco: i.precoCentavos === null ? '' : formatarCentavos(i.precoCentavos),
-      tags: i.tags, outrosNomes: i.outrosNomes, unidade: i.unidade, incluir: i.incluir,
+      tags: i.tags, outrosNomes: i.outrosNomes, unidade: i.unidade, incluir: i.incluir, precoConflito: i.precoConflito ?? [],
     })),
   }))
 }
@@ -110,7 +114,9 @@ function mudancas(i: ItemEdit, atual: ItemExistente): string[] {
 export function RevisaoRascunho(props: {
   id: string
   origem: 'csv' | 'arquivo'
-  rascunho: RascunhoCardapio
+  rascunho: RascunhoCardapioImportacao
+  /** importação por alvo (vários arquivos, Etapa 07): aplica por `aplicarImportacaoAction`, sem arquivo de envio */
+  porAlvo?: boolean
   categoriasExistentes: { nome: string; ativo: boolean }[]
   itensExistentes: ItemExistente[]
   /** unidades ativas (para o arquivo de envio) */
@@ -129,6 +135,7 @@ export function RevisaoRascunho(props: {
   const [descartar, setDescartar] = useState(false)
   // guarda síncrona: o duplo clique chega antes do re-render com o botão ocupado
   const emAndamento = useRef(false)
+  const porAlvo = useConfirmarImportacao({ id: props.id, alvo: 'cardapio', modo: 'completo' })
 
   const existentes = useMemo(() => new Map(props.itensExistentes.map((i) => [chave(i.categoria, i.nome), i])), [props.itensExistentes])
   const categoriasCadastradas = useMemo(() => new Set(props.categoriasExistentes.map((c) => normalizeText(c.nome))), [props.categoriasExistentes])
@@ -151,6 +158,7 @@ export function RevisaoRascunho(props: {
       setErroGeral('Confira os itens marcados antes de confirmar.')
       return
     }
+    if (props.porAlvo) return porAlvo.confirmar(() => paraRascunho(cats))
     emAndamento.current = true
     setAplicando(true)
     try {
@@ -186,6 +194,9 @@ export function RevisaoRascunho(props: {
   }
 
   if (resultado) return <ResultadoAplicacao r={resultado} />
+  if (porAlvo.resultado) return <ResultadoImportacao alvo="cardapio" modo="completo" r={porAlvo.resultado} />
+  const aplicandoAgora = aplicando || porAlvo.aplicando
+  const erroAgora = erroGeral ?? porAlvo.erroGeral
 
   return (
     <div className="flex flex-col gap-4">
@@ -250,6 +261,7 @@ export function RevisaoRascunho(props: {
                     {i.incluir && <Badge variant={atualiza ? 'secondary' : 'default'}>{atualiza ? 'Atualiza' : 'Novo'}</Badge>}
                   </div>
                   {i.unidade && <p className="text-sm text-muted-foreground">Preço só da unidade {i.unidade}</p>}
+                  <AvisoConflitoPreco precos={i.precoConflito} />
                   {i.incluir && atualiza && (
                     <p className="text-sm text-muted-foreground">
                       {muda.length ? `Muda: ${muda.join(', ')}` : 'Nada muda: campos em branco mantêm o valor atual.'}
@@ -304,7 +316,7 @@ export function RevisaoRascunho(props: {
         {props.categoriasExistentes.map((c) => <option key={c.nome} value={c.nome} />)}
       </datalist>
 
-      {props.origem === 'arquivo' && props.podeAplicar && (
+      {props.origem === 'arquivo' && props.podeAplicar && !props.porAlvo && (
         <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
           <label className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-foreground">
             <input type="checkbox" className="size-5 accent-primary" checked={usarArquivo} onChange={(ev) => setUsarArquivo(ev.target.checked)} />
@@ -323,7 +335,7 @@ export function RevisaoRascunho(props: {
         </div>
       )}
 
-      {erroGeral && <p role="alert" className="text-sm text-destructive">{erroGeral}</p>}
+      {erroAgora && <p role="alert" className="text-sm text-destructive">{erroAgora}</p>}
       {!props.podeAplicar && (
         <p className="text-sm text-muted-foreground">
           Só o dono, ou gerente com acesso a todas as unidades, confirma a importação. Você pode revisar os itens ou descartá-la.
@@ -331,11 +343,11 @@ export function RevisaoRascunho(props: {
       )}
       <div className="flex flex-wrap gap-2">
         {props.podeAplicar && (
-          <Button aria-busy={aplicando || undefined} disabled={aplicando || incluidos === 0} onClick={confirmar}>
-            {aplicando ? 'Aplicando…' : 'Confirmar importação'}
+          <Button aria-busy={aplicandoAgora || undefined} disabled={aplicandoAgora || incluidos === 0} onClick={confirmar}>
+            {aplicandoAgora ? 'Aplicando…' : 'Confirmar importação'}
           </Button>
         )}
-        <Button variant="outline" disabled={aplicando} onClick={() => setDescartar(true)}>Descartar</Button>
+        <Button variant="outline" disabled={aplicandoAgora} onClick={() => setDescartar(true)}>Descartar</Button>
       </div>
       <Confirmar
         aberto={descartar}
