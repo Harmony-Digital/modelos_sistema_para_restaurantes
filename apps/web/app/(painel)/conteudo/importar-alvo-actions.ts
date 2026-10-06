@@ -4,27 +4,32 @@ import { z } from 'zod'
 import {
   rascunhoCardapioImportacaoSchema, rascunhoEspacosSchema, rascunhoHorariosSchema, rascunhoInformacoesSchema, rascunhoSoPrecosSchema,
 } from '@atd/core/importacao'
-import { anexarArquivo, aplicarImportacao, criarImportacaoArquivos, enqueueIngest, iniciarLeitura, lerImportacao, removerArquivo } from '@atd/db'
+import {
+  anexarArquivo, aplicarImportacao, caminhoArquivoImportacao, criarImportacaoArquivos, enqueueIngest, iniciarLeitura, leituraParada, podeAnexar,
+  removerArquivo,
+} from '@atd/db'
 import type { ActionResult } from '@/lib/action-result'
-import type { AlvoImportacaoTela, ModoImportacaoTela } from '@/lib/importacao'
+import { MENSAGEM_NAO_PRONTA, type AlvoImportacaoTela, type ModoImportacaoTela } from '@/lib/importacao'
 import { MENSAGEM_ERRO_PAINEL } from '@/lib/painel-erros'
 import { requireStaff } from '@/lib/dal'
 import { getBoss } from '@/lib/server/boss'
 import { getDb } from '@/lib/server/db'
-import { arquivoDoForm, ERRO_STORAGE, lerArquivoCardapio, subirArquivo } from '@/lib/server/upload-arquivo'
-import { createClient } from '@/lib/supabase/server'
+import { arquivoDoForm, copiarParaCardapio, ERRO_STORAGE, lerArquivoCardapio, subirArquivo } from '@/lib/server/upload-arquivo'
 
 /**
  * Importação por alvo com vários arquivos (Etapa 07): criar → anexar um arquivo por requisição (até 10) → "Ler
  * arquivos" (enfileira a leitura por lotes) → revisão → aplicar (PRD I10). Dono/gerente; o banco exige acesso a
- * todas as unidades.
+ * todas as unidades para informações, horários e espaços e para confirmar (o gerente restrito envia, lê e revisa o
+ * cardápio).
  */
 const GESTAO: ['dono', 'gerente'] = ['dono', 'gerente']
-const SEM_PERMISSAO = 'Só o dono, ou gerente com acesso a todas as unidades, importa arquivos.'
+const SEM_PERMISSAO = 'Só o dono, ou gerente com acesso a todas as unidades, importa informações, horários e espaços.'
 const SEM_PERMISSAO_APLICAR = 'Só o dono, ou gerente com acesso a todas as unidades, aplica a importação.'
 const JA_INICIADA = 'A leitura destes arquivos já começou. Para mudar a lista, comece outra importação.'
 const RASCUNHO_INVALIDO = 'Algum dado está inválido. Confira e tente de novo.'
 const NAO_ENCONTRADA = { ok: false as const, formError: 'Não encontramos essa importação.' }
+const LIMITE = 'No máximo 10 arquivos por importação.'
+const ARQUIVO_INVALIDO = 'Este arquivo não pode ser usado como cardápio para enviar aos clientes.'
 const idValido = (id: string) => z.uuid().safeParse(id).success
 
 const alvoModoSchema = z
@@ -46,7 +51,11 @@ export async function novaImportacaoAction(v: { alvo: AlvoImportacaoTela; modo: 
   return { ok: true, data: r.valor }
 }
 
-/** Um arquivo por requisição: tipo pelos primeiros bytes, tamanho e sha256 no servidor; vai ao bucket `importacoes`. */
+/**
+ * Um arquivo por requisição: tipo pelos primeiros bytes, tamanho e sha256 no servidor; vai ao bucket `importacoes`.
+ * Permissão, estado e limite são conferidos antes do upload (sem objeto órfão no Storage). Objeto que sobra (o mesmo
+ * conteúdo já na lista) não é apagado: o nome é o sha256 e pode ser de outra importação (limpeza por job, ver PLAN).
+ */
 export async function anexarArquivoAction(id: string, fd: FormData): Promise<ActionResult<{ ordem: number }>> {
   const s = await requireStaff(GESTAO)
   if (!idValido(id)) return NAO_ENCONTRADA
@@ -54,31 +63,20 @@ export async function anexarArquivoAction(id: string, fd: FormData): Promise<Act
   if (!arquivo) return { ok: false, fieldErrors: { arquivo: 'Escolha o arquivo.' } }
   const a = await lerArquivoCardapio(arquivo)
   if (!a.ok) return { ok: false, fieldErrors: { arquivo: a.erro } }
+  const db = getDb()
+  const pode = await podeAnexar(db, s.claims, id)
+  if (!pode.ok) return erroAnexar(pode.erro)
   const enviado = await subirArquivo('importacoes', s.restaurantId, a)
   if (!enviado.ok) return { ok: false, formError: ERRO_STORAGE }
-  const r = await anexarArquivo(getDb(), s.claims, id, { storagePath: enviado.storagePath, mime: a.mime, tamanho: a.bytes.length, sha256: a.sha256 })
-  if (r.ok) {
-    if (r.valor.descartarCaminho !== null) await apagarSobra(r.valor.descartarCaminho)
-    return { ok: true, data: { ordem: r.valor.ordem } }
-  }
-  if (r.erro === 'limite_arquivos') return { ok: false, formError: 'No máximo 10 arquivos por importação.' }
-  if (r.erro === 'ja_iniciada') return { ok: false, formError: JA_INICIADA }
-  return erroPainel(r.erro)
+  const r = await anexarArquivo(db, s.claims, id, { storagePath: enviado.storagePath, mime: a.mime, tamanho: a.bytes.length, sha256: a.sha256 })
+  if (r.ok) return { ok: true, data: { ordem: r.valor.ordem } }
+  return erroAnexar(r.erro)
 }
 
-/**
- * O conteúdo já estava na lista com outro caminho: apaga o objeto recém-enviado (sessão do usuário; as policies do
- * Storage decidem). Melhor esforço: falhar aqui não desfaz o anexo.
- */
-async function apagarSobra(caminho: string) {
-  const objeto = caminho.replace(/^importacoes\//, '')
-  if (objeto === caminho) return
-  try {
-    const supabase = await createClient()
-    await supabase.storage.from('importacoes').remove([objeto])
-  } catch {
-    // objeto órfão: sem dado do documento em log
-  }
+function erroAnexar(erro: 'limite_arquivos' | 'ja_iniciada' | keyof typeof MENSAGEM_ERRO_PAINEL) {
+  if (erro === 'limite_arquivos') return { ok: false as const, formError: LIMITE }
+  if (erro === 'ja_iniciada') return { ok: false as const, formError: JA_INICIADA }
+  return erroPainel(erro)
 }
 
 export async function removerArquivoAction(id: string, ordem: number): Promise<ActionResult<null>> {
@@ -92,10 +90,20 @@ export async function removerArquivoAction(id: string, ordem: number): Promise<A
 
 const NAO_ENFILEIROU = 'Recebemos os arquivos, mas não foi possível começar a leitura agora. Tente de novo em instantes.'
 
+async function enfileirar(id: string): Promise<boolean> {
+  try {
+    await enqueueIngest(await getBoss())(id)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /**
- * "Ler arquivos": fecha a lista e enfileira a leitura (singletonKey = id). O mesmo conjunto já importado devolve a
- * importação existente (`existente`). Clicar de novo depois de a fila falhar reenfileira (a leitura já iniciada
- * continua `enviado` até o worker pegar).
+ * "Ler arquivos" (e "Tentar de novo" da leitura): fecha a lista e enfileira a leitura (singletonKey = id). O mesmo
+ * conjunto já importado devolve a importação existente (`existente`). Leitura já iniciada e parada (o
+ * enfileiramento falhou, ou a fila desistiu depois de o leitor morrer: `leituraParada`) é reenfileirada e segue de
+ * onde parou — a existente também; lendo de verdade, só mostra o estado.
  */
 export async function lerArquivosAction(id: string): Promise<ActionResult<{ id: string; existente: boolean }>> {
   const s = await requireStaff(GESTAO)
@@ -103,19 +111,17 @@ export async function lerArquivosAction(id: string): Promise<ActionResult<{ id: 
   const db = getDb()
   const r = await iniciarLeitura(db, s.claims, id)
   if (!r.ok) {
-    if (r.erro === 'ja_importado') return { ok: true, data: { id: r.id, existente: true } }
     if (r.erro === 'sem_arquivos') return { ok: false, formError: 'Envie ao menos um arquivo antes de ler.' }
-    if (r.erro !== 'ja_iniciada') return erroPainel(r.erro)
-    const imp = await lerImportacao(db, s.claims, id)
-    if (!imp) return NAO_ENCONTRADA
-    if (imp.status !== 'enviado' || imp.recebendo) return { ok: true, data: { id, existente: false } }
+    if (r.erro !== 'ja_importado' && r.erro !== 'ja_iniciada') return erroPainel(r.erro)
+    const alvo = r.erro === 'ja_importado' ? r.id : id
+    const data = { id: alvo, existente: r.erro === 'ja_importado' }
+    if (!(await leituraParada(db, s.claims, alvo))) return { ok: true, data }
+    if (!(await enfileirar(alvo))) return { ok: false, formError: NAO_ENFILEIROU }
+    revalidatePath('/conteudo')
+    return { ok: true, data }
   }
   revalidatePath('/conteudo')
-  try {
-    await enqueueIngest(await getBoss())(id)
-  } catch {
-    return { ok: false, formError: NAO_ENFILEIROU }
-  }
+  if (!(await enfileirar(id))) return { ok: false, formError: NAO_ENFILEIROU }
   return { ok: true, data: { id, existente: false } }
 }
 
@@ -131,32 +137,52 @@ function schemaDoAlvo(alvo: string, modo: string): z.ZodType | null {
   return porModo?.[modo] ?? null
 }
 
+const arquivoDeEnvioSchema = z.object({ ordem: z.int().min(1).max(10), unitId: z.uuid().nullable() }).nullable()
+
 /**
  * Confirmação humana (PRD I10) do rascunho revisado, validado aqui pelo schema do alvo e de novo no banco (que também
- * confere o alvo da importação). Sem revalidatePath: a tela mostra o resultado e o usuário navega.
+ * confere o alvo da importação). Cardápio completo com `arquivoDeEnvio`: o arquivo escolhido é copiado antes para o
+ * bucket `cardapio` (a equipe toda vê a prévia) e vira o cardápio para enviar aos clientes na mesma transação (como na
+ * Etapa 05). Sem revalidatePath: a tela mostra o resultado e o usuário navega.
  */
 export async function aplicarImportacaoAction(
   id: string,
-  entrada: { alvo: AlvoImportacaoTela; modo: ModoImportacaoTela; rascunho: unknown },
+  entrada: {
+    alvo: AlvoImportacaoTela
+    modo: ModoImportacaoTela
+    rascunho: unknown
+    arquivoDeEnvio?: { ordem: number; unitId: string | null } | null
+  },
 ): Promise<ActionResult<{ criados: number; atualizados: number; ignorados: number }>> {
   const s = await requireStaff(GESTAO)
   if (!idValido(id)) return NAO_ENCONTRADA
   const schema = schemaDoAlvo(entrada.alvo, entrada.modo)
   const r = schema?.safeParse(entrada.rascunho)
   if (!r?.success) return { ok: false, formError: RASCUNHO_INVALIDO }
-  const res = await aplicarImportacao(getDb(), s.claims, id, r.data)
+  const envio = arquivoDeEnvioSchema.safeParse(entrada.arquivoDeEnvio ?? null)
+  if (!envio.success) return { ok: false, formError: ARQUIVO_INVALIDO }
+  const db = getDb()
+  if (envio.data !== null) {
+    if (entrada.alvo !== 'cardapio' || entrada.modo !== 'completo') return { ok: false, formError: ARQUIVO_INVALIDO }
+    const caminho = await caminhoArquivoImportacao(db, s.claims, id, envio.data.ordem)
+    if (caminho === null) return { ok: false, formError: ARQUIVO_INVALIDO }
+    if (!(await copiarParaCardapio(caminho))) return { ok: false, formError: ERRO_STORAGE }
+  }
+  const res = await aplicarImportacao(db, s.claims, id, r.data, { arquivoDeEnvio: envio.data })
   if (res.ok) return { ok: true, data: res.valor }
   switch (res.erro) {
     case 'unidade_nao_escolhida':
       return { ok: false, formError: 'Escolha a unidade de cada horário ou espaço marcado (ou deixe-o de fora) antes de confirmar.' }
     case 'ja_aplicado':
       return { ok: false, formError: 'Essa importação já foi aplicada.' }
+    case 'arquivo_invalido':
+      return { ok: false, formError: ARQUIVO_INVALIDO }
     case 'rascunho_invalido':
       return { ok: false, formError: RASCUNHO_INVALIDO }
     case 'sem_permissao':
       return { ok: false, formError: SEM_PERMISSAO_APLICAR }
     case 'nao_pronta':
-      return { ok: false, formError: 'Esta importação não está pronta para confirmar: a leitura ainda não terminou, deu erro ou ela foi descartada. Atualize a página.' }
+      return { ok: false, formError: MENSAGEM_NAO_PRONTA }
     default:
       return { ok: false, formError: MENSAGEM_ERRO_PAINEL[res.erro] }
   }

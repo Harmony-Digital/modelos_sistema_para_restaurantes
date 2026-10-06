@@ -12,3 +12,7 @@ export const ALVOS_IMPORTACAO_TELA: readonly { chave: AlvoImportacaoTela; rotulo
 export const URL_IMPORTAR = '/conteudo?aba=importar'
 export const urlImportarAlvo = (alvo: AlvoImportacaoTela) => `${URL_IMPORTAR}&alvo=${alvo}`
 export const urlImportacao = (id: string) => `${URL_IMPORTAR}&imp=${id}`
+
+/** Confirmar uma importação que não está em `rascunho` (ainda lendo, com erro ou descartada). */
+export const MENSAGEM_NAO_PRONTA =
+  'Esta importação não está pronta para confirmar: a leitura ainda não terminou, deu erro ou ela foi descartada. Atualize a página.'

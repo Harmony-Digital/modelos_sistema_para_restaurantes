@@ -37,6 +37,8 @@ export type ImportacaoPainel = {
   /** mensagem amigável (status `erro`) */
   erro: string | null
   criadoEm: Date
+  /** última mudança (status, parcial ou lote salvo) */
+  atualizadoEm: Date
   revisadoEm: Date | null
 }
 
@@ -54,7 +56,7 @@ const colunas = {
   loteAtual: knowledgeDocuments.loteAtual, lotesTotal: knowledgeDocuments.lotesTotal,
   recebendo: sql<boolean>`(${knowledgeDocuments.origem} = 'arquivo' and ${knowledgeDocuments.storagePath} is null and ${knowledgeDocuments.status} = 'enviado' and ${knowledgeDocuments.sha256} is null)`,
   draft: knowledgeDocuments.draft, erro: knowledgeDocuments.erro, criadoEm: knowledgeDocuments.createdAt,
-  revisadoEm: knowledgeDocuments.revisadoAt,
+  atualizadoEm: knowledgeDocuments.updatedAt, revisadoEm: knowledgeDocuments.revisadoAt,
 }
 type Linha = Omit<ImportacaoPainel, 'draft'> & { draft: unknown }
 const paraPainel = (r: Linha): ImportacaoPainel => {

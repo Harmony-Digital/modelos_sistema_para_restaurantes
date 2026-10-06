@@ -90,11 +90,14 @@ describe('importarCsvAction', () => {
 
 describe('estado, aplicar e descartar', () => {
   it('estado para o acompanhamento (polling)', async () => {
-    lerImportacao.mockResolvedValue({ id: ID, status: 'erro', erro: 'Não consegui ler esse arquivo.', loteAtual: 0, lotesTotal: null })
-    expect(await A.estadoImportacaoAction(ID)).toEqual({ ok: true, data: { status: 'erro', erro: 'Não consegui ler esse arquivo.', loteAtual: 0, lotesTotal: null } })
-    // vários arquivos: o progresso por lote vai para "Lendo n de m"
-    lerImportacao.mockResolvedValue({ id: ID, status: 'processando', erro: null, loteAtual: 2, lotesTotal: 5 })
-    expect(await A.estadoImportacaoAction(ID)).toEqual({ ok: true, data: { status: 'processando', erro: null, loteAtual: 2, lotesTotal: 5 } })
+    const em = new Date('2026-10-06T12:00:00Z')
+    lerImportacao.mockResolvedValue({ id: ID, status: 'erro', erro: 'Não consegui ler esse arquivo.', loteAtual: 0, lotesTotal: null, atualizadoEm: em })
+    expect(await A.estadoImportacaoAction(ID)).toEqual({
+      ok: true, data: { status: 'erro', erro: 'Não consegui ler esse arquivo.', loteAtual: 0, lotesTotal: null, atualizadoEm: em.toISOString() },
+    })
+    // vários arquivos: o progresso por lote vai para "Lendo n de m"; a última mudança (parcial ou lote salvo) reinicia o prazo da tela
+    lerImportacao.mockResolvedValue({ id: ID, status: 'processando', erro: null, loteAtual: 2, lotesTotal: 5, atualizadoEm: em })
+    expect(await A.estadoImportacaoAction(ID)).toEqual({ ok: true, data: { status: 'processando', erro: null, loteAtual: 2, lotesTotal: 5, atualizadoEm: em.toISOString() } })
     lerImportacao.mockResolvedValue(null)
     expect(await A.estadoImportacaoAction(ID)).toMatchObject({ ok: false })
     expect(await A.estadoImportacaoAction('x')).toMatchObject({ ok: false })
@@ -137,6 +140,10 @@ describe('estado, aplicar e descartar', () => {
     aplicarRascunho.mockResolvedValue({ ok: false, erro: 'ja_aplicado' })
     expect(await A.aplicarRascunhoAction(ID, rascunho, { usarComoArquivoDeEnvio: false, unitIdArquivo: null })).toEqual({
       ok: false, formError: 'Essa importação já foi aplicada.',
+    })
+    aplicarRascunho.mockResolvedValue({ ok: false, erro: 'nao_pronta' })
+    expect(await A.aplicarRascunhoAction(ID, rascunho, { usarComoArquivoDeEnvio: false, unitIdArquivo: null })).toEqual({
+      ok: false, formError: 'Esta importação não está pronta para confirmar: a leitura ainda não terminou, deu erro ou ela foi descartada. Atualize a página.',
     })
     lerImportacao.mockResolvedValue({ id: ID, storagePath: null })
     aplicarRascunho.mockResolvedValue({ ok: false, erro: 'arquivo_invalido' })

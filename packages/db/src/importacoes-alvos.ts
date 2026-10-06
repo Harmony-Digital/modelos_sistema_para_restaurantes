@@ -88,7 +88,8 @@ async function travarRecebendo(tx: Tx, id: string): Promise<DocRecebendo | 'nao_
 
 /**
  * `descartarCaminho`: o conteúdo já estava na importação (mesmo sha256) com outro caminho — o objeto recém-enviado
- * ficou sem uso e quem chamou deve apagá-lo do Storage. Null quando o arquivo entrou ou é o mesmo objeto (reenvio).
+ * ficou sem uso. Não é apagado pelo painel (sem policy de DELETE; o nome por sha256 pode ser de outra importação): a
+ * limpeza por job confere as referências (PLAN). Null quando o arquivo entrou ou é o mesmo objeto (reenvio).
  */
 export type ResultadoAnexar = ResultadoPainel<{ ordem: number; descartarCaminho: string | null }> | { ok: false; erro: ErroArquivos }
 

@@ -6,6 +6,7 @@ import {
   aplicarRascunho, criarImportacao, lerImportacao, rejeitarImportacao, type ItemIgnorado, type StatusImportacao,
 } from '@atd/db'
 import { actionErrorFromZod, type ActionResult } from '@/lib/action-result'
+import { MENSAGEM_NAO_PRONTA } from '@/lib/importacao'
 import { MENSAGEM_ERRO_PAINEL } from '@/lib/painel-erros'
 import { opcoesImportacaoSchema, type OpcoesImportacao } from '@/lib/schemas/cardapio'
 import { requireStaff } from '@/lib/dal'
@@ -56,15 +57,21 @@ export async function importarCsvAction(fd: FormData): Promise<ActionResult<{ id
   return { ok: true, data: { id: r.valor.id, erros: [] } }
 }
 
-/** Para o acompanhamento da leitura (polling da tela), com o progresso por lote dos vários arquivos. */
-export async function estadoImportacaoAction(
-  id: string,
-): Promise<ActionResult<{ status: StatusImportacao; erro: string | null; loteAtual: number; lotesTotal: number | null }>> {
+/**
+ * Para o acompanhamento da leitura (polling da tela), com o progresso por lote dos vários arquivos e a última mudança
+ * da importação (`atualizadoEm`: muda a cada parcial e lote salvos; a tela reinicia o prazo de espera com ela).
+ */
+export async function estadoImportacaoAction(id: string): Promise<ActionResult<{
+  status: StatusImportacao; erro: string | null; loteAtual: number; lotesTotal: number | null; atualizadoEm: string
+}>> {
   const s = await requireStaff(GESTAO)
   if (!idValido(id)) return NAO_ENCONTRADA
   const imp = await lerImportacao(getDb(), s.claims, id)
   if (!imp) return NAO_ENCONTRADA
-  return { ok: true, data: { status: imp.status, erro: imp.erro, loteAtual: imp.loteAtual, lotesTotal: imp.lotesTotal } }
+  return {
+    ok: true,
+    data: { status: imp.status, erro: imp.erro, loteAtual: imp.loteAtual, lotesTotal: imp.lotesTotal, atualizadoEm: imp.atualizadoEm.toISOString() },
+  }
 }
 
 /**
@@ -93,6 +100,7 @@ export async function aplicarRascunhoAction(
   const res = await aplicarRascunho(db, s.claims, id, r.data, o.data)
   if (res.ok) return { ok: true, data: res.valor }
   if (res.erro === 'ja_aplicado') return { ok: false, formError: 'Essa importação já foi aplicada.' }
+  if (res.erro === 'nao_pronta') return { ok: false, formError: MENSAGEM_NAO_PRONTA }
   if (res.erro === 'arquivo_invalido') return { ok: false, formError: 'Este arquivo não pode ser usado como cardápio para enviar aos clientes.' }
   if (res.erro === 'sem_permissao') return { ok: false, formError: 'Só o dono, ou gerente com acesso a todas as unidades, aplica a importação.' }
   return { ok: false, formError: MENSAGEM_ERRO_PAINEL[res.erro] }
