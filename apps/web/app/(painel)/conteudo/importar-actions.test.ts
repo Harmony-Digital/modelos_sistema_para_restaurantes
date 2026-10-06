@@ -10,7 +10,8 @@ const rejeitarImportacao = vi.fn()
 const enfileirar = vi.fn()
 const enqueueIngest = vi.fn(() => enfileirar)
 const upload = vi.fn()
-const from = vi.fn(() => ({ upload }))
+const copy = vi.fn()
+const from = vi.fn(() => ({ upload, copy }))
 const revalidatePath = vi.fn()
 // o pacote `server-only` lança fora do bundle de servidor do Next (upload-arquivo.ts o importa)
 vi.mock('server-only', () => ({}))
@@ -150,10 +151,30 @@ describe('estado, aplicar e descartar', () => {
   it('aplicar: valida o rascunho e devolve as contagens e os ignorados', async () => {
     const ignorados = [{ categoria: 'Carnes', nome: 'Cupim', motivo: 'unidade_desconhecida' }]
     aplicarRascunho.mockResolvedValue({ ok: true, valor: { criados: 1, atualizados: 0, ignorados } })
+    lerImportacao.mockResolvedValue({ id: ID, storagePath: `importacoes/${REST}/abc.pdf` })
+    copy.mockResolvedValue({ data: { path: `${REST}/abc.pdf` }, error: null })
     const opcoes = { usarComoArquivoDeEnvio: true, unitIdArquivo: UNI }
     expect(await A.aplicarRascunhoAction(ID, rascunho, opcoes)).toEqual({ ok: true, data: { criados: 1, atualizados: 0, ignorados } })
     expect(aplicarRascunho).toHaveBeenCalledWith('db', { sub: 'u' }, ID, rascunho, opcoes)
     expect(requireStaff).toHaveBeenCalledWith(['dono', 'gerente'])
+    // arquivo de envio: copiado para o bucket cardapio (a equipe toda vê a prévia) antes de aplicar (M5)
+    expect(from).toHaveBeenCalledWith('importacoes')
+    expect(copy).toHaveBeenCalledWith(`${REST}/abc.pdf`, `${REST}/abc.pdf`, { destinationBucket: 'cardapio' })
+  })
+  it('aplicar com arquivo de envio: cópia já existente é aceita; falha do Storage não aplica nada (M5)', async () => {
+    lerImportacao.mockResolvedValue({ id: ID, storagePath: `importacoes/${REST}/abc.pdf` })
+    aplicarRascunho.mockResolvedValue({ ok: true, valor: { criados: 1, atualizados: 0, ignorados: [] } })
+    const opcoes = { usarComoArquivoDeEnvio: true, unitIdArquivo: null }
+    copy.mockResolvedValue({ data: null, error: { statusCode: '409', message: 'The resource already exists' } })
+    expect(await A.aplicarRascunhoAction(ID, rascunho, opcoes)).toMatchObject({ ok: true })
+    aplicarRascunho.mockClear()
+    copy.mockResolvedValue({ data: null, error: { statusCode: '500', message: 'boom' } })
+    expect(await A.aplicarRascunhoAction(ID, rascunho, opcoes)).toEqual({ ok: false, formError: 'Não foi possível enviar o arquivo agora. Tente de novo.' })
+    expect(aplicarRascunho).not.toHaveBeenCalled()
+    // sem arquivo de envio, não copia
+    copy.mockClear()
+    await A.aplicarRascunhoAction(ID, rascunho, { usarComoArquivoDeEnvio: false, unitIdArquivo: null })
+    expect(copy).not.toHaveBeenCalled()
   })
   it('aplicar: rascunho inválido não chega ao banco', async () => {
     const ruim = { categorias: [{ nome: 'Carnes', itens: [{ ...rascunho.categorias[0]!.itens[0]!, precoCentavos: -1 }] }] }
@@ -166,6 +187,7 @@ describe('estado, aplicar e descartar', () => {
     expect(await A.aplicarRascunhoAction(ID, rascunho, { usarComoArquivoDeEnvio: false, unitIdArquivo: null })).toEqual({
       ok: false, formError: 'Essa importação já foi aplicada.',
     })
+    lerImportacao.mockResolvedValue({ id: ID, storagePath: null })
     aplicarRascunho.mockResolvedValue({ ok: false, erro: 'arquivo_invalido' })
     expect(await A.aplicarRascunhoAction(ID, rascunho, { usarComoArquivoDeEnvio: true, unitIdArquivo: null })).toEqual({
       ok: false, formError: 'Este arquivo não pode ser usado como cardápio para enviar aos clientes.',

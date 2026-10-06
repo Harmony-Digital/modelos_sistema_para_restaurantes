@@ -12,7 +12,9 @@ import { opcoesImportacaoSchema, type OpcoesImportacao } from '@/lib/schemas/car
 import { requireStaff } from '@/lib/dal'
 import { getBoss } from '@/lib/server/boss'
 import { getDb } from '@/lib/server/db'
-import { arquivoDoForm, ERRO_SEM_ARQUIVO, ERRO_STORAGE, lerArquivoCardapio, sha256, subirArquivo } from '@/lib/server/upload-arquivo'
+import {
+  arquivoDoForm, copiarParaCardapio, ERRO_SEM_ARQUIVO, ERRO_STORAGE, lerArquivoCardapio, sha256, subirArquivo,
+} from '@/lib/server/upload-arquivo'
 
 /** Importações são só de dono/gerente (RLS de knowledge_documents). */
 const GESTAO: ['dono', 'gerente'] = ['dono', 'gerente']
@@ -102,7 +104,8 @@ export async function estadoImportacaoAction(id: string): Promise<ActionResult<{
 
 /**
  * Confirmação humana do rascunho revisado (PRD I10). Sem revalidatePath de propósito: a tela de revisão mostra o
- * resultado (inclusive os itens ignorados) e só então o usuário navega.
+ * resultado (inclusive os itens ignorados) e só então o usuário navega. Com "usar como arquivo de envio", o arquivo
+ * é copiado antes para o bucket `cardapio` (a equipe toda vê a prévia; `importacoes` é só de dono/gerente).
  */
 export async function aplicarRascunhoAction(
   id: string,
@@ -115,7 +118,14 @@ export async function aplicarRascunhoAction(
   if (!r.success) return { ok: false, formError: 'Algum item está com dado inválido. Confira nomes e preços.' }
   const o = opcoesImportacaoSchema.safeParse(opcoes)
   if (!o.success) return actionErrorFromZod(o.error)
-  const res = await aplicarRascunho(getDb(), s.claims, id, r.data, o.data)
+  const db = getDb()
+  if (o.data.usarComoArquivoDeEnvio) {
+    const imp = await lerImportacao(db, s.claims, id)
+    if (!imp) return NAO_ENCONTRADA
+    // sem arquivo (CSV): aplicarRascunho recusa com arquivo_invalido
+    if (imp.storagePath !== null && !(await copiarParaCardapio(imp.storagePath))) return { ok: false, formError: ERRO_STORAGE }
+  }
+  const res = await aplicarRascunho(db, s.claims, id, r.data, o.data)
   if (res.ok) return { ok: true, data: res.valor }
   if (res.erro === 'ja_aplicado') return { ok: false, formError: 'Essa importação já foi aplicada.' }
   if (res.erro === 'arquivo_invalido') return { ok: false, formError: 'Este arquivo não pode ser usado como cardápio para enviar aos clientes.' }

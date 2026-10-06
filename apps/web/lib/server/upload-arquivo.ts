@@ -43,3 +43,15 @@ export async function subirArquivo(
   if (error && !jaExiste(error as { statusCode?: string; message?: string })) return { ok: false }
   return { ok: true, storagePath: `${bucket}/${objeto}` }
 }
+
+/**
+ * Copia um objeto do bucket `importacoes` para `cardapio` (mesmo `<restaurant_id>/<arquivo>`), com a sessão do
+ * usuário (lê importacoes e grava em cardapio: dono/gerente). Destino já existente é aceito (nome = sha256).
+ */
+export async function copiarParaCardapio(storagePath: string): Promise<boolean> {
+  const objeto = storagePath.replace(/^importacoes\//, '')
+  if (objeto === storagePath) return false
+  const supabase = await createClient()
+  const { error } = await supabase.storage.from('importacoes').copy(objeto, objeto, { destinationBucket: 'cardapio' })
+  return !error || jaExiste(error as { statusCode?: string; message?: string })
+}

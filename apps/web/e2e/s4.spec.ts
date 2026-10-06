@@ -225,6 +225,7 @@ test('importar PDF: "Lendo o cardápio…", revisão com o rascunho da IA, edita
   // a revisão corrige o preço antes de virar dado oficial
   await moqueca.getByLabel(/^Preço/).fill('12490')
   expect(await getSql()`select 1 from menu_categories where nome = ${CATEGORIA_PDF}`).toHaveLength(0)
+  await page.getByLabel('Usar este arquivo como cardápio para enviar aos clientes').check()
 
   await confirmar.click()
   await expect(page.getByRole('status').filter({ hasText: 'Cardápio atualizado: 2 novos, 0 atualizados' })).toBeVisible()
@@ -237,6 +238,12 @@ test('importar PDF: "Lendo o cardápio…", revisão com o rascunho da IA, edita
   const [doc] = await getSql()`select k.status, k.revisado_por is not null as revisado from knowledge_documents k
     join auth.users u on u.id = k.enviado_por where u.email like '%@teste.local' and k.origem = 'arquivo'`
   expect(doc).toEqual({ status: 'aprovado', revisado: true })
+  // arquivo de envio copiado para o bucket cardapio (a equipe toda vê a prévia; importacoes é só de dono/gerente)
+  const [arquivo] = await getSql()`select f.storage_path from menu_files f
+    join knowledge_documents k on k.sha256 = f.sha256 and k.restaurant_id = f.restaurant_id where k.origem = 'arquivo'`
+  expect(arquivo!.storage_path).toMatch(/^cardapio\//)
+  const objeto = String(arquivo!.storage_path).replace(/^cardapio\//, '')
+  expect(await getSql()`select 1 from storage.objects where bucket_id = 'cardapio' and name = ${objeto}`).toHaveLength(1)
 })
 
 test('atendente consulta o cardápio sem botões de edição; aba Conteúdo cabe em 360 px', async ({ page }) => {
