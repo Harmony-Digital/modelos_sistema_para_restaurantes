@@ -56,7 +56,7 @@ jobs:
         name: Prompt ou triagem mudaram?
         env: { BASE_REF: "${{ github.base_ref }}" }
         run: |
-          if git diff --name-only "origin/$BASE_REF...HEAD" | grep -qE '^packages/ai/(src/prompts/|src/triage\.ts|src/ingestao\.ts|src/openrouter\.ts|evals/)'; then
+          if git diff --name-only "origin/$BASE_REF...HEAD" | grep -qE '^packages/ai/(src/prompts/|src/triage\.ts|src/ingestao\.ts|src/openrouter\.ts|src/openai\.ts|src/llm\.ts|evals/)'; then
             echo "sim=1" >> "$GITHUB_OUTPUT"
           fi
       - uses: pnpm/action-setup@v4

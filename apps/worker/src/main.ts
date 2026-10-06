@@ -1,5 +1,5 @@
 import { hostname } from 'node:os'
-import { createOpenRouterClient } from '@atd/ai'
+import { createLlmClient } from '@atd/ai'
 import { loadEnv, workerEnvSchema } from '@atd/config'
 import { keyFromBase64 } from '@atd/core'
 import { createBoss, createDb, ensureQueues, QUEUES, type DeliverJob, type IngestJob, type ProcessJob } from '@atd/db'
@@ -11,13 +11,16 @@ import { processConversation, type ProcessDeps } from './jobs/process-conversati
 import { startHeartbeat } from './heartbeat.ts'
 import { sanitizeJobError } from './job-error.ts'
 import { createLogger } from './logger.ts'
+import { configurarIa } from './ia.ts'
 import { initSentry, Sentry } from './sentry.ts'
 import { createStorage } from './storage.ts'
 
 const VERSION = process.env.APP_VERSION ?? 'dev'
 const env = loadEnv(workerEnvSchema)
+// provedor de IA e modelos: falha antes de conectar se algum modelo da OpenAI não tem preço (custo incalculável)
+const ia = configurarIa(env, 'ia-atendimento')
 const log = createLogger(env.LOG_LEVEL)
-if (env.OPENROUTER_DEV_SEM_ZDR) log.warn('OPENROUTER_DEV_SEM_ZDR=1: chamadas à IA SEM ZDR (só desenvolvimento local, dados inventados)')
+if (env.AI_PROVIDER === 'openrouter' && env.OPENROUTER_DEV_SEM_ZDR) log.warn('OPENROUTER_DEV_SEM_ZDR=1: chamadas à IA SEM ZDR (só desenvolvimento local, dados inventados)')
 initSentry(env.SENTRY_DSN, VERSION)
 
 // Session pooler (IPv4) ou conexão direta: processo de longa duração com prepared statements (o modo
@@ -35,12 +38,8 @@ try {
   await boss.start()
   await ensureQueues(boss)
 
-  const llm = createOpenRouterClient({
-    apiKey: env.OPENROUTER_API_KEY,
-    appTitle: 'ia-atendimento',
-    ...(env.OPENROUTER_BASE_URL ? { baseUrl: env.OPENROUTER_BASE_URL } : {}),
-    ...(env.OPENROUTER_DEV_SEM_ZDR ? { semZdrDev: true } : {}),
-  })
+  // produção: OpenAI (store: false); desenvolvimento local: OpenRouter (deny + zdr). Mesma interface LlmClient
+  const llm = createLlmClient(ia.cliente)
   // chave de serviço só aqui (processo do worker); nunca em log
   const storage = createStorage({ url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY })
   const deps: ProcessDeps = {
@@ -107,7 +106,8 @@ try {
 
   heartbeat = startHeartbeat(db, `${hostname()}-${process.pid}`, VERSION)
   await heartbeat.beat()
-  log.info({ version: VERSION }, 'worker iniciado')
+  // provedor e modelos (nunca a chave): confere no log de boot que a produção está na OpenAI
+  log.info({ version: VERSION, ...ia.resumo }, 'worker iniciado')
 } catch (err) {
   log.error({ err }, 'falha ao iniciar o worker')
   Sentry.captureException(err)

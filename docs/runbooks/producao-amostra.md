@@ -59,9 +59,12 @@ Formato dos exemplos: só a forma, nunca o valor real. "Gerar" = o agente gera c
 | `WHATSAPP_ACCESS_TOKEN` | ❌ **nunca** | ✅ | — | gerar `hex32` (token inválido de propósito) | 64 hex |
 | `WHATSAPP_GRAPH_VERSION` | — | opcional | — | padrão `v24.0` | `v24.0` |
 | `RESTAURANT_ID` | ✅ | ✅ (mesmo valor) | — | impresso pelo `bootstrap:prod` (passo 4) | uuid |
-| `OPENROUTER_API_KEY` | ❌ | ✅ | — | 🔑 passo 6 | `sk-or-v1-…` |
-| `AI_TRIAGE_MODELS` | — | ✅ | — | fixo (seção Modelos) | `mistralai/mistral-nemo,mistralai/mistral-small-3.2-24b-instruct` |
-| `AI_INGEST_MODELS` | — | ✅ | — | fixo (seção Modelos) | `google/gemini-3.1-flash-lite,openai/gpt-4.1-mini` |
+| `AI_PROVIDER` | ❌ | ✅ **`openai`** (o worker recusa outro valor em produção) | — | fixo | `openai` |
+| `OPENAI_API_KEY` | ❌ **nunca** | ✅ | — | 🔑 passo 6 (chave do **projeto** da OpenAI) | `sk-proj-…` |
+| `OPENAI_BASE_URL` | ❌ | ❌ (opcional; só e2e local aponta para o servidor falso) | — | — | — |
+| `AI_TRIAGE_MODELS` | — | ✅ | — | fixo (seção Modelos) | `gpt-4.1-mini` |
+| `AI_INGEST_MODELS` | — | ✅ | — | fixo (seção Modelos) | `gpt-4.1-mini,gpt-4.1` |
+| `OPENROUTER_API_KEY` | ❌ | ❌ (só com `AI_PROVIDER=openrouter`, desenvolvimento local) | — | — | — |
 | `OPENROUTER_DEV_SEM_ZDR` | ❌ | ❌ **nunca** (o worker recusa subir) | — | — | — |
 | `OPENROUTER_BASE_URL` | ❌ | ❌ (só e2e local) | — | — | — |
 | `LOG_LEVEL` | opcional | opcional | — | padrão `info` | `info` |
@@ -69,35 +72,27 @@ Formato dos exemplos: só a forma, nunca o valor real. "Gerar" = o agente gera c
 
 `NODE_ENV=production` e `APP_VERSION` do worker vêm do `docker-compose.prod.yml`; não vão no `.env`.
 
-## Modelos de IA (escolhidos em 06/10/2026)
+## Modelos de IA (OpenAI direto em produção, definidos em 06/10/2026)
 
-Consulta à API pública do OpenRouter (`/api/v1/models` e `/api/v1/endpoints/zdr`): só entram modelos com
-endpoint **ZDR** que aceita **`structured_outputs`**, sem data de expiração anunciada. O cliente manda em toda
-chamada `provider: { data_collection: 'deny', zdr: true, require_parameters: true }` e `response_format:
-json_schema` estrito. O `require_parameters` impede que o pedido caia num provedor que ignora o schema (ex.: Io Net
-no `mistral-nemo`, sem saída estruturada). Como os modelos sem raciocínio não aceitam o campo `reasoning`, o
-cliente repete a chamada uma vez sem ele quando o OpenRouter responde "No endpoints found that can handle the
-requested parameters" (404, sem custo).
+Produção usa **a OpenAI direto** (`AI_PROVIDER=openai`); o OpenRouter fica só no desenvolvimento local. O cliente
+chama `/chat/completions` com **`store: false`**, `response_format: json_schema` estrito e `max_completion_tokens`;
+o custo vem da tabela de preços em código (`packages/ai/src/precos-openai.ts`): **modelo fora da tabela ⇒ o worker
+não sobe**. O PDF do cardápio vai como parte `file` e a foto como `image_url`.
 
-- **Triagem** — `AI_TRIAGE_MODELS=mistralai/mistral-nemo,mistralai/mistral-small-3.2-24b-instruct`
-  - `mistral-nemo` (principal): ZDR em DekaLLM, DeepInfra, Parasail, Novita e Mistral (UE), todos com saída
-    estruturada; US$ 0,018–0,04/M entrada e 0,03–0,17/M saída. Sem raciocínio (não gasta `max_tokens` pensando).
-  - `mistral-small-3.2-24b-instruct` (reserva): ZDR em Mistral (UE), Parasail e DeepInfra; US$ 0,075–0,10/M
-    entrada e 0,20–0,30/M saída; sem raciocínio.
-  - Fora: `google/gemini-2.5-flash-lite` (o reserva anterior) **expira em 20/10/2026** no OpenRouter.
-  - Custo estimado: uma conversa de ~5 mensagens ≈ 10 chamadas, ~30 mil tokens de entrada e ~3 mil de saída
-    ⇒ **≈ US$ 0,001** no principal, **≈ US$ 0,004** se tudo cair no reserva.
-- **Leitura de cardápio (PDF/foto)** — `AI_INGEST_MODELS=google/gemini-3.1-flash-lite,openai/gpt-4.1-mini`
-  - `gemini-3.1-flash-lite` (principal): entrada texto/imagem/**arquivo (PDF nativo)**; ZDR no Google Vertex
-    (global/UE/EUA); US$ 0,25/M entrada e 1,50/M saída.
-  - `gpt-4.1-mini` (reserva): imagem + arquivo; ZDR no Azure; US$ 0,40/M entrada e 1,60/M saída; sem raciocínio.
-  - Fora: `google/gemini-2.5-flash` (expira em 20/10/2026).
-  - Custo estimado por importação (PDF/foto de 1–3 páginas, ~5 mil tokens de entrada e até 8 mil de saída;
-    teto do código 16 mil) ⇒ **≈ US$ 0,01–0,03**. A reserva de orçamento por importação é de US$ 0,10.
-- Com **US$ 10** de crédito: milhares de conversas simuladas ou centenas de importações.
-- **Confirmar com o smoke test após pôr crédito** (passo 6): ZDR + saída estruturada respondem nos quatro
-  modelos. O Gemini 3.1 é modelo com raciocínio; se o smoke test mostrar saída vazia/cortada, troque a ordem
-  (`openai/gpt-4.1-mini` primeiro) e registre.
+**Privacidade (decisão do time, 06/10/2026):** a OpenAI não tem região de dados no Brasil nem ZDR por padrão. O time
+aceitou a **retenção padrão de 30 dias para monitoramento de abuso, sem uso para treino**. Mitigações no código:
+`store: false`, PII redigida antes da chamada, o modelo nunca recebe o telefone. Registre isso na mensagem de "pronto".
+
+- **Triagem** — `AI_TRIAGE_MODELS=gpt-4.1-mini` (sem raciocínio, saída estruturada). Custo estimado: uma conversa
+  de ~5 mensagens ≈ 10 chamadas, ~30 mil tokens de entrada (grande parte em cache) e ~3 mil de saída ⇒ **centavos**
+  (confira o preço atual na tabela do código antes de prometer valor).
+- **Leitura de cardápio (PDF/foto)** — `AI_INGEST_MODELS=gpt-4.1-mini,gpt-4.1` (o segundo entra se o primeiro der erro
+  transitório ou recusar). Custo por importação de 1–3 páginas: **centavos**; a reserva de orçamento por importação é
+  de **US$ 0,50** (cobre a leitura e uma repetição no `gpt-4.1`). Cada leitura tem prazo total de 120 s somando os dois
+  modelos, e a importação inteira cabe nos 5 min do job.
+- Outros modelos da tabela (`gpt-4.1-nano`, `gpt-5-mini`, `gpt-5-nano`) só entram depois de passar no `eval:prod`.
+- Com **US$ 10** de limite mensal: milhares de conversas simuladas ou centenas de importações.
+- **Confirmar com `smoke:ia:prod` e `eval:prod`** (passo 6) antes de apresentar.
 
 ## Passo 0 — Preparar a máquina e o repositório
 
@@ -321,7 +316,7 @@ pnpm dlx vercel@62 env ls production
 (`DATABASE_URL`, `PHONE_ENC_KEY`, `WA_ID_PEPPER`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`,
 `WHATSAPP_PHONE_NUMBER_ID`, `RESTAURANT_ID`, `LOG_LEVEL`, `NEXT_PUBLIC_SUPABASE_URL`,
 `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_LIMITE_UPLOAD_MB`) e as 11 no `env ls`, todas em Production.
-**Nunca** cadastre `SUPABASE_SERVICE_ROLE_KEY`, `WHATSAPP_ACCESS_TOKEN` ou `OPENROUTER_*` na Vercel.
+**Nunca** cadastre `SUPABASE_SERVICE_ROLE_KEY`, `WHATSAPP_ACCESS_TOKEN`, `OPENAI_*` ou `OPENROUTER_*` na Vercel.
 Se a CLI não aceitar `--force`, remova antes com `pnpm dlx vercel@62 env rm <NOME> production --yes`.
 
 **Build de produção** (as `NEXT_PUBLIC_*` são embutidas **no build**, por isso vêm antes). O build é feito pela
@@ -347,35 +342,64 @@ curl -s -o /dev/null -w '%{http_code}\n' https://<domínio>/login   # esperado: 
 - `inspect` mostra um deploy antigo → o Redeploy ainda não terminou ou foi feito em Preview: peça para refazer em Production;
 - erro "Variáveis de ambiente inválidas" nos logs de função → rode o passo 7 e corrija a variável apontada.
 
-## Passo 6 — OpenRouter 🔑
+## Passo 6 — OpenAI 🔑
 
-🔑 **Peça ao humano** (openrouter.ai, conta da empresa):
+**Pré-condição:** passos 0–5 feitos; `.env.worker-producao` existe (passo 4). 🔑 **Peça ao humano**
+(platform.openai.com, conta da empresa):
 
-1. **Settings → Privacy:** ZDR (Zero Data Retention) obrigatório e sem treinar com os dados; ou um **Guardrail**
-   com ZDR obrigatório, `limit_usd` mensal e `reset_interval: monthly`, aplicado à chave abaixo.
-2. **Credits:** pôr **~US$ 10**.
-3. **Keys → Create key** de produção com **limite mensal** (ex.: US$ 10); colar **direto** no `.env.worker-producao`
-   como `OPENROUTER_API_KEY=sk-or-v1-…`.
+1. **Criar um projeto** só para esta amostra (ex.: `atendimento-amostra`).
+2. No projeto, **Limits → limite de gasto mensal** (ex.: US$ 10) e saldo/cartão suficiente. É a camada 2 do
+   orçamento; a camada 1 é o nosso banco.
+3. No projeto, **Limits → Model access (liberar modelos):** permitir só `gpt-4.1-mini` e `gpt-4.1` (e nenhum outro).
+4. **API keys → Create** uma chave **do projeto** (não a da organização); colar **direto** no
+   `.env.worker-producao` como `OPENAI_API_KEY=sk-proj-…`.
+5. Ciente da privacidade (seção Modelos): retenção padrão de 30 dias da OpenAI, sem treino, aceita pelo time.
 
-Complete o worker e rode o **smoke test**. Ele usa **o mesmo cliente do worker** (`createOpenRouterClient`:
-`deny` + `zdr` + `require_parameters`, `json_schema` estrito, `reasoning` desligado com a repetição do cliente) e
-chama cada modelo sozinho e depois cada lista (triagem e cardápio), exigindo `{"ok":true}` em todas:
+Complete o worker e rode o **smoke test**. Ele usa **o mesmo cliente e a mesma validação do worker** (`store: false`,
+`json_schema` estrito, preço de cada modelo na tabela) e chama cada modelo sozinho e depois cada lista (triagem e
+cardápio), exigindo `{"ok":true}` em todas:
 
 ```bash
-printf 'AI_TRIAGE_MODELS=mistralai/mistral-nemo,mistralai/mistral-small-3.2-24b-instruct\nAI_INGEST_MODELS=google/gemini-3.1-flash-lite,openai/gpt-4.1-mini\n' >> .env.worker-producao
-pnpm --filter @atd/worker smoke:openrouter:prod; echo "saida=$?"
+printf 'AI_PROVIDER=openai\nAI_TRIAGE_MODELS=gpt-4.1-mini\nAI_INGEST_MODELS=gpt-4.1-mini,gpt-4.1\n' >> .env.worker-producao
+pnpm --filter @atd/worker smoke:ia:prod; echo "saida=$?"
 ```
 
-**Saída esperada:** seis linhas `OK <modelo> → <modelo usado> (US$ …, … ms)` (quatro modelos sozinhos e as duas
-listas), `Resultado: OK` e `saida=0`. O custo total fica abaixo de US$ 0,01. **Se falhar** (`saida=1`; cada `FALHA`
-traz o erro do OpenRouter):
-- "No endpoints found matching your data policy" → a conta/Guardrail ou o modelo não tem ZDR: troque o modelo por
-  outro da seção Modelos e registre;
-- "No endpoints found that can handle the requested parameters" mesmo depois da repetição → nenhum provedor ZDR
-  desse modelo tem saída estruturada hoje: troque o modelo (confira em `openrouter.ai/<modelo>` → Providers, coluna
-  structured outputs + ZDR) e registre;
-- `saida_invalida`/`saida_truncada` no Gemini → inverta a ordem em `AI_INGEST_MODELS` (`openai/gpt-4.1-mini` primeiro);
-- `HTTP 401`/`402` → 🔑 chave ou crédito; `.env.worker-producao: not found` → rode da raiz.
+**Como o env é carregado (smoke e eval):** os dois scripts leem o `.env.worker-producao` da **raiz do repositório**
+(qualquer que seja a pasta de onde você rodou) e os valores do arquivo **vencem** os do shell — um `.env` local
+carregado antes (`set -a; source .env`) não troca provedor, chave nem modelos. Os dois ignoram `OPENAI_BASE_URL` e
+`OPENROUTER_BASE_URL` (só e2e local); o smoke também ignora `OPENROUTER_DEV_SEM_ZDR`.
+
+**Saída esperada:** a linha `Provedor: openai` (se aparecer `AVISO: provedor openrouter`, falta `AI_PROVIDER=openai` no
+`.env.worker-producao`: corrija antes de seguir), uma linha `OK <modelo> → <modelo usado> (US$ …, … ms)` por modelo
+sozinho e por lista (o modelo usado pode vir com data, ex.: `gpt-4.1-mini-2025-04-14`), `Resultado: OK` e `saida=0`.
+O custo total fica abaixo de US$ 0,01. **Se falhar** (`saida=1`; cada `FALHA` traz o erro da OpenAI, com qualquer
+pedaço de chave trocado por `sk-…`):
+- `FALHA .env.worker-producao: not found` → o arquivo não existe na raiz do repositório (passo 4);
+- `FALHA Variáveis de ambiente inválidas ou ausentes: OPENAI_API_KEY` (ou `AI_PROVIDER`, `AI_TRIAGE_MODELS`) → falta a
+  linha no `.env.worker-producao` ou o valor está errado; `AI_PROVIDER` aparece se o arquivo tiver
+  `NODE_ENV=production` sem `AI_PROVIDER=openai`;
+- `FALHA Modelo(s) sem preço cadastrado em packages/ai/src/precos-openai.ts: <modelos> (cadastrados: …)` → o nome não
+  está na tabela de preços: use um nome da seção Modelos (o worker também não sobe com ele; nenhuma chamada foi feita);
+- `… Incorrect API key provided: sk-… (HTTP 401)` → 🔑 chave errada, revogada ou de outro projeto;
+- `… does not have access to model … (HTTP 403)` (ou `HTTP 404` com "does not exist") → 🔑 o modelo não está liberado
+  no projeto (passo 3);
+- `sem_cota: … You exceeded your current quota … (HTTP 429)` → 🔑 sem saldo ou limite mensal do projeto atingido;
+  `… Rate limit reached … (HTTP 429)` → espere um minuto e rode de novo;
+- `saida_invalida`/`saida_truncada` → troque o modelo pelo próximo da lista e registre.
+
+Depois do smoke test, rode o **portão de qualidade** (triagem S1–S4 e frustração contra a OpenAI, com o env de
+produção carregado como acima e `AI_PROVIDER=openai` forçado; custa centavos) e **só apresente se passar**:
+
+```bash
+pnpm --filter @atd/ai eval:prod; echo "saida=$?"
+```
+
+**Saída esperada:** cada eval imprime seu relatório (acerto por modelo contra a meta; também gravado em
+`packages/ai/evals/<serviço>/resultados/`), e no fim `OK s1`, `OK s2`, `OK s3`, `OK s4`, `OK frustracao`,
+`Resultado: OK` e `saida=0`. Todos rodam mesmo se um reprovar. **Se falhar:** relate ao humano as linhas `FALHA` e a
+seção "Erros por modelo" de cada relatório reprovado (sem segredos); não publique a amostra para apresentação até ele
+decidir (trocar de modelo ou ajustar prompt é trabalho de desenvolvimento, não deste runbook). Erro de configuração
+(`Defina OPENAI_API_KEY`, "sem preço cadastrado") tem a mesma correção do smoke test.
 
 ## Passo 7 — Conferência antes do worker
 
@@ -389,7 +413,7 @@ scripts/producao/verificar.sh --bootstrap .env.production-bootstrap --vercel .en
 
 **Saída esperada:** só `OK` (e `AVISO` apenas se você usou outra porta de propósito) e `Resultado: 0 falha(s)`;
 código de saída 0. O script confere: arquivos `600` e fora do git; variáveis obrigatórias e proibidas por destino;
-chaves de 32 bytes iguais nos dois destinos; `NEXT_PUBLIC_LIMITE_UPLOAD_MB=4`; ausência de `OPENROUTER_DEV_SEM_ZDR`;
+chaves de 32 bytes iguais nos dois destinos; `NEXT_PUBLIC_LIMITE_UPLOAD_MB=4`; `AI_PROVIDER=openai` e `OPENAI_API_KEY` no worker (sem `OPENROUTER_API_KEY`) e ausência de `OPENROUTER_DEV_SEM_ZDR`;
 login real como `web_app`/`worker_app`; Postgres 17; 33 migrations; buckets privados; roles com login; restaurante,
 dono, limites de gasto e demo; `RESTAURANT_ID` igual ao do banco; cadastro público desligado; Data API sem `public`;
 chave de serviço lendo o Storage; `/login` 200 e webhook recusando POST sem assinatura.
@@ -445,12 +469,13 @@ ssh <usuario>@<host> "cd /opt/atendimento && printf 'WORKER_IMAGE=atd-worker\nIM
 ```bash
 sleep 20
 ssh <usuario>@<host> 'cd /opt/atendimento && docker compose --env-file .deploy.env -f docker-compose.prod.yml ps \
-  && docker compose --env-file .deploy.env -f docker-compose.prod.yml logs --since 2m worker | grep -c "worker iniciado"'
+  && docker compose --env-file .deploy.env -f docker-compose.prod.yml logs --since 2m worker | grep "worker iniciado" | grep -c "\"provedorIa\":\"openai\""'
 ```
 
-**Saída esperada:** serviço `worker` `running` e contagem ≥ 1. **Se falhar:** `Variáveis de ambiente inválidas ou
+**Saída esperada:** serviço `worker` `running` e contagem ≥ 1 (a linha `worker iniciado` traz `"provedorIa":"openai"` e os
+modelos, nunca a chave). **Se falhar:** `Variáveis de ambiente inválidas ou
 ausentes: X` → corrija `X` no `.env` do VPS (e no `.env.worker-producao`), `up -d` de novo; `OPENROUTER_DEV_SEM_ZDR`
-na mensagem → apague a linha; erro de conexão ao banco → confira a porta 5432 (pooler session) e se o VPS sai para a internet.
+na mensagem → apague a linha; `AI_PROVIDER` na mensagem → deve ser `openai` em produção; `Modelo(s) sem preço cadastrado` → use os nomes da seção Modelos; erro de conexão ao banco → confira a porta 5432 (pooler session) e se o VPS sai para a internet.
 O worker **não** abre porta.
 
 ## Passo 9 — Checklist final (com evidência)
@@ -497,7 +522,7 @@ Amostra publicada.
 - Painel: https://<domínio> (Vercel, região gru1, deploy <id/URL do deploy>)
 - Supabase: projeto <ref> em sa-east-1, Postgres <versão>, 33 migrations, buckets privados
 - Worker: VPS <host>, imagem <tag>, status running, "worker iniciado" às <hora>
-- Modelos: triagem mistral-nemo → mistral-small-3.2; cardápio gemini-3.1-flash-lite → gpt-4.1-mini (smoke test: <resultado>)
+- IA: OpenAI direto (`AI_PROVIDER=openai`, `store: false`, retenção padrão de 30 dias aceita pelo time); triagem gpt-4.1-mini; cardápio gpt-4.1-mini → gpt-4.1 (smoke:ia:prod: <resultado>; eval:prod: <resultado>)
 - verificar.sh: 0 falha(s) em <data/hora>
 - Checklist: TOTP ok · IA Online · S1/S2/S3/S4 ok · handoff em tempo real em <N> s · CSV ok · gerente restrito ok · Gastos US$ <x>
 - Segredos: só em .env.production-bootstrap, .env.vercel-producao, .env.worker-producao (chmod 600, fora do git)

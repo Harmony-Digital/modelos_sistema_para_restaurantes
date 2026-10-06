@@ -5,9 +5,11 @@
  * Não grava nada no banco nem envia mensagem.
  */
 import { parseArgs } from 'node:util'
-import { createOpenRouterClient, parseTriageV2, triageV2, type TriageV2 } from '@atd/ai'
+import { createLlmClient, parseTriageV2, triageV2, type TriageV2 } from '@atd/ai'
+import { iaEnvSchema, loadEnv } from '@atd/config'
 import { resolverS1 } from '@atd/core'
 import { carregarContextoS1, createDb, getSingleRestaurantId } from '@atd/db'
+import { configurarIa } from '../src/ia.ts'
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: { agora: { type: 'string' }, itens: { type: 'string' } } })
 const mensagem = positionals.join(' ').trim()
@@ -23,11 +25,9 @@ try {
   if (values.itens) {
     itens = parseTriageV2({ itens: JSON.parse(values.itens), fora_escopo: false }).itens
   } else {
-    const apiKey = process.env.OPENROUTER_API_KEY
-    if (!apiKey) throw new Error('Sem OPENROUTER_API_KEY: use --itens para testar sem a IA')
-    const modelos = (process.env.AI_TRIAGE_MODELS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
-    if (!modelos.length) throw new Error('Defina AI_TRIAGE_MODELS (ex.: mistralai/mistral-nemo,mistralai/mistral-small-3.2-24b-instruct)')
-    const r = await triageV2(createOpenRouterClient({ apiKey, appTitle: 'ia-atendimento-cli', semZdrDev: process.env.OPENROUTER_DEV_SEM_ZDR === '1' && process.env.NODE_ENV !== 'production' }), { models: modelos, restaurante: ctx.restaurante, text: mensagem })
+    // mesmo provedor e validação do worker (AI_PROVIDER; padrão openrouter): sem chave, use --itens
+    const ia = configurarIa(loadEnv(iaEnvSchema), 'ia-atendimento-cli')
+    const r = await triageV2(createLlmClient(ia.cliente), { models: ia.resumo.modelosTriagem, restaurante: ctx.restaurante, text: mensagem })
     if (!r.ok) throw new Error(`Triagem falhou: ${r.error}`)
     process.stdout.write(`Modelo: ${r.model} · custo: US$ ${r.usage.costUsd ?? '?'} · ${r.latencyMs} ms\n`)
     itens = r.data.itens

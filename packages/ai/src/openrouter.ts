@@ -24,7 +24,10 @@ export interface LlmClient {
     jsonSchema: Record<string, unknown>
     parse: (raw: unknown) => T
     maxTokens: number
-    /** Sobrepõe o timeout do cliente (leitura de documento é mais lenta que a triagem). */
+    /**
+     * Prazo TOTAL da chamada, somando todos os modelos da lista (não é por modelo); sobrepõe o do cliente (leitura de
+     * documento é mais lenta que a triagem).
+     */
     timeoutMs?: number
     /**
      * Padrão false: manda `reasoning: { enabled: false }` — modelo de raciocínio gastava o max_tokens pensando e
@@ -34,9 +37,10 @@ export interface LlmClient {
   }): Promise<JsonCallResult<T>>
 }
 
-type ApiResponse = {
+/** Resposta do Chat Completions (formato comum ao OpenRouter e à OpenAI). */
+export type ApiResponse = {
   model?: string
-  choices?: { message?: { content?: string | null }; finish_reason?: string | null }[]
+  choices?: { message?: { content?: string | null; refusal?: string | null }; finish_reason?: string | null }[]
   usage?: {
     prompt_tokens?: number
     completion_tokens?: number
@@ -44,7 +48,7 @@ type ApiResponse = {
     cost?: number | null
   }
   error?: {
-    code?: number
+    code?: number | string | null
     message?: string
     metadata?: { raw?: unknown; provider_name?: unknown; failed_routing_step?: unknown } | null
   }
@@ -57,7 +61,7 @@ const MAX_ERRO = 400
  * do provedor em metadata.raw, e a etapa de roteamento que barrou em metadata.failed_routing_step.
  * O texto vai para log e ai_runs.erro: PII mascarada e tamanho limitado.
  */
-function mensagemDeErro(body: ApiResponse, status: number): string {
+export function mensagemDeErro(body: ApiResponse, status: number): string {
   const e = body.error
   if (!e?.message) return `HTTP ${status}`
   const md = e.metadata ?? {}
@@ -79,7 +83,7 @@ function mensagemDeErro(body: ApiResponse, status: number): string {
   return redactPii(completa).slice(0, MAX_ERRO)
 }
 
-const num = (x: unknown): number => {
+export const num = (x: unknown): number => {
   const n = typeof x === 'string' && x.trim() === '' ? NaN : Number(x)
   return Number.isFinite(n) ? n : 0
 }
@@ -105,12 +109,12 @@ function toUsage(u: unknown): LlmUsage | null {
   }
 }
 
-type ParteApi =
+export type ParteApi =
   | { type: 'text'; text: string }
   | { type: 'image_url'; image_url: { url: string } }
   | { type: 'file'; file: { filename: string; file_data: string } }
 
-function parteApi(p: ConteudoUsuario): ParteApi {
+export function parteApi(p: ConteudoUsuario): ParteApi {
   if (p.type === 'text') return { type: 'text', text: p.text }
   if (p.type === 'image') return { type: 'image_url', image_url: { url: `data:${p.mime};base64,${p.base64}` } }
   return { type: 'file', file: { filename: p.filename, file_data: `data:application/pdf;base64,${p.base64}` } }
@@ -128,6 +132,7 @@ export function createOpenRouterClient(cfg: {
   apiKey: string
   appTitle: string
   fetch?: typeof fetch
+  /** Prazo total de cada `completeJson` (a troca de modelo é no servidor do OpenRouter). Padrão 20 s. */
   timeoutMs?: number
   /** Só para teste (OpenRouter falso do e2e). */
   baseUrl?: string

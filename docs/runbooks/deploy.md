@@ -96,7 +96,9 @@ App → WhatsApp → Configuration:
 - Gerar token **permanente** de System User (Business Settings → System Users → Generate token, permissões `whatsapp_business_messaging` e `whatsapp_business_management`). Não use o token temporário de 24 h.
 - Conferir a versão da Graph API (padrão `v24.0`, variável `WHATSAPP_GRAPH_VERSION`).
 
-## 8. OpenRouter (antes da seção 7)
+## 8. Provedor de IA (antes da seção 7)
+
+> **Produção usa a OpenAI direto** (`AI_PROVIDER=openai`, `OPENAI_API_KEY`): crie o projeto, o limite de gasto e a chave como no passo 6 de [producao-amostra.md](producao-amostra.md), e rode `smoke:ia:prod` e `eval:prod`. As linhas abaixo valem para o OpenRouter (desenvolvimento local e staging que ainda use `AI_PROVIDER=openrouter`; produção recusa esse provedor). Na seção 9, no lugar de `OPENROUTER_API_KEY`, o `.env` de produção leva `AI_PROVIDER=openai`, `OPENAI_API_KEY` e `AI_INGEST_MODELS`.
 
 - Criar API key de produção com `limit` mensal.
 - Criar Guardrail com `limit_usd`, `reset_interval: monthly` e **ZDR (Zero Data Retention) obrigatório**.

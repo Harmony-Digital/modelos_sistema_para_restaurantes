@@ -1,12 +1,13 @@
 /**
- * Evals de frustração — camada 1: `frustracao` da triage-v6 com modelo real via OpenRouter.
- * Uso: pnpm --filter @atd/ai eval:frustracao [--modelos a,b,c] [--teto 0.50] [--max-chamadas 200]
+ * Evals de frustração — camada 1: `frustracao` da triage-v6 com modelo real via OpenRouter ou OpenAI (--provider ou AI_PROVIDER; padrão openrouter).
+ * Uso: pnpm --filter @atd/ai eval:frustracao [--modelos a,b,c] [--provider openrouter|openai] [--teto 0.50] [--max-chamadas 200]
  * Custo real, com teto por execução. Grava o relatório em evals/frustracao/resultados/AAAA-MM-DD-frustracao.md.
  * Gate por modelo: acerto ≥ 90%, no máximo 1 falso positivo (handoff desnecessário) e execução completa.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
-import { createOpenRouterClient, type LlmClient } from '../../src/openrouter.ts'
+import type { LlmClient } from '../../src/openrouter.ts'
+import { clienteDoEval } from '../provedor.ts'
 import { triageV6 } from '../../src/triage.ts'
 import { custoDaChamada } from '../s1/custo.ts'
 import { CONTEXTO } from '../s4/fixture.ts'
@@ -98,9 +99,7 @@ export async function rodarFrustracao(p: {
 }
 
 if (import.meta.main) {
-  const { values } = parseArgs({ options: { modelos: { type: 'string' }, teto: { type: 'string', default: '0.50' }, 'max-chamadas': { type: 'string', default: '200' } } })
-  const apiKey = process.env.OPENROUTER_API_KEY
-  if (!apiKey) throw new Error('Defina OPENROUTER_API_KEY (no .env da raiz ou no ambiente)')
+  const { values } = parseArgs({ options: { modelos: { type: 'string' }, provider: { type: 'string' }, teto: { type: 'string', default: '0.50' }, 'max-chamadas': { type: 'string', default: '200' } } })
   const modelos = (values.modelos ?? process.env.AI_TRIAGE_MODELS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
   if (modelos.length === 0) throw new Error('Informe --modelos ou AI_TRIAGE_MODELS')
   const teto = Number(values.teto)
@@ -108,7 +107,7 @@ if (import.meta.main) {
   const maxChamadas = Number(values['max-chamadas'])
   if (!Number.isInteger(maxChamadas) || maxChamadas <= 0) throw new Error('--max-chamadas deve ser um inteiro maior que zero')
 
-  const llm = createOpenRouterClient({ apiKey, appTitle: 'ia-atendimento-evals', semZdrDev: process.env.OPENROUTER_DEV_SEM_ZDR === '1' && process.env.NODE_ENV !== 'production' })
+  const { llm } = clienteDoEval({ provider: values.provider, env: process.env, modelos })
   const r = await rodarFrustracao({ llm, modelos, teto, maxChamadas })
   const hoje = new Date().toISOString().slice(0, 10)
   const pasta = new URL('./resultados/', import.meta.url)

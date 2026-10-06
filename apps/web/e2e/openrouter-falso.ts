@@ -32,8 +32,16 @@ export type LeituraCardapioFalsa = {
   }[]
 }
 
+/** Partes de conteúdo das mensagens (array), para conferir anexos. */
+function partes(mensagens: { content: unknown }[]): { type?: string; file?: { file_data?: unknown } }[] {
+  return mensagens.flatMap((m) => (Array.isArray(m.content) ? (m.content as { type?: string; file?: { file_data?: unknown } }[]) : []))
+}
+
 /**
- * Servidor local no formato do OpenRouter: responde a triagem por regras fixas e nunca cobra.
+ * Servidor local no formato do OpenRouter e da OpenAI (`/chat/completions` nos dois): responde a triagem por regras
+ * fixas e nunca cobra. O caminho é reconhecido pelo corpo: com `provider` é OpenRouter (exige deny + zdr +
+ * require_parameters); sem ele é OpenAI (exige `store: false`, `json_schema` estrito e um `model`, sem campos do
+ * OpenRouter) — o e2e roda o worker com `AI_PROVIDER=openai`, o caminho de produção.
  * `responder` recebe a mensagem do cliente e o `user` inteiro (com `<pergunta_pendente>`, quando houver).
  * `leituraCardapio` responde a leitura de PDF/foto da importação (sem ela, a leitura falha com 500); se devolver uma
  * Promise, a resposta espera por ela.
@@ -47,6 +55,8 @@ export async function iniciarOpenRouterFalso(
   const leituras: { pdfNativo: boolean }[] = []
   /** `user` completo de cada chamada, na mesma ordem de `chamadas`. */
   const entradas: string[] = []
+  /** Provedor de cada chamada aceita (triagem e leitura), na ordem de chegada. */
+  const provedores: ('openrouter' | 'openai')[] = []
   const servidor = createServer((req, res) => {
     let corpo = ''
     req.on('data', (c: Buffer) => { corpo += c.toString() })
@@ -58,7 +68,11 @@ export async function iniciarOpenRouterFalso(
         messages: { role: string; content: unknown }[]
         provider?: { data_collection?: string; zdr?: boolean; require_parameters?: boolean }
         plugins?: { id?: string; pdf?: { engine?: string } }[]
-        response_format?: { json_schema?: { name?: string } }
+        response_format?: { type?: string; json_schema?: { name?: string; strict?: boolean } }
+        // OpenAI
+        model?: unknown
+        models?: unknown
+        store?: unknown
       }
       try {
         body = JSON.parse(corpo) as typeof body
@@ -66,23 +80,47 @@ export async function iniciarOpenRouterFalso(
         return responderJson(400, { error: { message: 'corpo JSON inválido' } })
       }
       if (!Array.isArray(body?.messages)) return responderJson(400, { error: { message: 'messages ausente' } })
-      // a política de dados da LGPD também é conferida aqui
-      if (body.provider?.data_collection !== 'deny' || body.provider?.zdr !== true) {
-        return responderJson(400, { error: { message: 'chamada sem data_collection deny + zdr' } })
+      const openai = body.provider === undefined
+      if (openai) {
+        // OpenAI (produção): nada guardado do lado deles e saída presa ao esquema
+        if (body.store !== false) return responderJson(400, { error: { message: 'chamada sem store: false' } })
+        if (typeof body.model !== 'string' || !body.model) return responderJson(400, { error: { message: 'model ausente' } })
+        if (body.models !== undefined || body.plugins !== undefined) {
+          return responderJson(400, { error: { message: 'campos do OpenRouter (models/plugins) no corpo da OpenAI' } })
+        }
+        if (body.response_format?.type !== 'json_schema' || body.response_format.json_schema?.strict !== true) {
+          return responderJson(400, { error: { message: 'response_format sem json_schema estrito' } })
+        }
+      } else {
+        // a política de dados da LGPD também é conferida aqui
+        if (body.provider?.data_collection !== 'deny' || body.provider?.zdr !== true) {
+          return responderJson(400, { error: { message: 'chamada sem data_collection deny + zdr' } })
+        }
+        // e o roteamento só para provedor que honra o json_schema
+        if (body.provider.require_parameters !== true) {
+          return responderJson(400, { error: { message: 'chamada sem provider.require_parameters' } })
+        }
       }
-      // e o roteamento só para provedor que honra o json_schema
-      if (body.provider.require_parameters !== true) {
-        return responderJson(400, { error: { message: 'chamada sem provider.require_parameters' } })
-      }
-      const resposta = (conteudo: unknown) => responderJson(200, {
-        model: 'e2e/falso',
-        choices: [{ message: { role: 'assistant', content: JSON.stringify(conteudo) } }],
-        usage: { prompt_tokens: 10, completion_tokens: 5, cost: 0 },
-      })
+      provedores.push(openai ? 'openai' : 'openrouter')
+      // OpenAI: devolve o modelo pedido e usage sem custo (o cliente calcula pela tabela de preços, como em produção)
+      const resposta = (conteudo: unknown) => responderJson(200, openai
+        ? {
+            model: body.model,
+            choices: [{ message: { role: 'assistant', content: JSON.stringify(conteudo), refusal: null }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, prompt_tokens_details: { cached_tokens: 0 } },
+          }
+        : {
+            model: 'e2e/falso',
+            choices: [{ message: { role: 'assistant', content: JSON.stringify(conteudo) } }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, cost: 0 },
+          })
       // leitura de cardápio (job document.ingest): mesma política de dados, resposta fixa
       if (body.response_format?.json_schema?.name === 'rascunho_cardapio') {
         if (!opcoes.leituraCardapio) return responderJson(500, { error: { message: 'leitura de cardápio não configurada no e2e' } })
-        const pdfNativo = (body.plugins ?? []).some((p) => p.id === 'file-parser' && p.pdf?.engine === 'native')
+        // OpenRouter: plugin file-parser com motor nativo; OpenAI: o PDF vai como parte `file` e o modelo lê direto
+        const pdfNativo = openai
+          ? partes(body.messages).some((p) => p.type === 'file' && String(p.file?.file_data ?? '').startsWith('data:application/pdf;base64,'))
+          : (body.plugins ?? []).some((p) => p.id === 'file-parser' && p.pdf?.engine === 'native')
         leituras.push({ pdfNativo })
         // pode ser assíncrona: o teste segura a leitura para ver o estado "Lendo o cardápio…"
         void Promise.resolve(opcoes.leituraCardapio()).then(resposta, (e: unknown) => responderJson(500, { error: { message: String(e) } }))
@@ -109,6 +147,7 @@ export async function iniciarOpenRouterFalso(
     chamadas,
     entradas,
     leituras,
+    provedores,
     fechar: () => new Promise<void>((ok) => servidor.close(() => ok())),
   }
 }
