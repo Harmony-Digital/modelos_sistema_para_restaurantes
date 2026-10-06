@@ -1,5 +1,5 @@
 'use client'
-import { Check, CheckCheck, Clock3, List, MapPin } from 'lucide-react'
+import { Check, CheckCheck, Clock3, FileText, List, MapPin } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { WA } from './colors'
 import type { SimMessage, SimStatus } from './types'
@@ -130,6 +130,34 @@ export function Bubble(props: { m: SimMessage; onEscolher: (mensagemId: string, 
           >
             Abrir no Maps
           </a>
+          <Hora hora={m.hora} />
+        </div>
+      )}
+
+      {m.tipo === 'documento' && (
+        <div className="w-60">
+          <div className="flex items-center gap-2 rounded-md p-2" style={{ background: '#2A3942' }}>
+            <FileText aria-hidden="true" className="size-8 shrink-0" style={{ color: '#F15C6D' }} />
+            <p className="min-w-0 break-words font-medium">{m.titulo}</p>
+          </div>
+          {m.url
+            ? (
+              <a href={m.url} target="_blank" rel="noreferrer noopener" className="mt-1 block text-sm font-medium" style={{ color: WA.lida }}>
+                Abrir
+              </a>
+            )
+            : <p className="mt-1 text-sm" style={{ color: WA.meta }}>Arquivo indisponível na prévia</p>}
+          <Hora hora={m.hora} />
+        </div>
+      )}
+
+      {m.tipo === 'imagem' && (
+        <div className="w-60">
+          {m.url
+            // URL assinada do Storage (externa e curta): <img> simples, sem otimização do Next
+            ? <img src={m.url} alt={m.legenda} className="max-h-80 w-full rounded-md object-cover" />
+            : <p className="rounded-md p-2 text-sm" style={{ background: '#2A3942', color: WA.meta }}>Arquivo indisponível na prévia</p>}
+          {m.legenda && <p className="mt-1.5 whitespace-pre-wrap break-words">{m.legenda}</p>}
           <Hora hora={m.hora} />
         </div>
       )}

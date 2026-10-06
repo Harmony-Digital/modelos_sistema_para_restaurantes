@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX "knowledge_documents_arquivo_sha256_uq" ON "knowledge_documents" USING btree ("restaurant_id","sha256") WHERE "knowledge_documents"."origem" = 'arquivo' and "knowledge_documents"."status" not in ('rejeitado', 'erro');--> statement-breakpoint
+ALTER TABLE "knowledge_documents" ADD CONSTRAINT "knowledge_documents_mime_ck" CHECK ("knowledge_documents"."mime" in ('application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'text/csv'));

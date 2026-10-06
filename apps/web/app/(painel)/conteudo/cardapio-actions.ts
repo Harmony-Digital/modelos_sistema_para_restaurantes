@@ -1,0 +1,109 @@
+'use server'
+import { revalidatePath } from 'next/cache'
+import { z } from 'zod'
+import { ativarArquivo, listarCardapio, registrarArquivoCardapio, salvarCategoria, salvarExcecaoItem, salvarItem, type ErroPainel, type ResultadoPainel } from '@atd/db'
+import { actionErrorFromZod, type ActionResult } from '@/lib/action-result'
+import { requireStaff } from '@/lib/dal'
+import { MENSAGEM_ERRO_PAINEL } from '@/lib/painel-erros'
+import {
+  arquivoMetaSchema, categoriaSchema, excecaoSchema, itemSchema,
+  type CategoriaForm, type ExcecaoForm, type ItemForm,
+} from '@/lib/schemas/cardapio'
+import { getDb } from '@/lib/server/db'
+import { arquivoDoForm, ERRO_SEM_ARQUIVO, ERRO_STORAGE, lerArquivoCardapio, subirArquivo } from '@/lib/server/upload-arquivo'
+import { createClient } from '@/lib/supabase/server'
+
+const GESTAO: ['dono', 'gerente'] = ['dono', 'gerente']
+const NAO_ENCONTRADO = { ok: false as const, formError: 'Não encontramos esse item.' }
+const idValido = (id: string) => z.uuid().safeParse(id).success
+const SEM_PERMISSAO_GERAL = 'Só o dono, ou gerente com acesso a todas as unidades, altera categorias e itens.'
+const SEM_PERMISSAO_UNIDADE = 'Você só pode alterar o cardápio das unidades que gerencia.'
+const PREVIA_SEGUNDOS = 120
+
+function revalidar() {
+  revalidatePath('/conteudo')
+}
+
+/** Resultado do banco em ActionResult com mensagens do cardápio (a de `nome_duplicado` vai para o campo Nome). */
+function resultado<T>(r: ResultadoPainel<T>, o: { semPermissao: string; duplicado?: string }): ActionResult<T> {
+  if (r.ok) {
+    revalidar()
+    return { ok: true, data: r.valor }
+  }
+  const erro: ErroPainel = r.erro
+  if (erro === 'sem_permissao') return { ok: false, formError: o.semPermissao }
+  if (erro === 'nome_duplicado' && o.duplicado) return { ok: false, fieldErrors: { nome: o.duplicado } }
+  return { ok: false, formError: MENSAGEM_ERRO_PAINEL[erro] }
+}
+
+export async function salvarCategoriaAction(id: string | null, input: CategoriaForm): Promise<ActionResult<{ id: string }>> {
+  const s = await requireStaff(GESTAO)
+  if (id !== null && !idValido(id)) return NAO_ENCONTRADO
+  const p = categoriaSchema.safeParse(input)
+  if (!p.success) return actionErrorFromZod(p.error)
+  const r = await salvarCategoria(getDb(), s.claims, id, p.data)
+  return resultado(r, { semPermissao: SEM_PERMISSAO_GERAL, duplicado: 'Já existe uma categoria com esse nome.' })
+}
+
+export async function salvarItemAction(id: string | null, input: ItemForm): Promise<ActionResult<{ id: string }>> {
+  const s = await requireStaff(GESTAO)
+  if (id !== null && !idValido(id)) return NAO_ENCONTRADO
+  const p = itemSchema.safeParse(input)
+  if (!p.success) return actionErrorFromZod(p.error)
+  const { preco, ...resto } = p.data
+  const r = await salvarItem(getDb(), s.claims, id, { ...resto, precoCentavos: preco })
+  return resultado(r, { semPermissao: SEM_PERMISSAO_GERAL, duplicado: 'Já existe um item com esse nome nessa categoria.' })
+}
+
+/** Sem disponibilidade própria e sem preço próprio = o item volta ao padrão da unidade. */
+export async function salvarExcecaoAction(input: ExcecaoForm): Promise<ActionResult<null>> {
+  const s = await requireStaff(GESTAO)
+  const p = excecaoSchema.safeParse(input)
+  if (!p.success) return actionErrorFromZod(p.error)
+  const { itemId, unitId, disponivel, precoOverrideCentavos } = p.data
+  const dados = disponivel === null && precoOverrideCentavos === null
+    ? { itemId, unitId, remover: true as const }
+    : { itemId, unitId, disponivel, precoOverrideCentavos }
+  const r = await salvarExcecaoItem(getDb(), s.claims, dados)
+  return resultado(r, { semPermissao: SEM_PERMISSAO_UNIDADE })
+}
+
+/** Upload do cardápio (validação e Storage em `lib/server/upload-arquivo`). */
+export async function enviarArquivoAction(fd: FormData): Promise<ActionResult<{ id: string }>> {
+  const s = await requireStaff(GESTAO)
+  const meta = arquivoMetaSchema.safeParse({ titulo: fd.get('titulo') ?? '', unitId: fd.get('unitId') ?? '' })
+  const arquivo = arquivoDoForm(fd.get('arquivo'))
+  const erros: Record<string, string> = meta.success ? {} : actionErrorFromZod(meta.error).fieldErrors
+  if (!arquivo) erros.arquivo = ERRO_SEM_ARQUIVO
+  if (!meta.success || !arquivo) return { ok: false, fieldErrors: erros }
+
+  const a = await lerArquivoCardapio(arquivo)
+  if (!a.ok) return { ok: false, fieldErrors: { arquivo: a.erro } }
+  const enviado = await subirArquivo('cardapio', s.restaurantId, a)
+  if (!enviado.ok) return { ok: false, formError: ERRO_STORAGE }
+  const r = await registrarArquivoCardapio(getDb(), s.claims, {
+    unitId: meta.data.unitId, titulo: meta.data.titulo, storagePath: enviado.storagePath, mime: a.mime, tamanho: a.bytes.length, sha256: a.sha256,
+  })
+  return resultado(r, { semPermissao: SEM_PERMISSAO_UNIDADE })
+}
+
+export async function ativarArquivoAction(id: string, ativo: boolean): Promise<ActionResult<null>> {
+  const s = await requireStaff(GESTAO)
+  if (!idValido(id)) return NAO_ENCONTRADO
+  const r = await ativarArquivo(getDb(), s.claims, id, ativo)
+  return resultado(r, { semPermissao: SEM_PERMISSAO_UNIDADE })
+}
+
+/** URL assinada curta para ver o arquivo (bucket privado). Só arquivos que a RLS deixa o usuário ver. */
+export async function urlPreviaArquivoAction(id: string): Promise<ActionResult<{ url: string; mime: string; titulo: string }>> {
+  const s = await requireStaff()
+  if (!idValido(id)) return NAO_ENCONTRADO
+  const { arquivos } = await listarCardapio(getDb(), s.claims)
+  const a = arquivos.find((x) => x.id === id)
+  const [bucket, ...resto] = a?.storagePath.split('/') ?? []
+  if (!a || !bucket) return NAO_ENCONTRADO
+  const supabase = await createClient()
+  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(resto.join('/'), PREVIA_SEGUNDOS)
+  if (error || !data) return { ok: false, formError: 'Não foi possível abrir o arquivo agora. Tente de novo.' }
+  return { ok: true, data: { url: data.signedUrl, mime: a.mime, titulo: a.titulo } }
+}

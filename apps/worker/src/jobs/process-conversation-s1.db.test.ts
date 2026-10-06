@@ -5,9 +5,10 @@ import { encryptPhone, keyFromBase64 } from '@atd/core'
 import { ingestInbound, schema, type Enqueue } from '@atd/db'
 import { getTestDb, resetDb, seedRestaurant } from '@atd/db/test-utils'
 import type * as DbModule from '@atd/db'
-import type { LlmClient, TriageV4 } from '@atd/ai'
+import type { LlmClient, TriageV5 } from '@atd/ai'
 import type { SendResult } from '@atd/whatsapp'
 import { createLogger } from '../logger.ts'
+import { comMidiaProibida, storageProibido } from './midia-fake.ts'
 import { processConversation, type ProcessDeps } from './process-conversation.ts'
 
 const falha = vi.hoisted(() => ({ carregar: false }))
@@ -35,7 +36,7 @@ const log = createLogger('silent')
 const SEG_14H = new Date('2026-10-05T14:00:00-03:00')
 
 const h = (tipo: string, extra: Record<string, string | null> = {}) =>
-  ({ servico: 'horario_unidades', tipo, unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, ...extra }) as TriageV4['itens'][number]
+  ({ servico: 'horario_unidades', tipo, unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null, ...extra }) as TriageV5['itens'][number]
 
 async function setup(nUnidades: 1 | 4 = 1) {
   const { restaurantId, unitId } = await seedRestaurant(db)
@@ -70,7 +71,7 @@ async function receive(restaurantId: string, texto: string, interativoId: string
   return r.conversationId
 }
 
-function fakeLlm(script: TriageV4[]) {
+function fakeLlm(script: TriageV5[]) {
   const calls: string[] = []
   const llm: LlmClient = {
     async completeJson(p) {
@@ -96,7 +97,7 @@ function fakeWa() {
 }
 
 const deps = (llm: LlmClient, wa: ReturnType<typeof fakeWa>): ProcessDeps =>
-  ({ db, llm, wa, phoneKey, triageModels: ['fake/m'], log, requeue: async () => undefined, now: () => SEG_14H })
+  ({ db, llm, wa: comMidiaProibida(wa), storage: storageProibido, phoneKey, triageModels: ['fake/m'], log, requeue: async () => undefined, now: () => SEG_14H })
 const conversa = async (id: string) => (await db.select().from(schema.conversations).where(eq(schema.conversations.id, id)))[0]!
 
 describe('S1 no worker', () => {
@@ -111,7 +112,7 @@ describe('S1 no worker', () => {
       'Domingo (11/10), a unidade Asa Sul abre das 11h30 às 16h.',
     ])
     const [run] = await db.select().from(schema.aiRuns)
-    expect(run).toMatchObject({ promptVersion: 'triage-v4', itensValidos: 1, itensRespondidos: 1, simulado: false, intent: 'horario_unidades:horario_dia' })
+    expect(run).toMatchObject({ promptVersion: 'triage-v5', itensValidos: 1, itensRespondidos: 1, simulado: false, intent: 'horario_unidades:horario_dia' })
   })
 
   it('endereço sai como texto e como localização, nessa ordem', async () => {
@@ -351,7 +352,7 @@ describe('S1 no worker', () => {
   it('item humano em qualquer posição ⇒ handoff', async () => {
     const { restaurantId } = await setup()
     const conv = await receive(restaurantId, 'abre domingo? quero reclamar')
-    const { llm } = fakeLlm([{ itens: [h('horario_dia', { data: 'domingo' }), { servico: 'humano', tipo: null, unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null }], fora_escopo: false }])
+    const { llm } = fakeLlm([{ itens: [h('horario_dia', { data: 'domingo' }), { servico: 'humano', tipo: null, unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null }], fora_escopo: false }])
     await processConversation(deps(llm, fakeWa()), conv)
     expect((await conversa(conv)).estado).toBe('aguardando_humano')
   })

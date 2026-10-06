@@ -24,7 +24,7 @@ export type Caso = {
   contexto?: 'pequeno'
 }
 
-const nulos = { unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null }
+const nulos = { unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null }
 type Extra = Partial<Pick<ItemExtraido, 'unidade' | 'data' | 'pessoas' | 'horario'>>
 export const reg = (extra: Extra = {}): ItemExtraido => ({ servico: 'aviso_presenca', tipo: 'registrar', ...nulos, ...extra })
 export const can = (extra: Pick<Extra, 'unidade' | 'data'> = {}): ItemExtraido => ({ servico: 'aviso_presenca', tipo: 'cancelar', ...nulos, ...extra })

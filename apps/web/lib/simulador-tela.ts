@@ -9,6 +9,8 @@ export type MensagemTela = {
   texto: string | null
   payload: unknown
   criadaEm: string
+  /** documento/imagem do cardápio: título e URL assinada curta gerada no servidor */
+  midia?: { titulo: string; url: string | null }
 }
 export type RespostaSimulador = {
   conversationId: string
@@ -42,6 +44,14 @@ const lista = z.object({
   opcoes: z.array(z.object({ id: z.string(), titulo: z.string(), descricao: z.string() })).min(1),
 })
 const localizacao = z.object({ lat: z.number(), lng: z.number(), nome: z.string(), endereco: z.string() })
+const midiaPayload = z.object({ arquivoId: z.string() })
+
+/** Id do arquivo do cardápio de uma mensagem de documento/imagem (para a URL assinada); null se não for mídia. */
+export function arquivoDaMensagem(m: Pick<MensagemTela, 'direcao' | 'tipo' | 'payload'>): string | null {
+  if (m.direcao !== 'out' || (m.tipo !== 'documento' && m.tipo !== 'imagem')) return null
+  const p = midiaPayload.safeParse(m.payload)
+  return p.success ? p.data.arquivoId : null
+}
 
 export function horaDe(criadaEm: string, timezone: string, offsetSegundos: number | null) {
   const instante = new Date(Date.parse(criadaEm) + (offsetSegundos ?? 0) * 1000)
@@ -69,6 +79,8 @@ export function paraSimMessage(m: MensagemTela, timezone: string, offsetSegundos
     const p = localizacao.safeParse(m.payload)
     if (p.success) return { id, de: 'restaurante', tipo: 'localizacao', ...p.data, hora }
   }
+  if (m.tipo === 'documento' && m.midia) return { id, de: 'restaurante', tipo: 'documento', titulo: m.midia.titulo, url: m.midia.url, hora }
+  if (m.tipo === 'imagem' && m.midia) return { id, de: 'restaurante', tipo: 'imagem', url: m.midia.url, legenda: m.midia.titulo, hora }
   return { id, de: 'restaurante', tipo: 'texto', texto, hora }
 }
 

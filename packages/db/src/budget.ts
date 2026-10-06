@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, or, sql } from 'drizzle-orm'
 import { periodStarts } from '@atd/core'
 import type { Db } from './client.ts'
 import type { Tx } from './rls.ts'
@@ -122,3 +122,45 @@ export async function settleBudget(db: Db | Tx, r: Reservation, actualUsd: strin
 export function releaseBudget(db: Db | Tx, r: Reservation, ref?: string) {
   return adjust(db, r, '0', 'estorno', ref)
 }
+
+/**
+ * Devolve as reservas ainda abertas (sem liquidação nem estorno) de um `ref` — processo que morreu entre a reserva e a
+ * baixa. Os contadores são os dos períodos do momento da reserva. Idempotente (a baixa é única por reserva).
+ */
+export async function liberarReservasPendentes(
+  db: Db | Tx,
+  p: { restaurantId: string; ref: string; timeZone: string },
+): Promise<number> {
+  const abertas = await db
+    .select({ id: spendLedger.id, escopo: spendLedger.escopo, valorUsd: spendLedger.valorUsd, createdAt: spendLedger.createdAt })
+    .from(spendLedger)
+    .where(and(
+      eq(spendLedger.restaurantId, p.restaurantId),
+      eq(spendLedger.ref, p.ref),
+      eq(spendLedger.tipo, 'reserva'),
+      sql`not exists (select 1 from public.spend_ledger b where b.reserva_id = ${spendLedger.id} and b.tipo in ('liquidacao', 'estorno'))`,
+    ))
+  let liberadas = 0
+  for (const r of abertas) {
+    const inicio = periodStarts(r.createdAt, p.timeZone)
+    const contadores = await db
+      .select({ id: budgetCounters.id })
+      .from(budgetCounters)
+      .where(and(
+        eq(budgetCounters.restaurantId, p.restaurantId),
+        eq(budgetCounters.escopo, r.escopo),
+        or(
+          and(eq(budgetCounters.periodo, 'dia'), eq(budgetCounters.inicioPeriodo, inicio.dia)),
+          and(eq(budgetCounters.periodo, 'mes'), eq(budgetCounters.inicioPeriodo, inicio.mes)),
+        ),
+      ))
+      .orderBy(asc(budgetCounters.periodo)) // mesma ordem de lock da reserva (dia → mes)
+    await releaseBudget(db, {
+      restaurantId: p.restaurantId, scope: r.escopo, amountUsd: String(r.valorUsd), counterIds: contadores.map((c) => c.id),
+      reservationId: r.id,
+    }, p.ref)
+    liberadas++
+  }
+  return liberadas
+}
+

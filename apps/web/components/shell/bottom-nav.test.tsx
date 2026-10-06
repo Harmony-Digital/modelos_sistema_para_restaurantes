@@ -12,10 +12,10 @@ describe('BottomNav', () => {
   })
   it('mostra os 5 destinos com rótulo, na ordem', () => {
     render(<BottomNav />)
-    for (const nome of ['Início', 'Agenda', 'Unidades', 'Respostas', 'Mais']) {
+    for (const nome of ['Início', 'Agenda', 'Unidades', 'Conteúdo', 'Mais']) {
       expect(screen.getByRole('link', { name: nome })).toBeInTheDocument()
     }
-    expect(screen.getAllByRole('link').map((l) => l.textContent)).toEqual(['Início', 'Agenda', 'Unidades', 'Respostas', 'Mais'])
+    expect(screen.getAllByRole('link').map((l) => l.textContent)).toEqual(['Início', 'Agenda', 'Unidades', 'Conteúdo', 'Mais'])
   })
   it('marca o item ativo, inclusive em subpáginas', () => {
     pathname.value = '/unidades/123'

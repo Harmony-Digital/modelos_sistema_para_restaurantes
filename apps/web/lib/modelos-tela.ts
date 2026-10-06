@@ -47,6 +47,16 @@ export const ROTULOS_MODELO: Record<ChaveModelo, { titulo: string; quando: strin
   evento_nao_encontrado: { titulo: 'Nenhum pedido de evento para cancelar', quando: 'O cliente pede para cancelar, mas não tem pedido em andamento.' },
   evento_qual_cancelar: { titulo: 'Qual pedido de evento cancelar', quando: 'O cliente tem vários pedidos e não disse qual cancelar. {exemplo} é uma frase de cancelamento com o primeiro pedido da lista.' },
   evento_confirmado_humano: { titulo: 'Evento já confirmado', quando: 'O cliente quer cancelar um evento confirmado: um atendente assume.' },
+  evento_mudanca_humano: { titulo: 'Mudança no pedido de evento', quando: 'O cliente quer mudar um pedido de evento em andamento: a equipe assume e o pedido recebe uma observação.' },
+  evento_ja_confirmado_humano: { titulo: 'Já há evento confirmado no dia', quando: 'O cliente pede um evento na unidade e data de um evento já confirmado: um atendente assume.' },
+  // cardápio (Etapa 05)
+  cardapio_item: { titulo: 'Item do cardápio', quando: 'O cliente pergunta se tem um item ou quanto custa.' },
+  cardapio_indisponivel: { titulo: 'Item indisponível na unidade', quando: 'O item existe, mas está indisponível na unidade perguntada.' },
+  cardapio_filtro: { titulo: 'Opções por tipo', quando: 'O cliente pergunta por opções veganas, sem glúten, infantis…' },
+  cardapio_nao_encontrado: { titulo: 'Item não encontrado', quando: 'O item não está no cardápio; a pergunta vai para "Sem resposta".' },
+  cardapio_parecido: { titulo: 'Só item parecido', quando: 'O item pedido não está no cardápio, mas há nomes parecidos: eles são sugeridos (sem preço) e a pergunta vai para "Sem resposta".' },
+  cardapio_enviando: { titulo: 'Envio do cardápio', quando: 'Texto que acompanha o arquivo do cardápio.' },
+  cardapio_sem_arquivo: { titulo: 'Cardápio sem arquivo', quando: 'O cliente pede o cardápio e não há arquivo cadastrado: vão as categorias com alguns itens.' },
 }
 
 const LINHAS: Partial<Record<ChaveModelo, (nome: string, endereco: string) => string>> = {
@@ -87,6 +97,12 @@ export function exemploDeVariaveis(chave: ChaveModelo, u: UnidadeExemplo | null)
     min: '10',
     max: '30',
     sugestoes: ' Para 40 pessoas, sugiro: Salão.',
+    itens: chave === 'cardapio_filtro'
+      ? '• **Salada da casa** — R$ 32,00\n• **Risoto de cogumelos** — R$ 48,00'
+      : '**Picanha** — Corte grelhado na brasa — R$ 59,90',
+    item: '**Picanha**',
+    tag: 'veganas',
+    categorias: '• **Carnes**: Picanha (R$ 59,90), Fraldinha (R$ 49,00)\n• **Sobremesas**: Pudim (R$ 14,00)',
   }
 }
 

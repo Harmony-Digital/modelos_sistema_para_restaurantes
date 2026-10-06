@@ -24,6 +24,8 @@ export type PedidoAtivoS3 = {
   convidados: number
   tipo: TipoEvento
   status: 'novo' | 'em_contato' | 'confirmado'
+  /** espaço do pedido; ausente (worker antigo) ⇒ o espaço citado não é comparado */
+  spaceId?: string | null
 }
 
 /** Campo que a coleta guiada está perguntando (um por vez, nesta ordem; `espaco` só quando o citado não comporta). */
@@ -44,6 +46,8 @@ export type AcaoS3 =
   }
   /** `texto` é o trecho da resposta; se o banco não cancelar (corrida), o worker o troca por `textoSeFalhar`. */
   | { tipo: 'cancelar_evento'; pedidoId: string; texto: string; textoSeFalhar: string }
+  /** mudança pedida num pedido em andamento: o worker acrescenta `observacao` (texto nosso, ≤ 300) às observações */
+  | { tipo: 'observar_pedido'; pedidoId: string; observacao: string }
 
 /**
  * Pedido que espera uma resposta do cliente. `item` traz o que já foi validado (unidade pelo nome do banco,
@@ -58,7 +62,7 @@ export type ResultadoS3 = {
   perguntar: PerguntaEvento | null
   /** itens S3 que esperam a escolha da unidade na lista do S1 */
   pendenteUnidade: ItemExtraido[]
-  /** pedido `confirmado` que o cliente quer cancelar: a equipe assume */
+  /** pedido `confirmado` que o cliente quer cancelar, mudança de pedido em andamento ou pedido em dia já confirmado: a equipe assume */
   handoff: boolean
   lacunas: Lacuna[]
   validos: number

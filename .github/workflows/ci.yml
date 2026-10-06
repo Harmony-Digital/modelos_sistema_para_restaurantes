@@ -53,7 +53,7 @@ jobs:
         name: Prompt ou triagem mudaram?
         env: { BASE_REF: "${{ github.base_ref }}" }
         run: |
-          if git diff --name-only "origin/$BASE_REF...HEAD" | grep -qE '^packages/ai/(src/prompts/|src/triage\.ts|evals/)'; then
+          if git diff --name-only "origin/$BASE_REF...HEAD" | grep -qE '^packages/ai/(src/prompts/|src/triage\.ts|src/ingestao\.ts|src/openrouter\.ts|evals/)'; then
             echo "sim=1" >> "$GITHUB_OUTPUT"
           fi
       - uses: pnpm/action-setup@v4
@@ -84,3 +84,17 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY_EVALS }}
           AI_TRIAGE_MODELS: ${{ vars.AI_TRIAGE_MODELS }}
         run: node evals/s3/extracao.ts --teto 0.30
+      - name: Evals de extração S4 — cardápio e mudança de evento, triage-v5 (custo real, teto US$ 0,30)
+        if: steps.mudou.outputs.sim == '1' && steps.chave.outputs.tem == '1'
+        working-directory: packages/ai
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY_EVALS }}
+          AI_TRIAGE_MODELS: ${{ vars.AI_TRIAGE_MODELS }}
+        run: node evals/s4/extracao.ts --teto 0.30
+      - name: Eval de leitura de cardápio por IA (custo real, teto US$ 1,00; só com AI_INGEST_MODELS)
+        if: steps.mudou.outputs.sim == '1' && steps.chave.outputs.tem == '1' && vars.AI_INGEST_MODELS != ''
+        working-directory: packages/ai
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY_EVALS }}
+          AI_INGEST_MODELS: ${{ vars.AI_INGEST_MODELS }}
+        run: node evals/ingestao/leitura.ts --teto 1.00

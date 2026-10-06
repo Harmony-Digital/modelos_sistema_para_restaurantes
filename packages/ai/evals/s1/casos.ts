@@ -12,8 +12,8 @@ export type Espera = {
 export type Caso = { id: string; mensagem: string; agora: string; itens: ItemExtraido[]; espera: Espera; contexto?: 'pequeno' }
 
 const h = (tipo: TipoS1, unidade: string | null = null, data: string | null = null, tema: string | null = null): ItemExtraido =>
-  ({ servico: 'horario_unidades', tipo, unidade, data, tema, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null })
-const o = (servico: Exclude<Servico, 'horario_unidades'>): ItemExtraido => ({ servico, tipo: null, unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null })
+  ({ servico: 'horario_unidades', tipo, unidade, data, tema, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null })
+const o = (servico: Exclude<Servico, 'horario_unidades'>): ItemExtraido => ({ servico, tipo: null, unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null })
 const c = (id: string, mensagem: string, agora: string, itens: ItemExtraido[], espera: Espera, contexto?: 'pequeno'): Caso =>
   ({ id, mensagem, agora, itens, espera, ...(contexto ? { contexto } : {}) })
 

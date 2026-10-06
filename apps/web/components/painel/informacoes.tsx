@@ -2,7 +2,7 @@
 import { BookOpen, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { removerFatoAction, salvarFatoAction } from '@/app/(painel)/respostas/actions'
+import { removerFatoAction, salvarFatoAction } from '@/app/(painel)/conteudo/actions'
 import { EmptyState } from '@/components/shell/empty-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'

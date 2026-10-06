@@ -12,6 +12,8 @@ const valida = {
   WHATSAPP_PHONE_NUMBER_ID: '123',
   OPENROUTER_API_KEY: 'sk-or-x',
   AI_TRIAGE_MODELS: 'a/modelo-1, b/modelo-2',
+  SUPABASE_URL: 'http://127.0.0.1:54321',
+  SUPABASE_SERVICE_ROLE_KEY: 'chave-de-servico-bem-longa-0123456789',
 }
 
 describe('loadEnv', () => {
@@ -85,6 +87,17 @@ describe('loadEnv', () => {
     ).toThrowError(/WHATSAPP_ACCESS_TOKEN/)
   })
 
+  it('OPENROUTER_DEV_SEM_ZDR: desligado por padrão; "1" liga; outro valor é recusado', () => {
+    expect(loadEnv(workerEnvSchema, valida).OPENROUTER_DEV_SEM_ZDR).toBe(false)
+    expect(loadEnv(workerEnvSchema, { ...valida, OPENROUTER_DEV_SEM_ZDR: '0' }).OPENROUTER_DEV_SEM_ZDR).toBe(false)
+    expect(loadEnv(workerEnvSchema, { ...valida, OPENROUTER_DEV_SEM_ZDR: '1' }).OPENROUTER_DEV_SEM_ZDR).toBe(true)
+    expect(() => loadEnv(workerEnvSchema, { ...valida, OPENROUTER_DEV_SEM_ZDR: 'sim' })).toThrow('OPENROUTER_DEV_SEM_ZDR')
+  })
+
+  it('OPENROUTER_DEV_SEM_ZDR nunca vale em produção', () => {
+    expect(() => loadEnv(workerEnvSchema, { ...valida, NODE_ENV: 'production', OPENROUTER_DEV_SEM_ZDR: '1' })).toThrow('OPENROUTER_DEV_SEM_ZDR')
+  })
+
   it('OPENROUTER_BASE_URL é opcional, vazio é ausente e só aceita host local (é só para teste)', () => {
     expect(loadEnv(workerEnvSchema, valida).OPENROUTER_BASE_URL).toBeUndefined()
     expect(loadEnv(workerEnvSchema, { ...valida, OPENROUTER_BASE_URL: '' }).OPENROUTER_BASE_URL).toBeUndefined()
@@ -93,5 +106,30 @@ describe('loadEnv', () => {
     expect(() => loadEnv(workerEnvSchema, { ...valida, OPENROUTER_BASE_URL: 'http://127.0.0.1.evil.com' })).toThrow('OPENROUTER_BASE_URL')
     expect(loadEnv(workerEnvSchema, { ...valida, OPENROUTER_BASE_URL: 'http://127.0.0.1:4010' }).OPENROUTER_BASE_URL).toBe('http://127.0.0.1:4010')
     expect(() => loadEnv(workerEnvSchema, { ...valida, OPENROUTER_BASE_URL: 'ftp://x' })).toThrow('OPENROUTER_BASE_URL')
+  })
+
+  it('Storage do worker: SUPABASE_URL e chave de serviço obrigatórias; o erro nunca mostra a chave', () => {
+    const env = loadEnv(workerEnvSchema, valida)
+    expect(env.SUPABASE_URL).toBe('http://127.0.0.1:54321')
+    expect(env.SUPABASE_SERVICE_ROLE_KEY).toBe(valida.SUPABASE_SERVICE_ROLE_KEY)
+    expect(() => loadEnv(workerEnvSchema, { ...valida, SUPABASE_URL: undefined })).toThrow('SUPABASE_URL')
+    expect(() => loadEnv(workerEnvSchema, { ...valida, SUPABASE_URL: 'nao-e-url' })).toThrow('SUPABASE_URL')
+    const curta = () => loadEnv(workerEnvSchema, { ...valida, SUPABASE_SERVICE_ROLE_KEY: 'SEGREDO-curto' })
+    expect(curta).toThrow('SUPABASE_SERVICE_ROLE_KEY')
+    expect(curta).not.toThrow(/SEGREDO/)
+  })
+
+  it('AI_INGEST_MODELS é opcional (vazio = importação por IA desligada) e vira lista', () => {
+    expect(loadEnv(workerEnvSchema, valida).AI_INGEST_MODELS).toBeUndefined()
+    expect(loadEnv(workerEnvSchema, { ...valida, AI_INGEST_MODELS: '' }).AI_INGEST_MODELS).toBeUndefined()
+    expect(loadEnv(workerEnvSchema, { ...valida, AI_INGEST_MODELS: 'g/visao-1, a/visao-2' }).AI_INGEST_MODELS).toEqual(['g/visao-1', 'a/visao-2'])
+    expect(() => loadEnv(workerEnvSchema, { ...valida, AI_INGEST_MODELS: ' , ' })).toThrow('AI_INGEST_MODELS')
+  })
+
+  it('web nunca recebe a chave de serviço do Storage', () => {
+    const env = loadEnv(webEnvSchema, {
+      ...valida, NEXT_PUBLIC_SUPABASE_URL: 'http://localhost:54321', NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'pk-key',
+    })
+    expect(env).not.toHaveProperty('SUPABASE_SERVICE_ROLE_KEY')
   })
 })

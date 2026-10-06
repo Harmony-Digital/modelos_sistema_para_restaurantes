@@ -5,7 +5,7 @@ import { CONTEXTO } from './fixture.ts'
 
 const agora = new Date('2026-10-05T14:00:00-03:00')
 const h = (tipo: ItemExtraido['tipo'], unidade: string | null = null, data: string | null = null, tema: string | null = null): ItemExtraido =>
-  ({ servico: 'horario_unidades', tipo, unidade, data, tema, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null })
+  ({ servico: 'horario_unidades', tipo, unidade, data, tema, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null })
 
 describe('comparação de extração', () => {
   it('equivalências que levam à mesma resposta', () => {

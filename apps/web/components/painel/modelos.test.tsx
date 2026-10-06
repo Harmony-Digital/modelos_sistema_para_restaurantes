@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 const salvarModeloAction = vi.fn()
-vi.mock('@/app/(painel)/respostas/actions', () => ({ salvarModeloAction, restaurarModeloAction: vi.fn() }))
+vi.mock('@/app/(painel)/conteudo/actions', () => ({ salvarModeloAction, restaurarModeloAction: vi.fn() }))
 const { Modelos } = await import('./modelos')
 
 const unidade = { nome: 'Lago Sul', endereco: 'SHIS QI 11 Bloco A', bairro: 'Lago Sul', cidade: 'Brasília', uf: 'DF', mapsUrl: null }

@@ -6,6 +6,7 @@ import { getTestDb, resetDb, seedRestaurant } from '@atd/db/test-utils'
 import type * as CoreModule from '@atd/core'
 import type { LlmClient } from '@atd/ai'
 import { createLogger } from '../logger.ts'
+import { comMidiaProibida, storageProibido } from './midia-fake.ts'
 import { processConversation, type ProcessDeps } from './process-conversation.ts'
 
 vi.mock('@atd/core', async (importOriginal) => {
@@ -40,14 +41,14 @@ describe('S1 no worker: falha ao resolver depois da triagem paga', () => {
       async completeJson(p) {
         return {
           ok: true as const,
-          data: p.parse({ itens: [{ servico: 'horario_unidades', tipo: 'horario_dia', unidade: null, data: 'domingo', tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null }], fora_escopo: false }),
+          data: p.parse({ itens: [{ servico: 'horario_unidades', tipo: 'horario_dia', unidade: null, data: 'domingo', tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null }], fora_escopo: false }),
           model: 'fake/m', usage: { tokensIn: 100, tokensOut: 20, tokensCache: 0, costUsd: '0.000200' }, latencyMs: 10,
         }
       },
     }
     const wa = { sendText: vi.fn(), sendLocation: vi.fn(), sendList: vi.fn() }
     const d: ProcessDeps = {
-      db, llm, wa, phoneKey, triageModels: ['fake/m'], log: createLogger('silent'), requeue: async () => undefined,
+      db, llm, wa: comMidiaProibida(wa), storage: storageProibido, phoneKey, triageModels: ['fake/m'], log: createLogger('silent'), requeue: async () => undefined,
       now: () => new Date('2026-10-05T14:00:00-03:00'),
     }
     await expect(processConversation(d, r.conversationId)).rejects.toThrow(/falha simulada/)

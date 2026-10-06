@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/app/(painel)/respostas/actions', () => ({
+vi.mock('@/app/(painel)/conteudo/actions', () => ({
   responderLacunaAction: vi.fn(), ignorarLacunaAction: vi.fn(), salvarFatoAction: vi.fn(), removerFatoAction: vi.fn(),
 }))
 const { FatoForm } = await import('./fato-form')

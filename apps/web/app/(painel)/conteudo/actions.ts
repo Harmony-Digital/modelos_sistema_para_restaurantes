@@ -15,7 +15,7 @@ const idValido = (id: string) => z.uuid().safeParse(id).success
 const ehChave = (c: string): c is ChaveModelo => Object.hasOwn(MODELOS_S1, c)
 
 function revalidar() {
-  revalidatePath('/respostas')
+  revalidatePath('/conteudo')
   revalidatePath('/')
 }
 

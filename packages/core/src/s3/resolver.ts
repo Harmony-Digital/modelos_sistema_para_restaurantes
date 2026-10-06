@@ -1,3 +1,4 @@
+import { normalizeText } from '../normalize.ts'
 import { encontrarUnidade } from '../s1/busca.ts'
 import { resolverData } from '../s1/datas.ts'
 import { feriadosNacionais, mapaFeriados } from '../s1/feriados.ts'
@@ -18,6 +19,13 @@ export const OBSERVACAO_UNIDADE_FECHADA = 'Unidade fechada nesse dia pelo horár
 export const LACUNA_ESPACOS = 'eventos:espacos'
 /** Sem unidade citada, lista os espaços de todas as unidades só quando são poucas (como o S1). */
 const MAX_UNIDADES_SEM_LISTA = 3
+/** Limite das observações do pedido no banco. */
+const MAX_OBSERVACAO = 300
+export const OBSERVACAO_MUDANCA_GENERICA = 'Cliente pediu mudança no pedido (ver conversa).'
+
+/** "na verdade são 60", "quero mudar a data": a triagem resume a intenção do pedido em `tema`. */
+const DITA_MUDANCA = /\b(?:na verdade|mud(?:ar|a|e|ei|anca)|alter(?:ar|a|e|ei|acao)|troc(?:ar|a|ei)|troque|corrig(?:ir|e))\b/
+export const ditaComoMudanca = (tema: string | null): boolean => DITA_MUDANCA.test(normalizeText(tema ?? ''))
 
 /** Pergunta com o texto que a acompanha (null quando a pergunta é o corpo da lista de unidades). */
 export type PerguntaEventoComTexto = PerguntaEvento & { texto: string | null }
@@ -68,6 +76,7 @@ export function resolverItensS3(
   const pendenteUnidade: ItemExtraido[] = []
   const lacunas = new Map<string, Lacuna>()
   const cancelados = new Set<string>()
+  const observados = new Set<string>()
   let pergunta: PerguntaEventoComTexto | null = null
   let handoff = false
   let validos = 0
@@ -85,8 +94,52 @@ export function resolverItensS3(
   }
   const listarEspacos = (lista: readonly EspacoS3Core[]) => m('evento_espacos', { linhas: [...lista].sort(porUnidadeENome).map(linhaEspaco).join('\n') })
 
+  /** Campos validados do item que diferem do pedido, em texto nosso (nunca texto livre do cliente). */
+  function diferencas(item: ItemExtraido, p: PedidoAtivoS3): string[] {
+    const partes: string[] = []
+    const u = escolhida ?? encontrarUnidade(item.unidade, unidades)
+    if (u && u.id !== p.unitId) partes.push(`unidade ${u.nome}`)
+    const d = item.data ? resolverData(item.data, local.data, listaFeriados) : null
+    if (d?.ok && d.data >= amanha && d.data <= limite && d.data !== p.data) partes.push(`data ${ddmmaaaa(d.data)}`)
+    const n = item.convidados
+    if (n !== null && Number.isInteger(n) && n >= MIN_CONVIDADOS && n <= MAX_CONVIDADOS && n !== p.convidados) partes.push(textoConvidados(n))
+    const tipo = normalizarTipoEvento(item.tipoEvento)
+    // `outro` carrega texto do cliente: não é campo validado
+    if (tipo && tipo.tipo !== 'outro' && tipo.tipo !== p.tipo) partes.push(rotuloTipoEvento(tipo.tipo, null))
+    if (item.espaco && item.espaco !== ESPACO_QUALQUER && p.spaceId !== undefined) {
+      const daUnidade = espacos.filter((e) => e.unitId === (u?.id ?? p.unitId))
+      const e = encontrarEspaco(item.espaco, daUnidade)
+      if (e && e.id !== p.spaceId) partes.push(`espaço ${e.nome}`)
+    }
+    return partes
+  }
+
+  /** Mudança num pedido em andamento: a IA não altera; a equipe assume e o pedido (se for um só) recebe a observação. */
+  function mudanca(item: ItemExtraido, alvos: readonly PedidoAtivoS3[]): void {
+    validos++
+    handoff = true
+    trechos.push(m('evento_mudanca_humano')) // repetido na mesma mensagem: a composição junta
+    const p = alvos.length === 1 ? alvos[0]! : null
+    if (!p || observados.has(p.id)) return
+    observados.add(p.id)
+    const partes = diferencas(item, p)
+    const observacao = partes.length ? `Cliente pediu: ${partes.join(', ')}` : OBSERVACAO_MUDANCA_GENERICA
+    acoes.push({ tipo: 'observar_pedido', pedidoId: p.id, observacao: observacao.slice(0, MAX_OBSERVACAO) })
+  }
+
   function pedido(item: ItemExtraido): void {
     let u: UnidadeS1 | null = escolhida ?? encontrarUnidade(item.unidade, unidades)
+    if (ditaComoMudanca(item.tema)) {
+      // "na verdade são 60": vale para o pedido em andamento (da unidade citada, se houver), sem perguntar o resto.
+      // Nenhum pedido na unidade citada ("quero fazer na Asa Norte"): é troca de unidade — vale para todos os ativos
+      // (um só recebe a observação "unidade X"; vários, a equipe assume sem observação); nunca vira pedido novo.
+      const daUnidade = ativos.filter((p) => !u || p.unitId === u.id)
+      const alvos = daUnidade.length ? daUnidade : ativos
+      if (alvos.length) {
+        mudanca(item, alvos)
+        return
+      }
+    }
     if (!u) {
       if (unidades.length === 0) {
         validos++
@@ -112,8 +165,20 @@ export function resolverItensS3(
       return
     }
     const data = d.data
-    // o cliente já tem pedido em andamento nesse dia e unidade ("quero o salão", pedido repetido): não duplica
-    const existente = ativos.find((p) => p.unitId === u.id && p.data === data && (p.status === 'novo' || p.status === 'em_contato'))
+    const doDia = ativos.filter((p) => p.unitId === u.id && p.data === data)
+    if (doDia.some((p) => p.status === 'confirmado')) {
+      // evento já confirmado pela equipe nesse dia e unidade: a IA não cria outro pedido; um humano assume
+      validos++
+      handoff = true
+      trechos.push(m('evento_ja_confirmado_humano'))
+      return
+    }
+    // o cliente já tem pedido em andamento nesse dia e unidade: com algum campo diferente é mudança; igual, não duplica
+    const existente = doDia.find((p) => p.status === 'novo' || p.status === 'em_contato')
+    if (existente && diferencas(item, existente).length) {
+      mudanca(item, [existente])
+      return
+    }
     if (existente) {
       validos++
       respondidos++

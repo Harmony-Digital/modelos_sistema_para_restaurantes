@@ -53,6 +53,37 @@ const FATOS = [
   { tema: 'Acessibilidade', exemplos: ['cadeirante', 'rampa'], texto: 'A unidade tem rampa de acesso e banheiro adaptado.', unidade: 'lago-sul' },
 ]
 
+// Cardápio de demonstração (S4): preço em centavos; exceções por unidade (preço próprio / indisponível)
+const CARDAPIO = [
+  {
+    categoria: 'Carnes', ordem: 1,
+    itens: [
+      { nome: 'Picanha na brasa', descricao: 'Com farofa, vinagrete e mandioca', precoCentavos: 8990, tags: [], outrosNomes: ['picanha'], excecoes: [{ unidade: 'asa-sul', preco: 9490 }] },
+      { nome: 'Carne de sol', descricao: 'Com manteiga de garrafa e macaxeira', precoCentavos: 7490, tags: [], outrosNomes: ['carne do sol'], excecoes: [{ unidade: 'lago-sul', disponivel: false }] },
+      { nome: 'Costela no bafo', descricao: null, precoCentavos: null, tags: [], outrosNomes: [], excecoes: [] },
+    ],
+  },
+  {
+    categoria: 'Saladas', ordem: 2,
+    itens: [
+      { nome: 'Salada tropical', descricao: 'Folhas, manga e castanha de caju', precoCentavos: 3990, tags: ['vegano', 'sem_gluten'], outrosNomes: [], excecoes: [] },
+    ],
+  },
+  {
+    categoria: 'Bebidas', ordem: 3,
+    itens: [
+      { nome: 'Suco de laranja', descricao: 'Natural, 500 ml', precoCentavos: 1290, tags: ['bebida', 'vegano'], outrosNomes: ['suco'], excecoes: [] },
+      { nome: 'Água com gás', descricao: null, precoCentavos: 650, tags: ['bebida'], outrosNomes: [], excecoes: [] },
+    ],
+  },
+  {
+    categoria: 'Sobremesas', ordem: 4,
+    itens: [
+      { nome: 'Pudim de leite', descricao: null, precoCentavos: 1690, tags: ['sobremesa', 'vegetariano'], outrosNomes: ['pudim'], excecoes: [] },
+    ],
+  },
+]
+
 const { db, sql } = createDb(url)
 try {
   const restaurantId = await getSingleRestaurantId(db)
@@ -77,8 +108,32 @@ try {
       inArray(schema.knowledgeFacts.tema, FATOS.map((f) => f.tema)),
     ))
     await tx.insert(schema.knowledgeFacts).values(FATOS.map(({ unidade, ...f }) => ({ restaurantId, ...f, unitId: unidade ? ids[unidade]! : null })))
+
+    // cardápio: atualiza pelo nome (o índice único é do nome normalizado, sem alvo simples para upsert)
+    const { menuCategories, menuItems, menuItemUnits } = schema
+    for (const { categoria, ordem, itens } of CARDAPIO) {
+      const [existente] = await tx.select({ id: menuCategories.id }).from(menuCategories)
+        .where(and(eq(menuCategories.restaurantId, restaurantId), eq(menuCategories.nome, categoria)))
+      const categoryId = existente
+        ? (await tx.update(menuCategories).set({ ordem, ativo: true }).where(eq(menuCategories.id, existente.id)).returning({ id: menuCategories.id }))[0]!.id
+        : (await tx.insert(menuCategories).values({ restaurantId, nome: categoria, ordem }).returning({ id: menuCategories.id }))[0]!.id
+      for (const [i, { excecoes, ...item }] of itens.entries()) {
+        const dados = { ...item, disponivel: true, ordem: i + 1 }
+        const [atual] = await tx.select({ id: menuItems.id }).from(menuItems)
+          .where(and(eq(menuItems.categoryId, categoryId), eq(menuItems.nome, item.nome)))
+        const itemId = atual
+          ? (await tx.update(menuItems).set(dados).where(eq(menuItems.id, atual.id)).returning({ id: menuItems.id }))[0]!.id
+          : (await tx.insert(menuItems).values({ restaurantId, categoryId, ...dados }).returning({ id: menuItems.id }))[0]!.id
+        for (const e of excecoes) {
+          const excecao = { disponivel: 'disponivel' in e ? e.disponivel : null, precoOverrideCentavos: 'preco' in e ? e.preco : null }
+          await tx.insert(menuItemUnits).values({ itemId, unitId: ids[e.unidade]!, restaurantId, ...excecao })
+            .onConflictDoUpdate({ target: [menuItemUnits.itemId, menuItemUnits.unitId], set: excecao })
+        }
+      }
+    }
   })
-  process.stdout.write(`Demonstração de S1 pronta: ${UNIDADES.length} unidades e ${FATOS.length} informações.\n`)
+  const itens = CARDAPIO.reduce((n, c) => n + c.itens.length, 0)
+  process.stdout.write(`Demonstração de S1 pronta: ${UNIDADES.length} unidades, ${FATOS.length} informações e cardápio com ${itens} itens.\n`)
 } finally {
   await sql.end()
 }

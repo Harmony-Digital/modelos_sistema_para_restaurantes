@@ -76,6 +76,27 @@ describe('WhatsAppChat', () => {
     expect(screen.getByRole('link', { name: /Abrir no Maps/ })).toHaveAttribute('href', 'https://www.google.com/maps?q=-15.8267,-47.9218')
   })
 
+  it('documento do cardápio: nome do arquivo e link para abrir (nova aba)', () => {
+    const doc: SimMessage = { id: 'd1', de: 'restaurante', tipo: 'documento', titulo: 'Cardápio da casa', url: 'https://s/assinada', hora: '10:04' }
+    render(<WhatsAppChat {...base} mensagens={[doc]} />)
+    expect(screen.getByText('Cardápio da casa')).toBeInTheDocument()
+    const link = screen.getByRole('link', { name: /Abrir/ })
+    expect(link).toHaveAttribute('href', 'https://s/assinada')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noreferrer'))
+  })
+
+  it('imagem do cardápio com legenda; sem URL mostra aviso em vez da imagem', () => {
+    const img: SimMessage = { id: 'i1', de: 'restaurante', tipo: 'imagem', url: 'https://s/img', legenda: 'Cardápio', hora: '10:05' }
+    const semUrl: SimMessage = { id: 'i2', de: 'restaurante', tipo: 'imagem', url: null, legenda: 'Bebidas', hora: '10:05' }
+    const docSemUrl: SimMessage = { id: 'd2', de: 'restaurante', tipo: 'documento', titulo: 'Cardápio', url: null, hora: '10:05' }
+    render(<WhatsAppChat {...base} mensagens={[img, semUrl, docSemUrl]} />)
+    expect(screen.getByRole('img', { name: 'Cardápio' })).toHaveAttribute('src', 'https://s/img')
+    expect(screen.getByText('Bebidas')).toBeInTheDocument()
+    expect(screen.getAllByText('Arquivo indisponível na prévia')).toHaveLength(2)
+    expect(screen.queryByRole('link', { name: /Abrir/ })).toBeNull()
+  })
+
   it('painel da lista: foco entra, Esc fecha só o painel e devolve o foco, Cancelar fecha', async () => {
     const user = userEvent.setup()
     const lista: SimMessage = {

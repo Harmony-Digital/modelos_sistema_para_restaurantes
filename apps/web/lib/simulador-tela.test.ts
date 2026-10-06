@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  avisoDoEstado, horarioLocal, instanteDoHorarioLocal, paraSimMessage, rotuloRelogio, type MensagemTela,
+  arquivoDaMensagem, avisoDoEstado, horarioLocal, instanteDoHorarioLocal, paraSimMessage, rotuloRelogio, type MensagemTela,
 } from './simulador-tela'
 
 const TZ = 'America/Sao_Paulo'
@@ -30,6 +30,31 @@ describe('paraSimMessage', () => {
   it('localização', () => {
     const m: MensagemTela = { ...base, id: 4, direcao: 'out', tipo: 'localizacao', texto: 'Asa Sul: SCLS 404', payload: { lat: -15.8, lng: -47.9, nome: 'Asa Sul', endereco: 'SCLS 404' } }
     expect(paraSimMessage(m, TZ, null)).toEqual({ id: '4', de: 'restaurante', tipo: 'localizacao', nome: 'Asa Sul', endereco: 'SCLS 404', lat: -15.8, lng: -47.9, hora: '14:01' })
+  })
+  it('documento do cardápio: título e URL assinada', () => {
+    const m: MensagemTela = {
+      ...base, id: 6, direcao: 'out', tipo: 'documento', texto: 'Cardápio', payload: { arquivoId: 'a1', alternativa: 'x' },
+      midia: { titulo: 'Cardápio', url: 'https://s/assinada' },
+    }
+    expect(paraSimMessage(m, TZ, null)).toEqual({ id: '6', de: 'restaurante', tipo: 'documento', titulo: 'Cardápio', url: 'https://s/assinada', hora: '14:01' })
+  })
+  it('imagem do cardápio: legenda é o título; sem URL ainda mostra a imagem indisponível', () => {
+    const m: MensagemTela = {
+      ...base, id: 7, direcao: 'out', tipo: 'imagem', texto: 'Cardápio', payload: { arquivoId: 'a1', alternativa: 'x' },
+      midia: { titulo: 'Cardápio', url: null },
+    }
+    expect(paraSimMessage(m, TZ, null)).toEqual({ id: '7', de: 'restaurante', tipo: 'imagem', url: null, legenda: 'Cardápio', hora: '14:01' })
+  })
+  it('mídia sem os dados do arquivo (apagado) vira o título em texto', () => {
+    const m: MensagemTela = { ...base, id: 8, direcao: 'out', tipo: 'documento', texto: 'Cardápio', payload: { arquivoId: 'a1' } }
+    expect(paraSimMessage(m, TZ, null)).toMatchObject({ tipo: 'texto', texto: 'Cardápio' })
+  })
+  it('arquivoDaMensagem: só documento/imagem de saída com arquivoId', () => {
+    expect(arquivoDaMensagem({ direcao: 'out', tipo: 'documento', payload: { arquivoId: 'a1', alternativa: 'x' } })).toBe('a1')
+    expect(arquivoDaMensagem({ direcao: 'out', tipo: 'imagem', payload: { arquivoId: 'a2' } })).toBe('a2')
+    expect(arquivoDaMensagem({ direcao: 'out', tipo: 'texto', payload: { arquivoId: 'a1' } })).toBeNull()
+    expect(arquivoDaMensagem({ direcao: 'in', tipo: 'documento', payload: { arquivoId: 'a1' } })).toBeNull()
+    expect(arquivoDaMensagem({ direcao: 'out', tipo: 'documento', payload: null })).toBeNull()
   })
   it('payload quebrado vira o texto gravado (nunca some)', () => {
     const m: MensagemTela = { ...base, id: 5, direcao: 'out', tipo: 'lista', texto: 'Qual unidade?', payload: { botao: 1 } }

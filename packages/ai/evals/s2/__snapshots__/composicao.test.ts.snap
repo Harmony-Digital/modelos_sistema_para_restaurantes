@@ -4,6 +4,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > c
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -28,6 +29,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > c
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -45,6 +47,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > c
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -72,6 +75,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > c
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -96,6 +100,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > c
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -113,6 +118,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > c
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -130,6 +136,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > c
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -156,6 +163,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > c
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -173,6 +181,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > c
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -201,6 +210,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > m
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -235,6 +245,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > m
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -254,6 +265,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > m
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -269,12 +281,14 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > m
   "perguntarEvento": null,
   "perguntarPessoas": {
     "item": {
+      "consulta": null,
       "convidados": null,
       "data": "2026-10-10",
       "espaco": null,
       "horario": null,
       "pessoas": null,
       "servico": "aviso_presenca",
+      "tag": null,
       "tema": null,
       "tipo": "registrar",
       "tipoEvento": null,
@@ -294,6 +308,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > m
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": {
@@ -325,24 +340,28 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > m
   "localizacoes": [],
   "pendente": [
     {
+      "consulta": null,
       "convidados": null,
       "data": "sábado",
       "espaco": null,
       "horario": null,
       "pessoas": null,
       "servico": "horario_unidades",
+      "tag": null,
       "tema": null,
       "tipo": "horario_dia",
       "tipoEvento": null,
       "unidade": null,
     },
     {
+      "consulta": null,
       "convidados": null,
       "data": "sábado",
       "espaco": null,
       "horario": null,
       "pessoas": 4,
       "servico": "aviso_presenca",
+      "tag": null,
       "tema": null,
       "tipo": "registrar",
       "tipoEvento": null,
@@ -370,6 +389,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > m
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -389,6 +409,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > m
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [
     {
@@ -411,6 +432,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > m
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [
     {
@@ -442,6 +464,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > m
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -459,6 +482,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > m
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -476,6 +500,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > m
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -495,6 +520,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > m
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -503,12 +529,14 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > m
   "perguntarEvento": null,
   "perguntarPessoas": {
     "item": {
+      "consulta": null,
       "convidados": null,
       "data": "2026-10-06",
       "espaco": null,
       "horario": null,
       "pessoas": null,
       "servico": "aviso_presenca",
+      "tag": null,
       "tema": null,
       "tipo": "registrar",
       "tipoEvento": null,
@@ -537,6 +565,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -563,6 +592,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -589,6 +619,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -615,6 +646,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -641,6 +673,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -667,6 +700,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -693,6 +727,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -719,6 +754,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -745,6 +781,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -771,6 +808,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -797,6 +835,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -823,6 +862,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -849,6 +889,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -866,6 +907,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -874,12 +916,14 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
   "perguntarEvento": null,
   "perguntarPessoas": {
     "item": {
+      "consulta": null,
       "convidados": null,
       "data": "2026-10-10",
       "espaco": null,
       "horario": "20h",
       "pessoas": null,
       "servico": "aviso_presenca",
+      "tag": null,
       "tema": null,
       "tipo": "registrar",
       "tipoEvento": null,
@@ -897,6 +941,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": {
@@ -928,12 +973,14 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
   "localizacoes": [],
   "pendente": [
     {
+      "consulta": null,
       "convidados": null,
       "data": "hoje",
       "espaco": null,
       "horario": null,
       "pessoas": 4,
       "servico": "aviso_presenca",
+      "tag": null,
       "tema": null,
       "tipo": "registrar",
       "tipoEvento": null,
@@ -952,6 +999,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": {
@@ -973,12 +1021,14 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
   "localizacoes": [],
   "pendente": [
     {
+      "consulta": null,
       "convidados": null,
       "data": "hoje",
       "espaco": null,
       "horario": null,
       "pessoas": 4,
       "servico": "aviso_presenca",
+      "tag": null,
       "tema": null,
       "tipo": "registrar",
       "tipoEvento": null,
@@ -1006,6 +1056,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -1023,6 +1074,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": {
@@ -1054,12 +1106,14 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
   "localizacoes": [],
   "pendente": [
     {
+      "consulta": null,
       "convidados": null,
       "data": "sábado",
       "espaco": null,
       "horario": null,
       "pessoas": 4,
       "servico": "aviso_presenca",
+      "tag": null,
       "tema": null,
       "tipo": "registrar",
       "tipoEvento": null,
@@ -1078,6 +1132,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -1095,6 +1150,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -1112,6 +1168,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -1129,6 +1186,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -1146,6 +1204,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -1163,6 +1222,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -1189,6 +1249,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -1206,6 +1267,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -1223,6 +1285,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -1240,6 +1303,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -1257,6 +1321,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -1274,6 +1339,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -1300,6 +1366,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -1326,6 +1393,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -1352,6 +1420,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -1386,6 +1455,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -1414,6 +1484,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,
@@ -1431,6 +1502,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > x
 {
   "acoesS2": [],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": {
@@ -1462,12 +1534,14 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > x
   "localizacoes": [],
   "pendente": [
     {
+      "consulta": null,
       "convidados": null,
       "data": null,
       "espaco": null,
       "horario": null,
       "pessoas": 2,
       "servico": "aviso_presenca",
+      "tag": null,
       "tema": null,
       "tipo": "registrar",
       "tipoEvento": null,
@@ -1495,6 +1569,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > x
     },
   ],
   "acoesS3": [],
+  "acoesS4": [],
   "handoff": false,
   "lacunas": [],
   "lista": null,

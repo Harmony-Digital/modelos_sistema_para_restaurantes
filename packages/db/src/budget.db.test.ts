@@ -1,8 +1,9 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { getTestDb, resetDb, seedRestaurant } from './test-utils.ts'
+import { withRole } from './rls.ts'
 import { budgetCounters, budgetLimits, spendLedger } from './schema/ops.ts'
-import { releaseBudget, reserveBudget, settleBudget } from './budget.ts'
+import { liberarReservasPendentes, releaseBudget, reserveBudget, settleBudget } from './budget.ts'
 
 const { db, sql } = getTestDb()
 beforeEach(() => resetDb(sql))
@@ -126,4 +127,21 @@ describe('orçamento', () => {
     expect(ledger[1]!.reservaId).toBe(r!.reservationId)
     expect(ledger[0]!.id).toBe(r!.reservationId)
   })
+
+  it('liberarReservasPendentes: devolve só as reservas do ref ainda abertas (processo que morreu), uma vez só', async () => {
+    const restaurantId = await setup('1', '10')
+    const ref = 'importacao:x'
+    // relógio real: o ledger grava now() do banco e a liberação acha os contadores pelo período desse instante
+    await reserveBudget(db, { restaurantId, scope: 'ia', amountUsd: '0.50', timeZone: TZ, ref })
+    const liquidada = await reserveBudget(db, { restaurantId, scope: 'ia', amountUsd: '0.20', timeZone: TZ, ref })
+    await settleBudget(db, liquidada!, '0.01', ref)
+    await reserveBudget(db, { restaurantId, scope: 'ia', amountUsd: '0.10', timeZone: TZ, ref: 'outro' })
+    expect((await counters(restaurantId)).map((c) => c.reservado)).toEqual(['0.600000', '0.600000'])
+
+    expect(await withRole(db, 'worker_app', (tx) => liberarReservasPendentes(tx, { restaurantId, ref, timeZone: TZ }))).toBe(1)
+    expect((await counters(restaurantId)).map((c) => [c.reservado, c.gasto])).toEqual([['0.100000', '0.010000'], ['0.100000', '0.010000']])
+    expect(await liberarReservasPendentes(db, { restaurantId, ref, timeZone: TZ })).toBe(0)
+    expect((await counters(restaurantId)).map((c) => c.reservado)).toEqual(['0.100000', '0.100000'])
+  })
 })
+

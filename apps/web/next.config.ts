@@ -14,6 +14,9 @@ const config: NextConfig = {
   poweredByHeader: false,
   devIndicators: false, // o selo do dev cobre o 1º item da navegação inferior no celular (e intercepta cliques do E2E)
   agentRules: false,
+  // upload de cardápio/importação (20 MB + campos do formulário): o padrão das Server Actions é 1 MB e o proxy.ts
+  // (que cobre /conteudo) corta o corpo em 10 MB — os dois limites precisam subir juntos
+  experimental: { serverActions: { bodySizeLimit: '21mb' }, proxyClientMaxBodySize: '21mb' },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }]
   },

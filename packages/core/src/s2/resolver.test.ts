@@ -11,7 +11,7 @@ const DOM_0010 = new Date('2026-10-11T00:10:00-03:00')
 const DEZ_20 = new Date('2026-12-20T12:00:00-03:00')
 
 const reg = (extra: Partial<ItemExtraido> = {}): ItemExtraido =>
-  ({ servico: 'aviso_presenca', tipo: 'registrar', unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, ...extra })
+  ({ servico: 'aviso_presenca', tipo: 'registrar', unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null, ...extra })
 const can = (extra: Partial<ItemExtraido> = {}): ItemExtraido => reg({ tipo: 'cancelar', ...extra })
 
 const SO_ASA_NORTE: ContextoS1 = { ...CONTEXTO, unidades: [ASA_NORTE] }

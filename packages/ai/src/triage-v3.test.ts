@@ -11,7 +11,7 @@ function fakeLlm(data: unknown): LlmClient & { calls: Parameters<LlmClient['comp
     }) as LlmClient['completeJson'],
   }
 }
-const base = { unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null }
+const base = { unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null }
 const aviso = { servico: 'aviso_presenca', tipo: 'registrar', ...base, unidade: 'asa sul', data: 'sábado', pessoas: 4, horario: '20h' }
 const s1 = { servico: 'horario_unidades', tipo: 'horario_dia', ...base, unidade: 'asa sul', data: 'domingo' }
 
@@ -54,7 +54,7 @@ describe('parseTriageV3', () => {
   it('v3 não extrai eventos: convidados, tipoEvento e espaco saem null (o modelo não os envia)', () => {
     const semEvento = { servico: 'aviso_presenca', tipo: 'registrar', unidade: 'asa sul', data: 'sábado', tema: null, pessoas: 4, horario: '20h' }
     expect(parseTriageV3({ itens: [semEvento], fora_escopo: false }).itens[0]).toEqual(aviso)
-    expect(aviso).toMatchObject({ convidados: null, tipoEvento: null, espaco: null })
+    expect(aviso).toMatchObject({ convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null })
   })
   it('pessoas: inteiro de 1 a 1000 ou null (acima de 60 o core responde o limite)', () => {
     for (const pessoas of [1, 60, 61, 80, 1000, null]) expect(() => parseTriageV3({ itens: [{ ...aviso, pessoas }], fora_escopo: false })).not.toThrow()
