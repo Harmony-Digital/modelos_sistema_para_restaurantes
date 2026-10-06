@@ -10,12 +10,16 @@ export const FUSO_PADRAO = 'America/Sao_Paulo'
 
 export const hojeLocal = (agora: Date, timezone: string = FUSO_PADRAO): DataIso => agoraLocal(agora, timezone).data
 export const limiteDaPrevisao = (hoje: DataIso): DataIso => somarDias(hoje, DIAS_A_FRENTE)
+/** A previsão também consulta os últimos 30 dias (só leitura); o formulário continua de hoje a +30. */
+export const DIAS_ATRAS = 30
+export const inicioDaPrevisao = (hoje: DataIso): DataIso => somarDias(hoje, -DIAS_ATRAS)
 
-/** Dia pedido na URL: inválido volta para hoje; fora de [hoje, hoje+30] vai para o limite mais próximo. */
+/** Dia pedido na URL: inválido volta para hoje; fora de [hoje-30, hoje+30] vai para o limite mais próximo. */
 export function dataDaUrl(param: string | undefined, hoje: DataIso): DataIso {
   if (!param || !dataIsoValida(param)) return hoje
+  const inicio = inicioDaPrevisao(hoje)
   const limite = limiteDaPrevisao(hoje)
-  return param < hoje ? hoje : param > limite ? limite : param
+  return param < inicio ? inicio : param > limite ? limite : param
 }
 
 export function hrefPrevisao(p: { data: DataIso; hoje: DataIso; unidade?: string | undefined; cancelados?: boolean | undefined }): string {

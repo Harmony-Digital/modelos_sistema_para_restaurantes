@@ -26,7 +26,7 @@ Use **Novo cliente** entre os blocos para começar do zero.
 8. Abra **Previsão**: nenhum desses avisos aparece (são simulados).
 
 ## 3. Previsão (barra inferior)
-1. A tela abre em **hoje**. Use as setas ou o campo de data para navegar até 30 dias à frente (não volta para dias passados). Com mais de uma unidade, filtre pelas abas.
+1. A tela abre em **hoje**. Use as setas ou o campo de data para navegar de 30 dias atrás até 30 dias à frente. Dias passados são só consulta ("Dia passado: só consulta.", sem **Novo aviso** nem cancelar). Com mais de uma unidade, filtre pelas abas.
 2. **Novo aviso** (para quem avisou por telefone ou balcão): escolha unidade, dia, pessoas, horário (opcional, dentro do funcionamento) e nome (opcional). Salvar mostra "Aviso anotado." e o aviso aparece com o selo **Painel**; o resumo da unidade soma as pessoas.
 3. Tente salvar com dia em que a unidade não abre ou horário fora do turno: o erro aparece no campo certo, nada é gravado.
 4. **Cancelar** (×) pede confirmação; o aviso sai da lista e o total volta. **Mostrar cancelados** exibe os cancelados riscados.

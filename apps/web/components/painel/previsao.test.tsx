@@ -81,15 +81,27 @@ describe('Previsao', () => {
     expect(screen.getByText('Nenhum aviso para 06/10/2026')).toBeInTheDocument()
   })
 
-  it('seletor de dia: anterior desativado hoje, limites e input leva à URL', () => {
+  it('seletor de dia: de 30 dias atrás a 30 à frente, limites e input leva à URL', () => {
     const { rerender } = render(<Previsao {...base} />)
-    expect(screen.queryByRole('link', { name: 'Dia anterior' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Dia anterior' })).toHaveAttribute('href', '/previsao?data=2026-10-04')
     expect(screen.getByRole('link', { name: 'Próximo dia' })).toHaveAttribute('href', '/previsao?data=2026-10-06')
+    expect(screen.getByLabelText('Escolher o dia')).toHaveAttribute('min', '2026-09-05')
+    expect(screen.getByLabelText('Escolher o dia')).toHaveAttribute('max', '2026-11-04')
     fireEvent.change(screen.getByLabelText('Escolher o dia'), { target: { value: '2026-10-10' } })
     expect(push).toHaveBeenCalledWith('/previsao?data=2026-10-10')
     rerender(<Previsao {...base} data="2026-11-04" />)
     expect(screen.queryByRole('link', { name: 'Próximo dia' })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Dia anterior' })).toHaveAttribute('href', '/previsao?data=2026-11-03')
+    rerender(<Previsao {...base} data="2026-09-05" />)
+    expect(screen.queryByRole('link', { name: 'Dia anterior' })).not.toBeInTheDocument()
+  })
+
+  it('dia passado: só leitura, sem Novo aviso nem Cancelar', () => {
+    render(<Previsao {...base} data="2026-10-04" />)
+    expect(screen.getByText('Ana')).toBeInTheDocument()
+    expect(screen.getByText('Dia passado: só consulta.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Novo aviso' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Cancelar aviso/ })).not.toBeInTheDocument()
   })
 })
 

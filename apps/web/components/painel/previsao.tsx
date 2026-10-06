@@ -11,7 +11,7 @@ import { EmptyState } from '@/components/shell/empty-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { chamarAcao } from '@/lib/action-result'
-import { dataBr, hrefPrevisao, limiteDaPrevisao, resumoUnidade, rotuloDoDia } from '@/lib/previsao'
+import { dataBr, hrefPrevisao, inicioDaPrevisao, limiteDaPrevisao, resumoUnidade, rotuloDoDia } from '@/lib/previsao'
 import { Abas } from './abas'
 import { AvisoForm } from './aviso-form'
 import { Confirmar } from './confirmar'
@@ -34,18 +34,22 @@ export function Previsao(props: {
   const [novo, setNovo] = useState(false)
   const [cancelando, setCancelando] = useState<AvisoPainel | null>(null)
   const limite = limiteDaPrevisao(props.hoje)
+  const inicio = inicioDaPrevisao(props.hoje)
+  // dia passado é só consulta: sem Novo aviso nem Cancelar
+  const passado = props.data < props.hoje
+  const podeEditar = props.podeEditar && !passado
   const href = (data: string, extra: { unidade?: string | null; cancelados?: boolean } = {}) =>
     hrefPrevisao({
       data, hoje: props.hoje,
       unidade: extra.unidade === undefined ? props.filtro ?? undefined : extra.unidade ?? undefined,
       cancelados: extra.cancelados ?? props.mostrarCancelados,
     })
-  const anterior = props.data > props.hoje ? somarDias(props.data, -1) : null
+  const anterior = props.data > inicio ? somarDias(props.data, -1) : null
   const proximo = props.data < limite ? somarDias(props.data, 1) : null
   const visiveis = props.filtro ? props.unidades.filter((u) => u.unitId === props.filtro) : props.unidades
   const totalAvisos = visiveis.reduce((s, u) => s + u.avisos.length, 0)
   const opcoes = props.unidades.map((u) => ({ id: u.unitId, nome: u.unidade }))
-  const botaoNovo = props.podeEditar && props.unidades.length > 0 && (
+  const botaoNovo = podeEditar && props.unidades.length > 0 && (
     <Button className="self-start" onClick={() => setNovo(true)}>
       <Plus aria-hidden="true" className="size-4" /> Novo aviso
     </Button>
@@ -63,7 +67,7 @@ export function Previsao(props: {
           type="date"
           aria-label="Escolher o dia"
           value={props.data}
-          min={props.hoje}
+          min={inicio}
           max={limite}
           onChange={(e) => e.target.value && router.push(href(e.target.value))}
           className="h-11 min-w-0 flex-1 rounded-md border border-input bg-card px-3 text-base text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -75,6 +79,7 @@ export function Previsao(props: {
         )}
       </div>
       <p className="font-medium text-foreground" aria-live="polite">{rotuloDoDia(props.data, props.hoje)}</p>
+      {passado && <p className="text-sm text-muted-foreground">Dia passado: só consulta.</p>}
 
       {props.unidades.length > 1 && (
         <Abas
@@ -102,7 +107,7 @@ export function Previsao(props: {
         <EmptyState
           icon={CalendarCheck}
           title={props.data === props.hoje ? 'Nenhum aviso para hoje' : `Nenhum aviso para ${dataBr(props.data)}`}
-          description="Quando um cliente avisar pelo WhatsApp, aparece aqui."
+          description={passado ? 'Ninguém avisou que viria neste dia.' : 'Quando um cliente avisar pelo WhatsApp, aparece aqui.'}
         />
       ) : null}
 
@@ -133,7 +138,7 @@ export function Previsao(props: {
                             {a.status === 'cancelado' && <Badge variant="outline">Cancelado</Badge>}
                           </p>
                         </div>
-                        {props.podeEditar && a.status === 'ativo' && (
+                        {podeEditar && a.status === 'ativo' && (
                           <Button variant="ghost" size="icon" aria-label={`Cancelar aviso de ${a.nome ?? 'sem nome'}, ${a.pessoas === 1 ? '1 pessoa' : `${a.pessoas} pessoas`}`} onClick={() => setCancelando(a)}>
                             <X aria-hidden="true" className="size-5" />
                           </Button>

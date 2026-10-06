@@ -6,11 +6,12 @@ const SEG_MEIO_DIA = { data: '2026-10-05', minuto: 12 * 60 }
 const unidade = { semanal: [[], [], [jantar], [jantar], [jantar], [jantar], [jantar]], excecoes: {} }
 
 describe('previsão: datas e links', () => {
-  it('data da URL: inválida ou fora da faixa volta ao limite', () => {
+  it('data da URL: inválida volta para hoje; fora de hoje ± 30 vai para o limite', () => {
     expect(dataDaUrl(undefined, '2026-10-05')).toBe('2026-10-05')
     expect(dataDaUrl('lixo', '2026-10-05')).toBe('2026-10-05')
     expect(dataDaUrl('2026-10-12', '2026-10-05')).toBe('2026-10-12')
-    expect(dataDaUrl('2026-09-01', '2026-10-05')).toBe('2026-10-05')
+    expect(dataDaUrl('2026-09-20', '2026-10-05')).toBe('2026-09-20')
+    expect(dataDaUrl('2026-09-01', '2026-10-05')).toBe('2026-09-05')
     expect(dataDaUrl('2027-01-01', '2026-10-05')).toBe('2026-11-04')
   })
   it('href omite o que é padrão', () => {
