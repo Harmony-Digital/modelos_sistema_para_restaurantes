@@ -122,13 +122,20 @@ export type ResultadoAplicar =
 
 /** Tipos aceitos como arquivo de cardápio para envio (iguais ao check de menu_files). */
 export const MIMES_ARQUIVO_CARDAPIO = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'] as const
+/**
+ * Onde o arquivo importado fica quando vira arquivo de envio: copiado do bucket `importacoes` (só dono/gerente leem)
+ * para `cardapio` (a equipe toda vê a prévia). A Server Action copia o objeto antes de aplicar.
+ */
+export const caminhoArquivoDeEnvio = (storagePath: string) => storagePath.replace(/^importacoes\//, 'cardapio/')
 const dataBr = (d: Date) =>
   new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric' }).format(d)
 
 /**
  * Confirmação humana do rascunho (PRD I10), numa transação: trava a importação, exige `rascunho`, cria categorias e
- * itens novos e atualiza os existentes (mesmo nome normalizado na mesma categoria: preço, descrição, tags, outros
- * nomes). Item com `unidade` reconhecida ⇒ preço próprio naquela unidade (o preço padrão só nasce com o item).
+ * itens novos e atualiza os existentes (mesmo nome normalizado na mesma categoria). No existente, só sobrescreve o
+ * que o rascunho traz: descrição vazia, tags e outros nomes vazios e preço null mantêm o valor atual (limpar um campo
+ * é pela edição do item). Itens novos entram depois do último item da categoria. Item com `unidade` reconhecida ⇒
+ * preço próprio naquela unidade (o preço padrão só nasce com o item; preço null não mexe na exceção).
  * `incluir: false` é ignorado. Auditoria só com contagens.
  */
 export async function aplicarRascunho(
@@ -162,7 +169,7 @@ export async function aplicarRascunho(
     if (opcoes.usarComoArquivoDeEnvio && doc.storagePath !== null) {
       // o nome original não é guardado (o caminho no Storage é gerado): título com a data da importação
       await gravarArquivo(tx, {
-        unitId: opcoes.unitIdArquivo, titulo: `Cardápio importado em ${dataBr(new Date())}`, storagePath: doc.storagePath,
+        unitId: opcoes.unitIdArquivo, titulo: `Cardápio importado em ${dataBr(new Date())}`, storagePath: caminhoArquivoDeEnvio(doc.storagePath),
         mime: doc.mime, tamanho: doc.tamanho, sha256: doc.sha256,
       })
     }
@@ -198,8 +205,11 @@ async function aplicarNoCardapio(
     .from(menuCategories)
   const categoriaPorNome = new Map(cats.map((c) => [normalizeText(c.nome), c.id]))
   let proximaOrdem = cats.reduce((m, c) => Math.max(m, c.ordem), 0) + 1
-  const its = await tx.select({ id: menuItems.id, categoryId: menuItems.categoryId, nome: menuItems.nome }).from(menuItems)
+  const its = await tx.select({ id: menuItems.id, categoryId: menuItems.categoryId, nome: menuItems.nome, ordem: menuItems.ordem }).from(menuItems)
   const itemPorChave = new Map(its.map((i) => [`${i.categoryId}|${normalizeText(i.nome)}`, i.id]))
+  // próxima ordem por categoria: itens novos vão para o fim (não se intercalam com os já cadastrados)
+  const ordemPorCategoria = new Map<string, number>()
+  for (const i of its) ordemPorCategoria.set(i.categoryId, Math.max(ordemPorCategoria.get(i.categoryId) ?? 0, i.ordem))
   const us = await tx.select({ id: units.id, nome: units.nome, slug: units.slug, apelidos: units.apelidos }).from(units)
   const unidadePorNome = new Map<string, string>()
   for (const u of us) for (const n of [u.nome, u.slug, ...u.apelidos]) unidadePorNome.set(normalizeText(n), u.id)
@@ -229,31 +239,34 @@ async function aplicarNoCardapio(
       categoriaPorNome.set(normalizeText(c.nome), categoryId)
       categoriasCriadas++
     }
-    for (const [ordem, { i, unitId }] of itens.entries()) {
+    for (const { i, unitId } of itens) {
       const chave = `${categoryId}|${normalizeText(i.nome)}`
       let itemId = itemPorChave.get(chave)
       if (!itemId) {
+        const ordem = (ordemPorCategoria.get(categoryId) ?? 0) + 1
+        ordemPorCategoria.set(categoryId, ordem)
         const [novo] = await tx.execute<{ id: string }>(sql`
           insert into public.menu_items (restaurant_id, category_id, nome, descricao, preco_centavos, tags, outros_nomes, disponivel, ordem)
           values (${restaurantId}, ${categoryId}, ${i.nome}, ${i.descricao}, ${unitId === null ? i.precoCentavos : null},
-                  ${sql.param(i.tags)}::text[], ${sql.param(i.outrosNomes)}::text[], true, ${ordem + 1})
+                  ${sql.param(i.tags)}::text[], ${sql.param(i.outrosNomes)}::text[], true, ${ordem})
           returning id`)
         // item novo só com preço de unidade: padrão "sob consulta"; o preço fica na exceção da unidade
         itemId = novo!.id
         itemPorChave.set(chave, itemId)
         criados.add(itemId)
       } else {
-        await tx
-          .update(menuItems)
-          .set({
-            descricao: i.descricao, tags: i.tags, outrosNomes: i.outrosNomes,
-            // preço de uma unidade não mexe no preço padrão
-            ...(unitId === null ? { precoCentavos: i.precoCentavos } : {}),
-          })
-          .where(eq(menuItems.id, itemId))
+        // só o que o rascunho traz (CSV sem a coluna, IA que não leu): vazio mantém o valor atual
+        const set = {
+          ...(i.descricao ? { descricao: i.descricao } : {}),
+          ...(i.tags.length ? { tags: i.tags } : {}),
+          ...(i.outrosNomes.length ? { outrosNomes: i.outrosNomes } : {}),
+          // preço de uma unidade não mexe no preço padrão; preço ilegível/ausente não vira "sob consulta"
+          ...(unitId === null && i.precoCentavos !== null ? { precoCentavos: i.precoCentavos } : {}),
+        }
+        if (Object.keys(set).length > 0) await tx.update(menuItems).set(set).where(eq(menuItems.id, itemId))
         if (!criados.has(itemId)) atualizados.add(itemId)
       }
-      if (unitId !== null) {
+      if (unitId !== null && i.precoCentavos !== null) {
         await tx.execute(sql`
           insert into public.menu_item_units (item_id, unit_id, restaurant_id, preco_override_centavos)
           values (${itemId}, ${unitId}, ${restaurantId}, ${i.precoCentavos})

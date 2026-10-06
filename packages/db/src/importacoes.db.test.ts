@@ -212,6 +212,41 @@ describe('aplicarRascunho', () => {
     expect(JSON.stringify(log!.diff)).not.toMatch(/Fraldinha|Picanha|Suco|Cupim|Lago/)
   })
 
+  it('reimportar só sobrescreve o que o rascunho traz: vazio e preço null preservam o existente (I2)', async () => {
+    const c = await cenario()
+    await db.update(menuItems).set({ tags: ['sem_gluten'], outrosNomes: ['pica', 'picanha argentina'] }).where(eq(menuItems.id, c.picanha))
+    await db.insert(menuItemUnits).values({ restaurantId: c.restaurantId, itemId: c.picanha, unitId: c.u2, precoOverrideCentavos: 7000 })
+    const vazio: RascunhoCardapio = { categorias: [{ nome: 'Carnes', itens: [
+      item('Picanha', { precoCentavos: null, descricao: null, tags: [], outrosNomes: [] }),
+      item('Picanha', { precoCentavos: null, unidade: 'Asa Norte' }),
+    ] }] }
+    const id = idDe(await csv(c, vazio))
+    expect(await aplicarRascunho(db, as(c.dono), id, vazio, SEM_ARQUIVO)).toMatchObject({ ok: true, valor: { criados: 0, atualizados: 1 } })
+    const [p] = await db.select().from(menuItems).where(eq(menuItems.id, c.picanha))
+    expect(p).toMatchObject({ precoCentavos: 5990, descricao: 'Antiga', tags: ['sem_gluten'], outrosNomes: ['pica', 'picanha argentina'] })
+    const [exc] = await db.select().from(menuItemUnits).where(eq(menuItemUnits.itemId, c.picanha))
+    expect(exc!.precoOverrideCentavos).toBe(7000)
+
+    // com valor, sobrescreve
+    const cheio: RascunhoCardapio = { categorias: [{ nome: 'Carnes', itens: [
+      item('Picanha', { precoCentavos: 6990, descricao: 'Nova', tags: ['infantil'], outrosNomes: ['pic'] }),
+    ] }] }
+    const id2 = idDe(await csv(c, cheio))
+    expect((await aplicarRascunho(db, as(c.dono), id2, cheio, SEM_ARQUIVO)).ok).toBe(true)
+    const [p2] = await db.select().from(menuItems).where(eq(menuItems.id, c.picanha))
+    expect(p2).toMatchObject({ precoCentavos: 6990, descricao: 'Nova', tags: ['infantil'], outrosNomes: ['pic'] })
+  })
+
+  it('itens novos em categoria existente entram depois do último item dela (M6)', async () => {
+    const c = await cenario()
+    await db.update(menuItems).set({ ordem: 7 }).where(eq(menuItems.id, c.picanha))
+    const r: RascunhoCardapio = { categorias: [{ nome: 'Carnes', itens: [item('Alcatra'), item('Cupim')] }] }
+    const id = idDe(await csv(c, r))
+    expect((await aplicarRascunho(db, as(c.dono), id, r, SEM_ARQUIVO)).ok).toBe(true)
+    const its = await db.select().from(menuItems).where(eq(menuItems.categoryId, c.carnes))
+    expect(Object.fromEntries(its.map((i) => [i.nome, i.ordem]))).toEqual({ Picanha: 7, Alcatra: 8, Cupim: 9 })
+  })
+
   it('segunda aplicação ⇒ ja_aplicado; rejeitada ⇒ ja_aplicado', async () => {
     const c = await cenario()
     const id = idDe(await csv(c))
@@ -240,7 +275,7 @@ describe('aplicarRascunho', () => {
     expect(await db.select().from(menuItems).where(eq(menuItems.restaurantId, c.restaurantId))).toHaveLength(3)
   })
 
-  it('usarComoArquivoDeEnvio cria o arquivo de cardápio a partir do arquivo importado', async () => {
+  it('usarComoArquivoDeEnvio cria o arquivo de cardápio no bucket cardapio (cópia do importado, visível ao atendente — M5)', async () => {
     const c = await cenario()
     const id = idDe(await arquivo(c))
     await marcarProcessando(db, id)
@@ -248,7 +283,7 @@ describe('aplicarRascunho', () => {
     expect(await aplicarRascunho(db, as(c.dono), id, RASCUNHO, { usarComoArquivoDeEnvio: true, unitIdArquivo: c.u2 })).toMatchObject({ ok: true })
     const fs = await db.select().from(menuFiles)
     expect(fs).toEqual([expect.objectContaining({
-      restaurantId: c.restaurantId, unitId: c.u2, storagePath: `importacoes/${c.restaurantId}/menu.pdf`, mime: 'application/pdf',
+      restaurantId: c.restaurantId, unitId: c.u2, storagePath: `cardapio/${c.restaurantId}/menu.pdf`, mime: 'application/pdf',
       tamanho: 50_000, sha256: SHA, ativo: true, titulo: `Cardápio importado em ${hojeBr()}`,
     })])
   })
