@@ -6,6 +6,11 @@ import { INGESTAO_PROMPT_VERSION, ingestaoJsonSchema, ingestaoSystemPrompt } fro
 export { INGESTAO_PROMPT_VERSION }
 /** Reserva de orçamento por leitura de documento (PDF/imagem cobra como tokens de entrada; ajustar com o eval:ingestao). */
 export const INGESTAO_BUDGET_ESTIMATE_USD = '0.10'
+/**
+ * Teto de saída da leitura (~50 tokens por item no JSON: cabe um cardápio de ~300 itens). Acima disso a saída é
+ * cortada (`saida_truncada`, sem repetir) e o painel pede o cardápio em partes — lotes por página ficam para a Etapa 07.
+ */
+export const INGESTAO_MAX_TOKENS = 16_000
 /** Leitura de documento demora bem mais que a triagem. */
 export const INGESTAO_TIMEOUT_MS = 120_000
 
@@ -92,7 +97,7 @@ export async function lerCardapioPorIa(
     schemaName: 'rascunho_cardapio',
     jsonSchema: ingestaoJsonSchema,
     parse: parseLeituraCardapio,
-    maxTokens: 4000,
+    maxTokens: INGESTAO_MAX_TOKENS,
     timeoutMs: INGESTAO_TIMEOUT_MS,
   })
 }

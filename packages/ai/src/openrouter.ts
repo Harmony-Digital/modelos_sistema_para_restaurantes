@@ -36,7 +36,7 @@ export interface LlmClient {
 
 type ApiResponse = {
   model?: string
-  choices?: { message?: { content?: string | null } }[]
+  choices?: { message?: { content?: string | null }; finish_reason?: string | null }[]
   usage?: {
     prompt_tokens?: number
     completion_tokens?: number
@@ -196,6 +196,10 @@ export function createOpenRouterClient(cfg: {
         const data = p.parse(JSON.parse(content))
         return { ok: true, data, model: model ?? p.models[0]!, usage: usage ?? { tokensIn: 0, tokensOut: 0, tokensCache: 0, costUsd: null }, latencyMs: elapsed() }
       } catch {
+        // cortada pelo max_tokens: repetir a mesma chamada cobraria de novo e cortaria no mesmo ponto
+        if (body.choices?.[0]?.finish_reason === 'length') {
+          return { ok: false, error: 'saida_truncada', retryable: false, status: res.status, model, usage, latencyMs: elapsed() }
+        }
         return { ok: false, error: 'saida_invalida', retryable: true, status: res.status, model, usage, latencyMs: elapsed() }
       }
     },

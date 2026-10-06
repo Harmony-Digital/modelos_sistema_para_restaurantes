@@ -56,6 +56,12 @@ describe('OpenRouter completeJson', () => {
     expect(r).toMatchObject({ ok: false, error: 'saida_invalida', retryable: true, usage: { costUsd: '0.000178' } })
   })
 
+  it('saída cortada pelo max_tokens (finish_reason length): permanente — repetir cobraria de novo e cortaria igual', async () => {
+    const cortada = { ...okBody('{"categorias":[{"nome":"Carnes","itens":[{"nome":"Pica'), choices: [{ message: { content: '{"categorias":[{"nome":"Carnes","itens":[{"nome":"Pica' }, finish_reason: 'length' }] }
+    const r = await call(async () => json(200, cortada))
+    expect(r).toMatchObject({ ok: false, error: 'saida_truncada', retryable: false, usage: { costUsd: '0.000178' } })
+  })
+
   it('402 (crédito/guardrail) é permanente', async () => {
     const r = await call(async () => json(402, { error: { code: 402, message: 'no credits' } }))
     expect(r).toMatchObject({ ok: false, retryable: false, status: 402 })

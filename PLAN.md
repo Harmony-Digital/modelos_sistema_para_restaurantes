@@ -123,6 +123,7 @@ Spec aprovada: [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-
 - [ ] Upload seguro (magic bytes, tamanho, sha256), job `document.ingest`, Structured Outputs por alvo — feito para `cardapio` na Etapa 05; falta estender aos outros alvos
 - [ ] Tela de revisão/aprovação do rascunho → tabelas oficiais — feita para `cardapio` na Etapa 05; falta para os outros alvos
 - [ ] Evals de extração · Homologação
+- [ ] Lotes por página na importação de PDF grande (spec §3.3; adiado na revisão final da Etapa 05): hoje a leitura tem teto de 16 mil tokens de saída e, se cortar (`finish_reason: length`), não repete a chamada paga e pede o cardápio em partes ou CSV
 
 ## Etapa 08 — Gastos, limites e LGPD no painel
 - [ ] Refinamento · Plano detalhado

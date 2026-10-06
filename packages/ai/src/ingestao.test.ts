@@ -31,7 +31,7 @@ const PDF = { mime: 'application/pdf', base64: 'JVBERi0x', filename: 'cardapio.p
 const PNG = { mime: 'image/png', base64: 'iVBORw0K', filename: 'foto.png' }
 
 describe('lerCardapioPorIa', () => {
-  it('PDF: anexa o arquivo, schema estrito, 4000 tokens e devolve o rascunho válido (incluir=true, sem outros nomes)', async () => {
+  it('PDF: anexa o arquivo, schema estrito, 16 mil tokens e devolve o rascunho válido (incluir=true, sem outros nomes)', async () => {
     const llm = fakeLlm(SAIDA)
     const r = await lerCardapioPorIa(llm, { models: ['visao/a', 'visao/b'], arquivo: PDF })
     expect(r.ok).toBe(true)
@@ -42,7 +42,7 @@ describe('lerCardapioPorIa', () => {
     expect(r.data.categorias[0]!.itens[1]!.precoCentavos).toBeNull()
     const call = llm.calls[0]!
     expect(call.models).toEqual(['visao/a', 'visao/b'])
-    expect(call.maxTokens).toBe(4000)
+    expect(call.maxTokens).toBe(16_000)
     expect(call.schemaName).toBe('rascunho_cardapio')
     expect(call.userParts).toEqual([{ type: 'pdf', filename: 'cardapio.pdf', base64: 'JVBERi0x' }])
     expect(call.system).toMatch(/centavos/)
