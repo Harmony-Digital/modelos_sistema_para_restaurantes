@@ -34,15 +34,22 @@ export const MODELOS_S1 = {
     texto: 'Consigo anotar avisos de 1 a 60 pessoas. Para grupos maiores, fale com a nossa equipe.',
     variaveis: [],
   },
-  aviso_data_fora: { texto: 'Consigo anotar avisos de hoje até {limite}. Pode me dizer outro dia?', variaveis: ['limite'] },
-  aviso_unidade_fechada: { texto: '{quando}, a unidade {unidade} não abre. Quer avisar para outro dia?', variaveis: ['quando', 'unidade'] },
+  // a triagem não vê o histórico: a pergunta de retorno pede o aviso completo de novo
+  aviso_data_fora: { texto: 'Consigo anotar avisos de hoje até {limite}. Se quiser, mande o aviso de novo com outro dia.', variaveis: ['limite'] },
+  aviso_unidade_fechada: {
+    texto: '{quando}, a unidade {unidade} não abre. Se quiser, mande o aviso de novo para outro dia.',
+    variaveis: ['quando', 'unidade'],
+  },
   aviso_horario_fora: {
-    texto: '{quando}, a unidade {unidade} funciona {turnos}. Pode me dizer um horário dentro desse período?',
+    texto: '{quando}, a unidade {unidade} funciona {turnos}. Se quiser, mande o aviso de novo com um horário nesse período.',
     variaveis: ['quando', 'unidade', 'turnos'],
   },
   aviso_cancelado: { texto: 'Pronto, cancelei seu aviso: {unidade}, {quando}.', variaveis: ['unidade', 'quando'] },
   aviso_nao_encontrado: { texto: 'Não encontrei nenhum aviso ativo seu.', variaveis: [] },
-  aviso_qual_cancelar: { texto: 'Você tem estes avisos:\n{linhas}\nQual deseja cancelar? Diga a unidade e o dia.', variaveis: ['linhas'] },
+  aviso_qual_cancelar: {
+    texto: 'Você tem estes avisos:\n{linhas}\nPara cancelar, mande por exemplo: "{exemplo}".',
+    variaveis: ['linhas', 'exemplo'],
+  },
 } as const satisfies Record<string, { texto: string; variaveis: readonly string[] }>
 
 export type ChaveModelo = keyof typeof MODELOS_S1

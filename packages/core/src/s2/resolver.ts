@@ -4,9 +4,9 @@ import { feriadosNacionais, mapaFeriados } from '../s1/feriados.ts'
 import {
   cruzaMeiaNoite, horarioDoDia, minutosDe, temHorarioCadastrado, type AgendaUnidade, type PoliticaFeriado, type Turno,
 } from '../s1/horarios.ts'
-import { dasHora, ddmm, formatarTurnos, renderModelo, rotuloDoDia, type ChaveModelo } from '../s1/modelos.ts'
+import { dasHora, ddmm, DIAS_SEMANA, formatarTurnos, renderModelo, rotuloDoDia, type ChaveModelo } from '../s1/modelos.ts'
 import { unidadesOrdenadas } from '../s1/resolver.ts'
-import { agoraLocal, somarDias, type DataIso } from '../s1/tempo.ts'
+import { agoraLocal, diaDaSemana, diasEntre, somarDias, type DataIso } from '../s1/tempo.ts'
 import type { ContextoS1, ItemExtraido, UnidadeS1 } from '../s1/tipos.ts'
 import { normalizarHorario } from './horario.ts'
 import { MAX_PESSOAS, MIN_PESSOAS } from './pessoas.ts'
@@ -154,6 +154,16 @@ export function resolverItensS2(
     }
   }
 
+  /** Frase completa que a triagem (sem histórico) entende: "cancela o aviso de sábado na unidade Asa Sul". */
+  function exemploCancelar(a: AvisoAtivoS2): string {
+    const delta = diasEntre(local.data, a.data)
+    const dia = delta === 0 ? 'de hoje'
+      : delta === 1 ? 'de amanhã'
+        : delta < 7 ? `de ${DIAS_SEMANA[diaDaSemana(a.data)]!.toLowerCase()}`
+          : `do dia ${ddmm(a.data)}`
+    return `cancela o aviso ${dia} na unidade ${nomeDe(a.unitId)}`
+  }
+
   function cancelar(item: ItemExtraido): void {
     if (ativos.length === 0) {
       validos++
@@ -178,9 +188,9 @@ export function resolverItensS2(
       return
     }
     validos++
-    const linhas = (candidatos.length ? candidatos : ativos)
-      .map((a) => `• ${nomeDe(a.unitId)} — ${minuscula(rotulo(a.data))}, ${textoPessoas(a.pessoas)}`)
-    trechos.push(m('aviso_qual_cancelar', { linhas: linhas.join('\n') }))
+    const lista = candidatos.length ? candidatos : ativos
+    const linhas = lista.map((a) => `• ${nomeDe(a.unitId)} — ${minuscula(rotulo(a.data))}, ${textoPessoas(a.pessoas)}`)
+    trechos.push(m('aviso_qual_cancelar', { linhas: linhas.join('\n'), exemplo: exemploCancelar(lista[0]!) }))
   }
 
   for (const item of itens) {

@@ -48,7 +48,7 @@ describe('resolverS2 — registrar', () => {
   it('data fora de [hoje, hoje+30]: não registra', () => {
     for (const data of ['20/11', '01/10/2026']) {
       const r = resolverS2([reg({ unidade: 'asa norte', data, pessoas: 2 })], CONTEXTO, SEG_14H, [])
-      expect(r.texto).toBe('Consigo anotar avisos de hoje até 04/11. Pode me dizer outro dia?')
+      expect(r.texto).toBe('Consigo anotar avisos de hoje até 04/11. Se quiser, mande o aviso de novo com outro dia.')
       expect(r.acoes).toEqual([])
       expect([r.validos, r.respondidos]).toEqual([1, 0])
     }
@@ -114,24 +114,24 @@ describe('resolverS2 — registrar', () => {
 
   it('unidade fechada no dia', () => {
     const r = resolverS2([reg({ unidade: 'asa sul', pessoas: 2 })], CONTEXTO, SEG_14H, [])
-    expect(r.texto).toBe('Hoje, a unidade Asa Sul não abre. Quer avisar para outro dia?')
+    expect(r.texto).toBe('Hoje, a unidade Asa Sul não abre. Se quiser, mande o aviso de novo para outro dia.')
     expect(r.acoes).toEqual([])
     expect([r.validos, r.respondidos]).toEqual([1, 0])
   })
 
   it('horário fora dos turnos do dia', () => {
     const r = resolverS2([reg({ unidade: 'asa sul', data: 'sábado', pessoas: 2, horario: '16h' })], CONTEXTO, SEG_14H, [])
-    expect(r.texto).toBe('Sábado (10/10), a unidade Asa Sul funciona das 11h30 às 15h e das 18h às 2h. Pode me dizer um horário dentro desse período?')
+    expect(r.texto).toBe('Sábado (10/10), a unidade Asa Sul funciona das 11h30 às 15h e das 18h às 2h. Se quiser, mande o aviso de novo com um horário nesse período.')
     expect(r.acoes).toEqual([])
   })
 
   it('feriado com política "como domingo" e exceção da data valem', () => {
     const r = resolverS2([reg({ unidade: 'asa sul', data: '12/10', pessoas: 2, horario: '20h' })], CONTEXTO, SEG_14H, [])
-    expect(r.texto).toBe('Segunda-feira (12/10, Nossa Senhora Aparecida), a unidade Asa Sul funciona das 11h30 às 16h. Pode me dizer um horário dentro desse período?')
+    expect(r.texto).toBe('Segunda-feira (12/10, Nossa Senhora Aparecida), a unidade Asa Sul funciona das 11h30 às 16h. Se quiser, mande o aviso de novo com um horário nesse período.')
     const v = resolverS2([reg({ unidade: 'asa norte', data: '24/12', pessoas: 2, horario: '19h' })], CONTEXTO, DEZ_20, [])
-    expect(v.texto).toBe('Quinta-feira (24/12), a unidade Asa Norte funciona das 11h às 18h. Pode me dizer um horário dentro desse período?')
+    expect(v.texto).toBe('Quinta-feira (24/12), a unidade Asa Norte funciona das 11h às 18h. Se quiser, mande o aviso de novo com um horário nesse período.')
     const n = resolverS2([reg({ unidade: 'asa sul', data: 'natal', pessoas: 2 })], CONTEXTO, DEZ_20, [])
-    expect(n.texto).toBe('Sexta-feira (25/12, Natal), a unidade Asa Sul não abre. Quer avisar para outro dia?')
+    expect(n.texto).toBe('Sexta-feira (25/12, Natal), a unidade Asa Sul não abre. Se quiser, mande o aviso de novo para outro dia.')
   })
 
   it('madrugada: turno de sábado até 2h aceita 1h30, recusa 3h', () => {
@@ -203,9 +203,17 @@ describe('resolverS2 — cancelar', () => {
 
   it('vários: lista e pergunta qual', () => {
     const r = resolverS2([can()], CONTEXTO, SEG_14H, [sab, hoje])
-    expect(r.texto).toBe('Você tem estes avisos:\n• Asa Norte — hoje, 2 pessoas\n• Asa Sul — sábado (10/10), 4 pessoas\nQual deseja cancelar? Diga a unidade e o dia.')
+    expect(r.texto).toBe('Você tem estes avisos:\n• Asa Norte — hoje, 2 pessoas\n• Asa Sul — sábado (10/10), 4 pessoas\nPara cancelar, mande por exemplo: "cancela o aviso de hoje na unidade Asa Norte".')
     expect(r.acoes).toEqual([])
     expect([r.validos, r.respondidos]).toEqual([1, 0])
+  })
+
+  it('exemplo do pedido de cancelamento usa o primeiro aviso da lista (amanhã, dia da semana ou dd/mm)', () => {
+    const av = (id: string, unitId: string, data: string): AvisoAtivoS2 => ({ id, unitId, data, pessoas: 2, horarioAprox: null })
+    const exemplo = (avisos: AvisoAtivoS2[]) => resolverS2([can()], CONTEXTO, SEG_14H, avisos).texto?.split('\n').at(-1)
+    expect(exemplo([av('x', 'u-asa-norte', '2026-10-06'), sab])).toBe('Para cancelar, mande por exemplo: "cancela o aviso de amanhã na unidade Asa Norte".')
+    expect(exemplo([av('y', 'u-lago-sul', '2026-10-25'), av('x', 'u-lago-sul', '2026-10-24')]))
+      .toBe('Para cancelar, mande por exemplo: "cancela o aviso do dia 24/10 na unidade Lago Sul".')
   })
 
   it('vários: escolhe pela unidade ou pela data', () => {
@@ -218,11 +226,11 @@ describe('resolverS2 — cancelar', () => {
   it('unidade/data sem aviso correspondente: lista os que existem', () => {
     const r = resolverS2([can({ unidade: 'lago sul' })], CONTEXTO, SEG_14H, [sab])
     expect(r.acoes).toEqual([])
-    expect(r.texto).toBe('Você tem estes avisos:\n• Asa Sul — sábado (10/10), 4 pessoas\nQual deseja cancelar? Diga a unidade e o dia.')
+    expect(r.texto).toBe('Você tem estes avisos:\n• Asa Sul — sábado (10/10), 4 pessoas\nPara cancelar, mande por exemplo: "cancela o aviso de sábado na unidade Asa Sul".')
   })
 
   it('unidade ou data dita mas não reconhecida: nunca cancela, lista todos', () => {
-    const lista = 'Você tem estes avisos:\n• Asa Sul — sábado (10/10), 4 pessoas\nQual deseja cancelar? Diga a unidade e o dia.'
+    const lista = 'Você tem estes avisos:\n• Asa Sul — sábado (10/10), 4 pessoas\nPara cancelar, mande por exemplo: "cancela o aviso de sábado na unidade Asa Sul".'
     for (const item of [can({ unidade: 'shopping' }), can({ unidade: 'asa' }), can({ data: 'semana retrasada' }), can({ unidade: 'asa sul', data: 'dia 45' })]) {
       const r = resolverS2([item], CONTEXTO, SEG_14H, [sab])
       expect(r.acoes).toEqual([])

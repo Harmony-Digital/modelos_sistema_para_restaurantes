@@ -29,7 +29,7 @@ export const ROTULOS_MODELO: Record<ChaveModelo, { titulo: string; quando: strin
   aviso_horario_fora: { titulo: 'Horário do aviso fora do funcionamento', quando: 'O horário informado não está dentro dos horários do dia.' },
   aviso_cancelado: { titulo: 'Aviso cancelado', quando: 'O cliente pede para cancelar o aviso.' },
   aviso_nao_encontrado: { titulo: 'Nenhum aviso para cancelar', quando: 'O cliente pede para cancelar, mas não tem aviso ativo.' },
-  aviso_qual_cancelar: { titulo: 'Qual aviso cancelar', quando: 'O cliente tem vários avisos e não disse qual cancelar.' },
+  aviso_qual_cancelar: { titulo: 'Qual aviso cancelar', quando: 'O cliente tem vários avisos e não disse qual cancelar. {exemplo} é uma frase de cancelamento com o primeiro aviso da lista.' },
 }
 
 const LINHAS: Partial<Record<ChaveModelo, (nome: string, endereco: string) => string>> = {
@@ -61,6 +61,7 @@ export function exemploDeVariaveis(chave: ChaveModelo, u: UnidadeExemplo | null)
     pessoas: '4 pessoas',
     horario: ', por volta das 20h',
     limite: '04/11',
+    exemplo: `cancela o aviso de hoje na unidade ${nome}`,
   }
 }
 

@@ -47,7 +47,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > c
   "texto": "Você tem estes avisos:
 • Asa Norte — hoje, 2 pessoas
 • Asa Sul — sábado (10/10), 4 pessoas
-Qual deseja cancelar? Diga a unidade e o dia.",
+Para cancelar, mande por exemplo: "cancela o aviso de hoje na unidade Asa Norte".",
   "validos": 1,
 }
 `;
@@ -119,7 +119,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > c
   "respondidos": 0,
   "texto": "Você tem estes avisos:
 • Asa Sul — sábado (10/10), 4 pessoas
-Qual deseja cancelar? Diga a unidade e o dia.",
+Para cancelar, mande por exemplo: "cancela o aviso de sábado na unidade Asa Sul".",
   "validos": 1,
 }
 `;
@@ -156,7 +156,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > c
   "respondidos": 0,
   "texto": "Você tem estes avisos:
 • Asa Sul — sábado (10/10), 4 pessoas
-Qual deseja cancelar? Diga a unidade e o dia.",
+Para cancelar, mande por exemplo: "cancela o aviso de sábado na unidade Asa Sul".",
   "validos": 1,
 }
 `;
@@ -420,7 +420,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > m
   "respondidos": 1,
   "texto": "Sábado (10/10), a unidade Asa Sul abre das 11h30 às 15h e das 18h às 2h.
 
-Sábado (10/10), a unidade Asa Sul funciona das 11h30 às 15h e das 18h às 2h. Pode me dizer um horário dentro desse período?",
+Sábado (10/10), a unidade Asa Sul funciona das 11h30 às 15h e das 18h às 2h. Se quiser, mande o aviso de novo com um horário nesse período.",
   "validos": 2,
 }
 `;
@@ -445,7 +445,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > m
     "unitId": "u-asa-norte",
   },
   "respondidos": 0,
-  "texto": "Hoje, a unidade Asa Sul não abre. Quer avisar para outro dia?
+  "texto": "Hoje, a unidade Asa Sul não abre. Se quiser, mande o aviso de novo para outro dia.
 
 Para quantas pessoas?",
   "validos": 1,
@@ -945,7 +945,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
   "pendente": [],
   "perguntarPessoas": null,
   "respondidos": 0,
-  "texto": "Hoje, a unidade Asa Sul não abre. Quer avisar para outro dia?",
+  "texto": "Hoje, a unidade Asa Sul não abre. Se quiser, mande o aviso de novo para outro dia.",
   "validos": 1,
 }
 `;
@@ -959,7 +959,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
   "pendente": [],
   "perguntarPessoas": null,
   "respondidos": 0,
-  "texto": "Sábado (10/10), a unidade Asa Sul funciona das 11h30 às 15h e das 18h às 2h. Pode me dizer um horário dentro desse período?",
+  "texto": "Sábado (10/10), a unidade Asa Sul funciona das 11h30 às 15h e das 18h às 2h. Se quiser, mande o aviso de novo com um horário nesse período.",
   "validos": 1,
 }
 `;
@@ -973,7 +973,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
   "pendente": [],
   "perguntarPessoas": null,
   "respondidos": 0,
-  "texto": "Sábado (10/10), a unidade Asa Sul funciona das 11h30 às 15h e das 18h às 2h. Pode me dizer um horário dentro desse período?",
+  "texto": "Sábado (10/10), a unidade Asa Sul funciona das 11h30 às 15h e das 18h às 2h. Se quiser, mande o aviso de novo com um horário nesse período.",
   "validos": 1,
 }
 `;
@@ -987,7 +987,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
   "pendente": [],
   "perguntarPessoas": null,
   "respondidos": 0,
-  "texto": "Amanhã, a unidade Águas Claras funciona das 18h às 23h. Pode me dizer um horário dentro desse período?",
+  "texto": "Amanhã, a unidade Águas Claras funciona das 18h às 23h. Se quiser, mande o aviso de novo com um horário nesse período.",
   "validos": 1,
 }
 `;
@@ -1001,7 +1001,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
   "pendente": [],
   "perguntarPessoas": null,
   "respondidos": 0,
-  "texto": "Consigo anotar avisos de hoje até 04/11. Pode me dizer outro dia?",
+  "texto": "Consigo anotar avisos de hoje até 04/11. Se quiser, mande o aviso de novo com outro dia.",
   "validos": 1,
 }
 `;
@@ -1015,7 +1015,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
   "pendente": [],
   "perguntarPessoas": null,
   "respondidos": 0,
-  "texto": "Consigo anotar avisos de hoje até 04/11. Pode me dizer outro dia?",
+  "texto": "Consigo anotar avisos de hoje até 04/11. Se quiser, mande o aviso de novo com outro dia.",
   "validos": 1,
 }
 `;
@@ -1094,7 +1094,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
   "pendente": [],
   "perguntarPessoas": null,
   "respondidos": 0,
-  "texto": "Sexta-feira (25/12, Natal), a unidade Asa Sul não abre. Quer avisar para outro dia?",
+  "texto": "Sexta-feira (25/12, Natal), a unidade Asa Sul não abre. Se quiser, mande o aviso de novo para outro dia.",
   "validos": 1,
 }
 `;
@@ -1108,7 +1108,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
   "pendente": [],
   "perguntarPessoas": null,
   "respondidos": 0,
-  "texto": "Quinta-feira (24/12), a unidade Asa Norte funciona das 11h às 18h. Pode me dizer um horário dentro desse período?",
+  "texto": "Quinta-feira (24/12), a unidade Asa Norte funciona das 11h às 18h. Se quiser, mande o aviso de novo com um horário nesse período.",
   "validos": 1,
 }
 `;

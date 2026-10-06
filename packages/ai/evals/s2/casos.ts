@@ -57,7 +57,7 @@ const CANC_A2 = 'Pronto, cancelei seu aviso: Asa Norte, hoje.'
 const cancelada = (avisoId: string, texto: string): AcaoS2 => ({ tipo: 'cancelar', avisoId, texto, textoSeFalhar: NAO_ACHOU })
 const LACUNA = 'Ainda não tenho essa informação; vou verificar com a equipe.'
 const AS_SABADO = 'Sábado (10/10), a unidade Asa Sul abre das 11h30 às 15h e das 18h às 2h.'
-const QUAL_SAB_HOJE = 'Você tem estes avisos:\n• Asa Norte — hoje, 2 pessoas\n• Asa Sul — sábado (10/10), 4 pessoas\nQual deseja cancelar? Diga a unidade e o dia.'
+const QUAL_SAB_HOJE = 'Você tem estes avisos:\n• Asa Norte — hoje, 2 pessoas\n• Asa Sul — sábado (10/10), 4 pessoas\nPara cancelar, mande por exemplo: "cancela o aviso de hoje na unidade Asa Norte".'
 const SAB_AS = aviso('a1', AS, '2026-10-10', 4, '20:00')
 const HOJE_AN = aviso('a2', AN, '2026-10-05', 2)
 const PASSADO = aviso('a0', AN, '2026-10-01', 2)
@@ -102,26 +102,26 @@ export const CASOS: Caso[] = [
 
   // ---- registrar: recusas (agenda, limites, dados inválidos)
   c('r30', 'vou na asa sul hoje com 2', SEG_14H, [reg({ unidade: 'asa sul', data: 'hoje', pessoas: 2 })],
-    { texto: 'Hoje, a unidade Asa Sul não abre. Quer avisar para outro dia?' }),
+    { texto: 'Hoje, a unidade Asa Sul não abre. Se quiser, mande o aviso de novo para outro dia.' }),
   c('r31', 'sábado às 16h na asa sul, em 2', SEG_14H, [reg({ unidade: 'asa sul', data: 'sábado', pessoas: 2, horario: '16h' })],
-    { texto: 'Sábado (10/10), a unidade Asa Sul funciona das 11h30 às 15h e das 18h às 2h. Pode me dizer um horário dentro desse período?' }),
+    { texto: 'Sábado (10/10), a unidade Asa Sul funciona das 11h30 às 15h e das 18h às 2h. Se quiser, mande o aviso de novo com um horário nesse período.' }),
   c('r32', 'sábado às 3h na asa sul, em 2', SEG_14H, [reg({ unidade: 'asa sul', data: 'sábado', pessoas: 2, horario: '3h' })],
     { contem: ['funciona das 11h30 às 15h e das 18h às 2h'] }),
   c('r33', 'amanhã ao meio-dia na águas claras, em 2', SEG_14H, [reg({ unidade: 'águas claras', data: 'amanhã', pessoas: 2, horario: 'meio-dia' })],
-    { texto: 'Amanhã, a unidade Águas Claras funciona das 18h às 23h. Pode me dizer um horário dentro desse período?' }),
+    { texto: 'Amanhã, a unidade Águas Claras funciona das 18h às 23h. Se quiser, mande o aviso de novo com um horário nesse período.' }),
   c('r34', 'dia 20/11 na asa norte, em 2', SEG_14H, [reg({ unidade: 'asa norte', data: '20/11', pessoas: 2 })],
-    { texto: 'Consigo anotar avisos de hoje até 04/11. Pode me dizer outro dia?' }),
+    { texto: 'Consigo anotar avisos de hoje até 04/11. Se quiser, mande o aviso de novo com outro dia.' }),
   c('r35', 'dia 01/10 na asa norte, em 2', SEG_14H, [reg({ unidade: 'asa norte', data: '01/10/2026', pessoas: 2 })],
-    { texto: 'Consigo anotar avisos de hoje até 04/11. Pode me dizer outro dia?' }),
+    { texto: 'Consigo anotar avisos de hoje até 04/11. Se quiser, mande o aviso de novo com outro dia.' }),
   c('r36', 'dia 04/11 na asa norte, em 2', SEG_14H, [reg({ unidade: 'asa norte', data: '04/11', pessoas: 2 })],
     { texto: `Anotado: Asa Norte, quarta-feira (04/11), 2 pessoas. ${FIM}`, acoes: [registrar(AN, '2026-11-04', 2)] }),
   c('r37', 'semana retrasada na asa norte', SEG_14H, [reg({ unidade: 'asa norte', data: 'semana retrasada', pessoas: 2 })], { texto: DATA_NAO }),
   c('r38', 'vamos em 70 na asa norte', SEG_14H, [reg({ unidade: 'asa norte', pessoas: 61 })], { texto: PESSOAS_INVALIDO }),
   c('r39', 'vou na asa norte com 0 pessoas', SEG_14H, [reg({ unidade: 'asa norte', pessoas: 0 })], { texto: PESSOAS_INVALIDO }),
   c('r40', 'natal na asa sul em 4', DEZ_20, [reg({ unidade: 'asa sul', data: 'natal', pessoas: 4 })],
-    { texto: 'Sexta-feira (25/12, Natal), a unidade Asa Sul não abre. Quer avisar para outro dia?' }),
+    { texto: 'Sexta-feira (25/12, Natal), a unidade Asa Sul não abre. Se quiser, mande o aviso de novo para outro dia.' }),
   c('r41', '24/12 às 19h na asa norte, em 2', DEZ_20, [reg({ unidade: 'asa norte', data: '24/12', pessoas: 2, horario: '19h' })],
-    { texto: 'Quinta-feira (24/12), a unidade Asa Norte funciona das 11h às 18h. Pode me dizer um horário dentro desse período?' }),
+    { texto: 'Quinta-feira (24/12), a unidade Asa Norte funciona das 11h às 18h. Se quiser, mande o aviso de novo com um horário nesse período.' }),
 
   // ---- registrar: atualização, duplicatas, injeção
   c('r50', 'sábado agora somos 5 na asa sul às 21h', SEG_14H, [reg({ unidade: 'asa sul', data: 'sábado', pessoas: 5, horario: '21h' })],
@@ -152,9 +152,9 @@ export const CASOS: Caso[] = [
     { texto: 'Pronto, cancelei seu aviso: Asa Sul, sábado (10/10).', acoes: [cancelada('a1', CANC_A1)] }, { avisos: [SAB_AS, HOJE_AN] }),
   c('c06', 'cancela meu aviso (só há aviso de ontem)', SEG_14H, [can()], { texto: NAO_ACHOU }, { avisos: [PASSADO] }),
   c('c07', 'cancela o do lago sul', SEG_14H, [can({ unidade: 'lago sul' })],
-    { texto: 'Você tem estes avisos:\n• Asa Sul — sábado (10/10), 4 pessoas\nQual deseja cancelar? Diga a unidade e o dia.' }, { avisos: [SAB_AS] }),
+    { texto: 'Você tem estes avisos:\n• Asa Sul — sábado (10/10), 4 pessoas\nPara cancelar, mande por exemplo: "cancela o aviso de sábado na unidade Asa Sul".' }, { avisos: [SAB_AS] }),
   c('c09', 'cancela o do shopping (unidade que não existe)', SEG_14H, [can({ unidade: 'shopping' })],
-    { texto: 'Você tem estes avisos:\n• Asa Sul — sábado (10/10), 4 pessoas\nQual deseja cancelar? Diga a unidade e o dia.' }, { avisos: [SAB_AS] }),
+    { texto: 'Você tem estes avisos:\n• Asa Sul — sábado (10/10), 4 pessoas\nPara cancelar, mande por exemplo: "cancela o aviso de sábado na unidade Asa Sul".' }, { avisos: [SAB_AS] }),
   c('c08', 'cancela, cancela!', SEG_14H, [can(), can()],
     { texto: 'Pronto, cancelei seu aviso: Asa Sul, sábado (10/10).', acoes: [cancelada('a1', CANC_A1)] }, { avisos: [SAB_AS] }),
 
@@ -177,9 +177,9 @@ export const CASOS: Caso[] = [
   c('m09', 'quero falar com o gerente', SEG_14H, [o('humano')], { texto: null }),
   c('m10', 'sábado às 16h na asa sul, em 2. a asa sul abre sábado?', SEG_14H,
     [reg({ unidade: 'asa sul', data: 'sábado', pessoas: 2, horario: '16h' }), h('horario_dia', 'asa sul', 'sábado')],
-    { texto: `${AS_SABADO}\n\nSábado (10/10), a unidade Asa Sul funciona das 11h30 às 15h e das 18h às 2h. Pode me dizer um horário dentro desse período?` }),
+    { texto: `${AS_SABADO}\n\nSábado (10/10), a unidade Asa Sul funciona das 11h30 às 15h e das 18h às 2h. Se quiser, mande o aviso de novo com um horário nesse período.` }),
   c('m11', 'vou na asa sul hoje em 2 e na asa norte amanhã', SEG_14H, [reg({ unidade: 'asa sul', data: 'hoje', pessoas: 2 }), reg({ unidade: 'asa norte', data: 'amanhã' })],
-    { texto: `Hoje, a unidade Asa Sul não abre. Quer avisar para outro dia?\n\n${PESSOAS}`, pergunta: true }),
+    { texto: `Hoje, a unidade Asa Sul não abre. Se quiser, mande o aviso de novo para outro dia.\n\n${PESSOAS}`, pergunta: true }),
 ]
 
 // ------------------------------------------------------------------ camada 1: frases reais
