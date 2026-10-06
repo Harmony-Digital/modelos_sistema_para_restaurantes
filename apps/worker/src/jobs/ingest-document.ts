@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { and, eq, sql } from 'drizzle-orm'
 import {
-  concluirIngestao, ERRO_RASCUNHO_INVALIDO, liberarReservasPendentes, marcarProcessando, proximoLote, releaseBudget, reserveBudget,
+  concluirIngestao, ERRO_RASCUNHO_INVALIDO, importacoesParadas, liberarReservasPendentes, marcarProcessando, proximoLote, releaseBudget, reserveBudget,
   salvarLote, schema, settleBudget, validarRascunho, type ArquivoImportacao, type Db, type EstadoLote, type Reservation,
 } from '@atd/db'
 import {
@@ -95,6 +95,29 @@ export async function ingestDocument(deps: IngestDeps, importacaoId: string): Pr
   const estado = await proximoLote(deps.db, importacaoId)
   if (estado) return lerLote(deps, importacaoId, estado)
   return lerArquivoUnico(deps, importacaoId)
+}
+
+/**
+ * Reenfileira as importações de vários arquivos paradas (enfileiramento perdido, fila que desistiu depois de o
+ * leitor morrer): no boot do worker e na retenção diária. Seguro repetir (chave do job + concessão do lote).
+ * Devolve quantas foram reenfileiradas.
+ */
+export async function retomarImportacoesParadas(deps: {
+  db: Db
+  log: Logger
+  enfileirar: (importacaoId: string) => Promise<unknown>
+}): Promise<number> {
+  let n = 0
+  for (const id of await importacoesParadas(deps.db)) {
+    try {
+      await deps.enfileirar(id)
+      n++
+    } catch (err) {
+      deps.log.error({ err, importacaoId: id }, 'falha ao reenfileirar importação parada')
+    }
+  }
+  if (n > 0) deps.log.warn({ importacoes: n }, 'importações paradas reenfileiradas')
+  return n
 }
 
 /** Importação de cardápio da Etapa 05 (um arquivo na linha principal): uma leitura inteira por job. */

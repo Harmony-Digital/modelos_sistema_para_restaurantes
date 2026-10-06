@@ -6,7 +6,7 @@ import { createDb, reserveBudget, schema } from '@atd/db'
 import { getTestDb, resetDb, seedRestaurant, setupPgbossRoles, WORKER_URL } from '@atd/db/test-utils'
 import { parseLeituraCardapio, type ConteudoUsuario, type LlmClient } from '@atd/ai'
 import { createLogger } from '../logger.ts'
-import { ingestDocument, type IngestDeps } from './ingest-document.ts'
+import { ingestDocument, retomarImportacoesParadas, type IngestDeps } from './ingest-document.ts'
 
 const { db, sql } = getTestDb()
 beforeEach(() => resetDb(sql))
@@ -397,6 +397,17 @@ describe('job document.ingest — importação em lotes (Etapa 07)', () => {
     const b = await setup({ arquivos: [{ bytes: await enorme.save(), mime: 'application/pdf' }] })
     expect(await ingestDocument(deps(fakeLlm([]).llm, b.objetos).d, b.id)).toBe('erro')
     expect((await importacao(b.id)).erro).toMatch(/até 200 páginas/i)
+  })
+
+  it('I1: varredura do worker reenfileira a importação parada (fila perdida) e ignora as que andam', async () => {
+    const parada = await setup({ arquivos: [{ bytes: png(1), mime: 'image/png' }] })
+    const lendo = await setup({ arquivos: [{ bytes: png(2), mime: 'image/png' }] })
+    await db.update(schema.knowledgeDocuments).set({ status: 'processando', loteLendoDesde: dsql`now()` }).where(eq(schema.knowledgeDocuments.id, lendo.id))
+    const enfileirados: string[] = []
+    const falhou = await retomarImportacoesParadas({ db, log, enfileirar: async (id) => { enfileirados.push(id); throw new Error('fila fora') } })
+    expect(falhou).toBe(0)
+    expect(await retomarImportacoesParadas({ db, log, enfileirar: async (id) => { enfileirados.push(id) } })).toBe(1)
+    expect(enfileirados).toEqual([parada.id, parada.id])
   })
 
   describe('com o role de produção (worker_app)', () => {
