@@ -159,8 +159,10 @@ export function createOpenRouterClient(cfg: {
             type: 'json_schema',
             json_schema: { name: p.schemaName, strict: true, schema: p.jsonSchema },
           },
-          // LGPD: em produção sempre deny + zdr; o modo dev só existe na máquina do desenvolvedor
-          ...(cfg.semZdrDev ? {} : { provider: { data_collection: 'deny', zdr: true } }),
+          // LGPD: em produção sempre deny + zdr; o modo dev só existe na máquina do desenvolvedor.
+          // require_parameters: só endpoint que honra todos os parâmetros (o json_schema, sobretudo) recebe o
+          // pedido — sem ele, um provedor sem structured outputs recebe e ignora o schema.
+          ...(cfg.semZdrDev ? {} : { provider: { data_collection: 'deny', zdr: true, require_parameters: true } }),
           ...(desligarRaciocinio ? { reasoning: { enabled: false } } : {}),
           temperature: 0,
           max_tokens: p.maxTokens,
@@ -172,10 +174,14 @@ export function createOpenRouterClient(cfg: {
       try {
         const desligar = p.reasoning !== true
         res = await pedir(desligar)
-        // modelo com raciocínio obrigatório recusa o desligamento (400 antes de rotear): repete uma vez sem o campo
-        if (desligar && res.status === 400) {
+        // Repete uma vez sem o campo `reasoning` quando ele é a causa da recusa:
+        // - modelo com raciocínio obrigatório recusa o desligamento (400 antes de rotear);
+        // - com require_parameters, nenhum endpoint que aceite `reasoning` (modelos sem raciocínio não o listam):
+        //   404 "No endpoints found that can handle the requested parameters" ou 400 de parâmetro não suportado.
+        if (desligar && (res.status === 400 || res.status === 404)) {
           const erro = (await res.clone().json().catch(() => ({}))) as ApiResponse
-          if (/reasoning/i.test(erro.error?.message ?? '')) res = await pedir(false)
+          const msg = erro.error?.message ?? ''
+          if (/reasoning/i.test(msg) || /parameter/i.test(msg)) res = await pedir(false)
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'erro de rede'

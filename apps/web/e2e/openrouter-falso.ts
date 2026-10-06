@@ -56,7 +56,7 @@ export async function iniciarOpenRouterFalso(
       if (req.method !== 'POST' || req.url !== '/chat/completions') return responderJson(404, { error: { message: 'rota desconhecida' } })
       let body: {
         messages: { role: string; content: unknown }[]
-        provider?: { data_collection?: string; zdr?: boolean }
+        provider?: { data_collection?: string; zdr?: boolean; require_parameters?: boolean }
         plugins?: { id?: string; pdf?: { engine?: string } }[]
         response_format?: { json_schema?: { name?: string } }
       }
@@ -69,6 +69,10 @@ export async function iniciarOpenRouterFalso(
       // a política de dados da LGPD também é conferida aqui
       if (body.provider?.data_collection !== 'deny' || body.provider?.zdr !== true) {
         return responderJson(400, { error: { message: 'chamada sem data_collection deny + zdr' } })
+      }
+      // e o roteamento só para provedor que honra o json_schema
+      if (body.provider.require_parameters !== true) {
+        return responderJson(400, { error: { message: 'chamada sem provider.require_parameters' } })
       }
       const resposta = (conteudo: unknown) => responderJson(200, {
         model: 'e2e/falso',
