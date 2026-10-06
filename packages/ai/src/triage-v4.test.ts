@@ -92,7 +92,13 @@ describe('parseTriageV4', () => {
   it('convidados: inteiro 1..10000 ou null', () => {
     expect(ok({ ...evento, convidados: 10000 }).itens[0]!.convidados).toBe(10000)
     expect(ok({ ...evento, convidados: 1 }).itens[0]!.convidados).toBe(1)
-    for (const n of [0, -3, 10001, 2.5, '40']) expect(() => ok({ ...evento, convidados: n })).toThrow()
+    for (const n of [10001, 2.5, '40']) expect(() => ok({ ...evento, convidados: n })).toThrow()
+  })
+  it('convidados e pessoas 0 ou negativo viram null (o core pergunta de novo) em vez de derrubar a triagem', () => {
+    for (const n of [0, -3]) {
+      const r = parseTriageV4({ itens: [{ ...evento, convidados: n }, { ...aviso, pessoas: n }], fora_escopo: false })
+      expect(r.itens.map((i) => [i.convidados, i.pessoas])).toEqual([[null, null], [null, null]])
+    }
   })
   it('tipoEvento e espaco são cortados em 60 caracteres', () => {
     const r = ok({ ...evento, tipoEvento: 'x'.repeat(100), espaco: 'y'.repeat(100) }).itens[0]!

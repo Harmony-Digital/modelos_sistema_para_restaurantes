@@ -72,6 +72,10 @@ export function triageV2(
 
 // ------------------------------------------------------------- v3: + avisos de presença (Etapa 03)
 
+/** Contagem de 1 a `max` ou null; 0 ou negativo vira null (o core pergunta de novo) em vez de derrubar a triagem inteira. */
+const contagem = (max: number) =>
+  z.preprocess((v) => (typeof v === 'number' && v <= 0 ? null : v), z.number().int().min(1).max(max).nullable())
+
 const itemV3Schema = z.object({
   servico: z.enum(SERVICOS),
   tipo: z.enum([...TIPOS_S1, ...TIPOS_S2]).nullable(),
@@ -79,7 +83,7 @@ const itemV3Schema = z.object({
   data: cortar(60),
   tema: cortar(120),
   // acima de 60 passa: o core responde o limite (aviso_pessoas_invalido) em vez de virar saída inválida
-  pessoas: z.number().int().min(1).max(1000).nullable(),
+  pessoas: contagem(1000),
   horario: cortar(40),
 }).transform((i) => ({ ...i, convidados: null, tipoEvento: null, espaco: null })) // v3 não extrai eventos
 const triageV3Schema = z.object({
@@ -114,10 +118,10 @@ const itemV4Schema = z.object({
   unidade: cortar(120),
   data: cortar(60),
   tema: cortar(120),
-  pessoas: z.number().int().min(1).max(1000).nullable(),
+  pessoas: contagem(1000),
   horario: cortar(40),
   // acima de 1000 passa: o core responde o limite (evento_convidados_invalido)
-  convidados: z.number().int().min(1).max(10000).nullable(),
+  convidados: contagem(10000),
   tipoEvento: cortar(60),
   espaco: cortar(60), // "*" = o cliente disse que tanto faz
 })
