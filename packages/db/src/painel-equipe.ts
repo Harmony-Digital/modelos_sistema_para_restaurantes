@@ -121,7 +121,10 @@ export function criarConvite(
   }), { staff_invites_email_uq: 'ja_existe' })
 }
 
-/** Só o dono: devolve a `pendente` um convite não aceito (de erro ou enviado). A Server Action enfileira de novo. */
+/**
+ * Só o dono: devolve a `pendente` um convite não aceito (de erro, ou enviado para quem nunca entrou). A Server Action
+ * enfileira de novo.
+ */
 export function reenviarConvite(db: Db, claims: JwtClaims, conviteId: string): Promise<ResultadoEquipe> {
   if (!UUID.test(conviteId)) return Promise.resolve(falha('nao_encontrada'))
   return semPermissaoVira(() => withUserContext(db, claims, async (tx): Promise<ResultadoEquipe> => {
@@ -129,7 +132,10 @@ export function reenviarConvite(db: Db, claims: JwtClaims, conviteId: string): P
     const [c] = await tx
       .update(staffInvites)
       .set({ status: 'pendente', erro: null })
-      .where(and(eq(staffInvites.id, conviteId), inArray(staffInvites.status, ['pendente', 'enviado', 'erro'])))
+      // `enviado` só de quem nunca entrou: reenviar para quem já entrou geraria um link silencioso e regravaria papel/unidades
+      .where(and(eq(staffInvites.id, conviteId), sql`(${staffInvites.status} in ('pendente','erro')
+        or (${staffInvites.status} = 'enviado' and exists (
+          select 1 from app.emails_da_equipe() e where e.user_id = ${staffInvites.userId} and not e.entrou)))`))
       .returning({ restaurantId: staffInvites.restaurantId })
     if (!c) return falha('nao_encontrada')
     await registrarAuditoria(tx, claims, {

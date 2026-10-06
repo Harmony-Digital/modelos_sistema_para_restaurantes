@@ -135,7 +135,11 @@ describe('worker: processamento do convite', () => {
     expect(m).toMatchObject({ tipo: 'membro', convitePendente: true, conviteId: id })
     expect((await listarEquipe(db, as(c.dono))).filter((x) => x.tipo === 'convite')).toEqual([])
     expect(await reenviarConvite(db, as(c.dono), id)).toEqual({ ok: true, valor: null })
+    await withRole(db, 'worker_app', (tx) => concluirConvite(tx, id, { ok: true, userId }))
     await sql`update auth.users set last_sign_in_at = now() where id = ${userId}`
+    // quem já entrou não recebe reenvio (nem por chamada direta da action): o convite `enviado` não volta a pendente
+    expect(await reenviarConvite(db, as(c.dono), id)).toEqual({ ok: false, erro: 'nao_encontrada' })
+    expect((await db.select({ status: staffInvites.status }).from(staffInvites).where(eq(staffInvites.id, id)))[0]!.status).toBe('enviado')
     const depois = (await listarEquipe(db, as(c.dono))).find((x) => x.id === userId)
     expect(depois).toMatchObject({ convitePendente: false, conviteId: null })
     expect((await listarEquipe(db, as(c.dono))).find((x) => x.id === c.gerente)).toMatchObject({ conviteId: null })
