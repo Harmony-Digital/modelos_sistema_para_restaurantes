@@ -19,10 +19,17 @@ describe('normalizarTipoEvento', () => {
     ['festa de fim de ano', 'confraternizacao'],
     ['encontro de amigos', 'confraternizacao'],
     ['chá de bebê', 'outro'],
-    ['festa', 'outro'],
+    ['festa surpresa', 'outro'],
+    ['reserva confirmada', 'outro'],
   ])('%s ⇒ %s', (texto, tipo) => {
     expect(normalizarTipoEvento(texto)).toEqual({ tipo, texto: texto.trim() })
   })
+
+  it.each(['festa', 'Festa!', 'uma festinha', 'evento', 'um evento', 'comemoração', 'comemoracao', 'reserva', 'a festa', 'evento privado', 'minha festa'])(
+    'termo genérico "%s" ⇒ null (a coleta pergunta o tipo)', (texto) => {
+      expect(normalizarTipoEvento(texto)).toBeNull()
+    },
+  )
 
   it('vazio ⇒ null', () => {
     expect(normalizarTipoEvento(null)).toBeNull()

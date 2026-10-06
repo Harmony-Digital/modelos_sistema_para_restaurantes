@@ -493,6 +493,70 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > c
 }
 `;
 
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > c15: festa para 40 na asa sul sábado (tipo "festa" é genérico) 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": {
+    "campo": "tipo",
+    "item": {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": null,
+      "unidade": "Asa Sul",
+    },
+    "unitId": "u-asa-sul",
+  },
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Qual o tipo do evento? (aniversário, casamento, corporativo, confraternização…)",
+  "validos": 0,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > c16: um evento para 40 na asa sul sábado 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": {
+    "campo": "tipo",
+    "item": {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": null,
+      "unidade": "Asa Sul",
+    },
+    "unitId": "u-asa-sul",
+  },
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Qual o tipo do evento? (aniversário, casamento, corporativo, confraternização…)",
+  "validos": 0,
+}
+`;
+
 exports[`evals S3 — camada 2 (resolução + composição, determinística) > m01: endereço da asa norte e quais espaços tem lá 1`] = `
 {
   "acoesS2": [],

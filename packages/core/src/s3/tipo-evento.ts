@@ -16,13 +16,19 @@ const REGRAS: readonly [RegExp, TipoEvento][] = [
   [/\b(fim de ano|final de ano|encontro|reencontro|amigos|amigas)\b/, 'confraternizacao'],
 ]
 
-/** "niver" ⇒ aniversário; "bodas" ⇒ casamento; "reunião da firma" ⇒ corporativo; outro texto ⇒ outro; vazio ⇒ null. */
+// "festa", "um evento", "minha comemoração": não dizem o tipo; a coleta pergunta (em vez de virar `outro`)
+const GENERICOS = new Set(['festa', 'festinha', 'festao', 'evento', 'eventinho', 'comemoracao', 'comemoracoes', 'reserva', 'privado', 'privada', 'particular'])
+const PALAVRAS_VAZIAS = new Set(['um', 'uma', 'o', 'a', 'os', 'as', 'de', 'do', 'da', 'no', 'na', 'pra', 'para', 'minha', 'meu', 'nossa', 'nosso', 'sua', 'seu'])
+
+/** "niver" ⇒ aniversário; "bodas" ⇒ casamento; "reunião da firma" ⇒ corporativo; outro texto ⇒ outro; vazio ou genérico ("festa") ⇒ null. */
 export function normalizarTipoEvento(texto: string | null): { tipo: TipoEvento; texto: string } | null {
   const t = normalizeText(texto ?? '')
   if (!t) return null
   const original = texto!.trim().slice(0, MAX_TIPO_TEXTO).trim()
-  const tipo = REGRAS.find(([re]) => re.test(t))?.[1] ?? 'outro'
-  return { tipo, texto: original }
+  const tipo = REGRAS.find(([re]) => re.test(t))?.[1]
+  if (tipo) return { tipo, texto: original }
+  if (t.split(' ').every((w) => GENERICOS.has(w) || PALAVRAS_VAZIAS.has(w))) return null
+  return { tipo: 'outro', texto: original }
 }
 
 const ROTULOS: Readonly<Record<Exclude<TipoEvento, 'outro'>, string>> = {

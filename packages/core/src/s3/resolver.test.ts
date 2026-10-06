@@ -189,6 +189,14 @@ describe('resolverS3 — coleta guiada (um campo por vez: unidade → data → c
     expect(r.perguntar?.campo).toBe('tipo')
   })
 
+  it('tipo genérico ("festa", "evento") não vira "outro": pergunta o tipo', () => {
+    for (const tipoEvento of ['festa', 'um evento', 'comemoração']) {
+      const r = resolverS3([completo({ tipoEvento })], CONTEXTO, ESPACOS, SEG_14H, [])
+      expect(r.acoes).toEqual([])
+      expect(r.perguntar?.campo).toBe('tipo')
+    }
+  })
+
   it('item guardado e completado depois (a triagem devolve o item inteiro): registra', () => {
     const r1 = resolverS3([completo({ tipoEvento: null })], CONTEXTO, ESPACOS, SEG_14H, [])
     const r2 = resolverS3([{ ...r1.perguntar!.item, tipoEvento: 'aniversário', espaco: '*' }], CONTEXTO, ESPACOS, SEG_14H, [])
