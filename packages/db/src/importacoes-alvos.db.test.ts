@@ -642,3 +642,46 @@ describe('fix round 1', () => {
     expect((await db.select().from(knowledgeDocuments)).map((d) => [d.alvo, d.modo, d.loteAtual])).toEqual([['cardapio', 'completo', 0], ['cardapio', 'completo', 0]])
   })
 })
+
+describe('integração do Bloco C (tela)', () => {
+  it('descartar importação ainda recebendo arquivos (antes de ler); depois de "Ler arquivos" não descarta', async () => {
+    const c = await cenario()
+    const id = idDe(await criarImportacaoArquivos(db, as(c.dono), { alvo: 'espacos', modo: 'completo' }))
+    await anexarArquivo(db, as(c.dono), id, arq(c, 1))
+    expect(await rejeitarImportacao(db, as(c.gerente), id)).toEqual({ ok: true, valor: null })
+    expect(await lerImportacao(db, as(c.dono), id)).toMatchObject({ status: 'rejeitado', recebendo: false })
+    const [log] = await db.select().from(auditLog).where(and(eq(auditLog.acao, 'cardapio.importacao_rejeitada'), eq(auditLog.entidadeId, id)))
+    expect(log).toBeDefined()
+    // descartada: a lista não muda mais e a leitura não começa
+    expect(await anexarArquivo(db, as(c.dono), id, arq(c, 2))).toEqual({ ok: false, erro: 'ja_iniciada' })
+    expect(await iniciarLeitura(db, as(c.dono), id)).toEqual({ ok: false, erro: 'ja_iniciada' })
+    expect(await proximoLote(db, id)).toBeNull()
+    // na fila (hash gravado, ainda enviado): não descarta pelo painel
+    const lida = idDe(await criarImportacaoArquivos(db, as(c.dono), { alvo: 'espacos', modo: 'completo' }))
+    await anexarArquivo(db, as(c.dono), lida, arq(c, 3))
+    await iniciarLeitura(db, as(c.dono), lida)
+    expect(await rejeitarImportacao(db, as(c.dono), lida)).toEqual({ ok: false, erro: 'nao_encontrada' })
+    // atendente não descarta
+    const outra = idDe(await criarImportacaoArquivos(db, as(c.dono), { alvo: 'espacos', modo: 'completo' }))
+    expect(await rejeitarImportacao(db, as(c.atendente, 'aal1'), outra)).toEqual({ ok: false, erro: 'sem_permissao' })
+    expect(await lerImportacao(db, as(c.dono), outra)).toMatchObject({ status: 'enviado', recebendo: true })
+  })
+
+  it('revisão traz o cadastro para Novo/Atualiza com a unidade escolhida à mão: unidades com horário e espaços existentes', async () => {
+    const c = await cenario()
+    await db.insert(unitHours).values({ restaurantId: c.restaurantId, unitId: c.u2, weekday: 1, turno: 1, abre: '10:00', fecha: '14:00' })
+    await db.insert(eventSpaces).values({ restaurantId: c.restaurantId, unitId: c.u1, nome: 'Salão Nobre', capacidadeMin: 5, capacidadeMax: 20 })
+    const h = { unidade: 'Lago', semana: [{ dia: 1, turnos: [{ abre: '10:00', fecha: '14:00' }], conflito: false }], excecoes: [], incluir: true }
+    const idH = await comRascunho(c, 'horarios', { unidades: [h] }, 'completo', 1)
+    expect(await revisaoImportacao(db, as(c.dono), idH)).toMatchObject({ alvo: 'horarios', unidadesComHorario: [c.u2] })
+    const e = { nome: 'Varanda', capacidadeMin: 1, capacidadeMax: 30, descricao: null, condicoes: null, unidade: null, incluir: true, capacidadeIncompleta: true }
+    const idE = await comRascunho(c, 'espacos', { espacos: [e] }, 'completo', 2)
+    expect(await revisaoImportacao(db, as(c.dono), idE)).toMatchObject({
+      alvo: 'espacos', espacosExistentes: [{ unitId: c.u1, nome: 'Salão Nobre' }],
+      draft: { espacos: [expect.objectContaining({ capacidadeIncompleta: true })] },
+    })
+    // a tela grava o id da unidade escolhida: aplica
+    expect(await aplicarImportacao(db, as(c.dono), idE, { espacos: [{ ...e, unidade: c.u2, capacidadeIncompleta: false }] }))
+      .toEqual({ ok: true, valor: { criados: 1, atualizados: 0, ignorados: 0 } })
+  })
+})

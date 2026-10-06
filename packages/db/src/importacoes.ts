@@ -305,14 +305,20 @@ export async function aplicarNoCardapio(
   return { criados: criados.size, atualizados: atualizados.size, ignorados, categoriasCriadas, precosPorUnidade }
 }
 
-/** Descarta o rascunho (ou a importação com erro). Já aprovada/rejeitada ⇒ `nao_encontrada`. */
+/**
+ * Descarta o rascunho, a importação com erro ou a de vários arquivos ainda recebendo (antes de "Ler arquivos").
+ * Na fila, lendo, já aprovada ou rejeitada ⇒ `nao_encontrada`.
+ */
 export function rejeitarImportacao(db: Db, claims: JwtClaims, id: string): Promise<ResultadoPainel> {
   return semPermissaoVira(() => withUserContext(db, claims, async (tx) => {
     if (!(await exigirPapel(tx, GESTAO))) return falha('sem_permissao')
     const [d] = await tx
       .update(knowledgeDocuments)
       .set({ status: 'rejeitado', revisadoPor: claims.sub, revisadoAt: sql`now()` })
-      .where(and(eq(knowledgeDocuments.id, id), sql`${knowledgeDocuments.status} in ('rascunho', 'erro')`))
+      // rascunho/erro; ou importação de vários arquivos ainda recebendo (enviado, sem hash: a leitura não começou)
+      .where(and(eq(knowledgeDocuments.id, id), sql`(${knowledgeDocuments.status} in ('rascunho', 'erro')
+        or (${knowledgeDocuments.status} = 'enviado' and ${knowledgeDocuments.sha256} is null and ${knowledgeDocuments.origem} = 'arquivo'
+          and ${knowledgeDocuments.storagePath} is null))`))
       .returning({ restaurantId: knowledgeDocuments.restaurantId })
     if (!d) return falha('nao_encontrada')
     await registrarAuditoria(tx, claims, { restaurantId: d.restaurantId, acao: 'cardapio.importacao_rejeitada', entidade: 'knowledge_document', entidadeId: id })

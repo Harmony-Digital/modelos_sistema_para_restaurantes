@@ -444,8 +444,10 @@ export type RevisaoImportacao = BaseRevisao & (
   | { alvo: 'cardapio'; modo: 'completo'; draft: RascunhoCardapioImportacao | null; itens: RotuloItemCardapio[] }
   | { alvo: 'cardapio'; modo: 'so_precos'; draft: RascunhoSoPrecos | null; mudancas: MudancaPreco[]; ignorados: PrecoIgnorado[] }
   | { alvo: 'informacoes'; modo: 'completo'; draft: RascunhoInformacoes | null; fatos: RotuloFato[] }
-  | { alvo: 'horarios'; modo: 'completo'; draft: RascunhoHorarios | null; unidades: RotuloHorario[] }
-  | { alvo: 'espacos'; modo: 'completo'; draft: RascunhoEspacos | null; espacos: RotuloEspaco[] }
+  /** `unidadesComHorario`: unidades que já têm grade (Novo/Atualiza quando a unidade é escolhida na revisão) */
+  | { alvo: 'horarios'; modo: 'completo'; draft: RascunhoHorarios | null; unidades: RotuloHorario[]; unidadesComHorario: string[] }
+  /** `espacosExistentes`: espaços cadastrados (Novo/Atualiza com unidade escolhida ou nome editado na revisão) */
+  | { alvo: 'espacos'; modo: 'completo'; draft: RascunhoEspacos | null; espacos: RotuloEspaco[]; espacosExistentes: { unitId: string; nome: string }[] }
 )
 
 /**
@@ -486,11 +488,13 @@ export function revisaoImportacao(db: Db, claims: JwtClaims, id: string): Promis
       }
       case 'horarios': {
         const h = r?.alvo === 'horarios' ? r.draft : null
-        return { ...base, alvo: 'horarios', modo: 'completo', draft: h, unidades: h ? await planoHorarios(tx, h) : [] }
+        const comHorario = (await tx.selectDistinct({ unitId: unitHours.unitId }).from(unitHours)).map((x) => x.unitId).sort()
+        return { ...base, alvo: 'horarios', modo: 'completo', draft: h, unidades: h ? await planoHorarios(tx, h) : [], unidadesComHorario: comHorario }
       }
       case 'espacos': {
         const e = r?.alvo === 'espacos' ? r.draft : null
-        return { ...base, alvo: 'espacos', modo: 'completo', draft: e, espacos: e ? await planoEspacos(tx, e) : [] }
+        const existentes = await tx.select({ unitId: eventSpaces.unitId, nome: eventSpaces.nome }).from(eventSpaces).orderBy(asc(eventSpaces.nome))
+        return { ...base, alvo: 'espacos', modo: 'completo', draft: e, espacos: e ? await planoEspacos(tx, e) : [], espacosExistentes: existentes }
       }
     }
   })
