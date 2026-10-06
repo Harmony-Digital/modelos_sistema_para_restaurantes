@@ -9,7 +9,8 @@
     "./s1": "./src/s1/index.ts",
     "./s2": "./src/s2/index.ts",
     "./s3": "./src/s3/index.ts",
-    "./s4": "./src/s4/index.ts"
+    "./s4": "./src/s4/index.ts",
+    "./conversa": "./src/conversa/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"

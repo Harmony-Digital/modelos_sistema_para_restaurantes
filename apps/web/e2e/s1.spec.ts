@@ -83,6 +83,7 @@ function proximoDomingoAoMeioDia(): string {
 
 test('cadastra unidade e horários; a lista mostra "Aberta agora"', async ({ page }) => {
   await entrarComoGestor(page)
+  await page.getByRole('link', { name: 'Mais', exact: true }).click()
   await page.getByRole('link', { name: 'Unidades', exact: true }).click()
   await page.getByRole('button', { name: 'Nova unidade' }).click()
   const nome = `E2E Centro ${SUFIXO}`
@@ -97,12 +98,14 @@ test('cadastra unidade e horários; a lista mostra "Aberta agora"', async ({ pag
   await page.getByRole('button', { name: 'Copiar segunda para todos os dias' }).click()
   await page.getByRole('button', { name: 'Salvar horários' }).click()
   await expect(page.getByText('Horários salvos')).toBeVisible()
+  await page.getByRole('link', { name: 'Mais', exact: true }).click()
   await page.getByRole('link', { name: 'Unidades', exact: true }).click()
   await expect(page.getByRole('listitem').filter({ hasText: nome })).toContainText('Aberta agora')
 })
 
 test('formulário de unidade: erro no campo certo, sem gravar', async ({ page }) => {
   await entrarComoGestor(page)
+  await page.getByRole('link', { name: 'Mais', exact: true }).click()
   await page.getByRole('link', { name: 'Unidades', exact: true }).click()
   await page.getByRole('button', { name: 'Nova unidade' }).click()
   // o SubmitButton não tira o foco no mousedown: o clique envia mesmo com o erro do blur do Nome

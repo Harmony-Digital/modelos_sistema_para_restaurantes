@@ -4,6 +4,6 @@
   "private": true,
   "type": "module",
   "exports": { ".": "./src/index.ts" },
-  "scripts": { "typecheck": "tsc -p tsconfig.json", "eval:s1": "node --env-file=../../.env evals/s1/extracao.ts", "eval:s2": "node --env-file=../../.env evals/s2/extracao.ts", "eval:s3": "node --env-file=../../.env evals/s3/extracao.ts", "eval:s4": "node --env-file=../../.env evals/s4/extracao.ts", "eval:ingestao": "node --env-file=../../.env evals/ingestao/leitura.ts", "exemplos:ingestao": "node evals/ingestao/gerar-exemplos.ts" },
+  "scripts": { "typecheck": "tsc -p tsconfig.json", "eval:s1": "node --env-file=../../.env evals/s1/extracao.ts", "eval:s2": "node --env-file=../../.env evals/s2/extracao.ts", "eval:s3": "node --env-file=../../.env evals/s3/extracao.ts", "eval:s4": "node --env-file=../../.env evals/s4/extracao.ts", "eval:frustracao": "node --env-file=../../.env evals/frustracao/extracao.ts", "eval:ingestao": "node --env-file=../../.env evals/ingestao/leitura.ts", "exemplos:ingestao": "node evals/ingestao/gerar-exemplos.ts" },
   "dependencies": { "@atd/core": "workspace:*", "zod": "^4.6.5" }
 }

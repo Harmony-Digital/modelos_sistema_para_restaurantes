@@ -1,4 +1,5 @@
 import { DIAS_SEMANA, diaDaSemana, type DataIso } from '@atd/core/s1'
+import { TRANSICOES_PEDIDO_EVENTO } from '@atd/core/s3'
 import type { StatusPedido } from '@atd/db'
 import { dataBr } from '@/lib/previsao'
 import { STATUS_PEDIDO } from '@/lib/schemas/eventos'
@@ -14,18 +15,9 @@ export const ROTULO_STATUS: Record<StatusPedido, string> = {
 /** Padrão da fila: o que ainda pede trabalho. */
 export const STATUS_PADRAO: readonly StatusPedido[] = ['novo', 'em_contato']
 
-// espelha as transições do banco (`atualizarPedido`); o servidor é quem decide, aqui só evita oferecer o impossível
-const TRANSICOES: Record<StatusPedido, readonly StatusPedido[]> = {
-  novo: ['em_contato', 'confirmado', 'recusado', 'cancelado'],
-  em_contato: ['confirmado', 'recusado', 'cancelado'],
-  confirmado: ['cancelado'],
-  recusado: [],
-  cancelado: [],
-}
-
 /** O status atual mais os que ele pode virar, na ordem do ciclo. */
 export function statusPossiveis(atual: StatusPedido): StatusPedido[] {
-  return STATUS_PEDIDO.filter((s) => s === atual || TRANSICOES[atual].includes(s))
+  return STATUS_PEDIDO.filter((s) => s === atual || TRANSICOES_PEDIDO_EVENTO[atual].includes(s))
 }
 
 /** `?status=novo,em_contato`: ignora valor desconhecido; ausente ou só lixo ⇒ padrão. */
@@ -67,4 +59,11 @@ export function haQuanto(criado: Date, agora: Date): string {
 export function linksTelefone(telefone: string): { tel: string; wa: string } {
   const digitos = telefone.replace(/\D/g, '')
   return { tel: `tel:+${digitos}`, wa: `https://wa.me/${digitos}` }
+}
+
+export type MembroTela = { id: string; nome: string; todas: boolean; unidades: string[] }
+
+/** Quem pode ser responsável por um pedido: acessa todas as unidades ou tem a do pedido (mesma regra da DAL). */
+export function membrosDaUnidade<T extends { todas: boolean; unidades: string[] }>(membros: T[], unitId: string): T[] {
+  return membros.filter((m) => m.todas || m.unidades.includes(unitId))
 }

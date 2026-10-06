@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { rotuloTipoEvento } from '@atd/core/s3'
 import type { PedidoPainel, StatusPedido } from '@atd/db'
 import { EmptyState } from '@/components/shell/empty-state'
-import { alternarStatus, dataDoEvento, haQuanto, hrefEventos, ROTULO_STATUS } from '@/lib/eventos'
+import { alternarStatus, dataDoEvento, haQuanto, hrefEventos, ROTULO_STATUS, type MembroTela } from '@/lib/eventos'
 import { STATUS_PEDIDO } from '@/lib/schemas/eventos'
 import { cn } from '@/lib/utils'
 import { Abas } from './abas'
@@ -23,7 +23,7 @@ export function Eventos(props: {
   unidades: { id: string; nome: string }[]
   status: StatusPedido[]
   unidade: string | null
-  membros: { id: string; nome: string }[]
+  membros: MembroTela[]
   /** Instante do carregamento: "há X horas" é calculado a partir dele (evita divergência na hidratação). */
   agora: Date
 }) {

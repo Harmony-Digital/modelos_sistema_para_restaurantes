@@ -59,7 +59,7 @@ const NAO_ACHOU = 'Não encontrei pedido de evento seu em andamento.'
 const LACUNA = 'Ainda não tenho essa informação; vou verificar com a equipe.'
 const FIM = 'Nossa equipe vai entrar em contato para confirmar.'
 const FECHADA = 'Unidade fechada nesse dia pelo horário cadastrado'
-const cancelar = (pedidoId: string, texto: string): AcaoS3 => ({ tipo: 'cancelar_evento', pedidoId, texto, textoSeFalhar: NAO_ACHOU })
+const cancelar = (pedidoId: string, texto: string): AcaoS3 => ({ tipo: 'cancelar_evento', pedidoId, texto, textoSeFalhar: 'Já temos um evento confirmado seu nesse dia. Vou chamar a equipe para te ajudar.', textoSeAtualizado: 'Seu pedido de evento foi atualizado pela equipe. Vou chamar alguém para te ajudar.', handoffSeFalhar: true })
 
 const SEG_14H = '2026-10-05T14:00:00-03:00'
 const SAB_PED = pedidoAtivo('p-sab', AS, '2026-10-10')

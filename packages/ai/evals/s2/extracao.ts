@@ -1,12 +1,12 @@
 /**
- * Evals S2 — camada 1: extração de avisos de presença (padrão triage-v5; --triagem v4|v3 mede as versões anteriores) com modelo real via OpenRouter.
- * Uso: pnpm --filter @atd/ai eval:s2 [--modelos a,b,c] [--teto 0.50] [--triagem v5|v4|v3] (padrão v5)
+ * Evals S2 — camada 1: extração de avisos de presença (padrão triage-v6; --triagem v5|v4|v3 mede as versões anteriores) com modelo real via OpenRouter.
+ * Uso: pnpm --filter @atd/ai eval:s2 [--modelos a,b,c] [--teto 0.50] [--triagem v6|v5|v4|v3] (padrão v6)
  * Custo real, com teto por execução. Grava o relatório em evals/s2/resultados/AAAA-MM-DD-extracao.md.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import { createOpenRouterClient } from '../../src/openrouter.ts'
-import { triageV3, triageV4, triageV5 } from '../../src/triage.ts'
+import { triageV3, triageV4, triageV5, triageV6 } from '../../src/triage.ts'
 import { lerTriagem } from '../triagem.ts'
 import { custoDaChamada } from '../s1/custo.ts'
 import { FRASES } from './casos.ts'
@@ -19,7 +19,7 @@ if (!apiKey) throw new Error('Defina OPENROUTER_API_KEY (no .env da raiz ou no a
 const modelos = (values.modelos ?? process.env.AI_TRIAGE_MODELS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
 if (modelos.length === 0) throw new Error('Informe --modelos ou AI_TRIAGE_MODELS')
 const triagem = lerTriagem(values.triagem, 'v3')
-const extrair = triagem === 'v5' ? triageV5 : triagem === 'v4' ? triageV4 : triageV3
+const extrair = triagem === 'v6' ? triageV6 : triagem === 'v5' ? triageV5 : triagem === 'v4' ? triageV4 : triageV3
 const teto = Number(values.teto)
 if (!(teto > 0)) throw new Error('--teto deve ser um valor em dólares maior que zero')
 

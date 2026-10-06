@@ -82,6 +82,8 @@ export const MODELOS_S1 = {
   // correções da homologação da Etapa 04 (Etapa 05): mudança de pedido e pedido em dia já confirmado vão para a equipe
   evento_mudanca_humano: { texto: 'Anotei o que você pediu e vou chamar a equipe para ajustar seu pedido de evento.', variaveis: [] },
   evento_ja_confirmado_humano: { texto: 'Já temos um evento confirmado seu nesse dia. Vou chamar a equipe para te ajudar.', variaveis: [] },
+  // revisão final da Etapa 06: o cancelamento não foi feito porque a equipe recusou ou cancelou o pedido no meio
+  evento_atualizado_humano: { texto: 'Seu pedido de evento foi atualizado pela equipe. Vou chamar alguém para te ajudar.', variaveis: [] },
   // S4 — cardápio (Etapa 05). Preço só do banco (`R$ 1.234,56`); nunca texto extraído pelo LLM.
   cardapio_item: { texto: 'Temos sim: {itens}', variaveis: ['itens'] },
   cardapio_indisponivel: { texto: 'Na unidade {unidade}, {item} está indisponível no momento.', variaveis: ['unidade', 'item'] },
@@ -90,6 +92,15 @@ export const MODELOS_S1 = {
   cardapio_parecido: { texto: 'Não encontrei esse item no cardápio. Temos parecido: {itens}. Quer saber o preço?', variaveis: ['itens'] },
   cardapio_enviando: { texto: 'Aqui está o nosso cardápio.', variaveis: [] },
   cardapio_sem_arquivo: { texto: 'Nosso cardápio:\n{categorias}', variaveis: ['categorias'] },
+  // Handoff (Etapa 06): `handoff_fora` em todo handoff fora do horário da equipe; `handoff_frustracao` dentro do horário
+  handoff_dentro: { texto: 'Vou passar você para alguém da nossa equipe. Já já te respondem por aqui.', variaveis: [] },
+  handoff_fora: {
+    texto: 'Vou passar você para alguém da nossa equipe. Nossa equipe atende {proximo_horario} e te responde assim que voltar.',
+    variaveis: ['proximo_horario'],
+  },
+  // cortesia sem item (pedido vago, "tenho uma dúvida"): não conta falha
+  cortesia: { texto: 'Posso ajudar com horários e unidades, aviso de presença, eventos e cardápio. É só me dizer do que precisa. 😊', variaveis: [] },
+  handoff_frustracao: { texto: 'Desculpe pelo transtorno. Vou chamar alguém da nossa equipe para continuar com você.', variaveis: [] },
 } as const satisfies Record<string, { texto: string; variaveis: readonly string[] }>
 
 export type ChaveModelo = keyof typeof MODELOS_S1

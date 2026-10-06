@@ -27,7 +27,7 @@ function fakeLlm(script: TriageV5[]) {
   let n = 0
   const llm: LlmClient = {
     async completeJson(p) {
-      const data = p.parse(script[Math.min(n++, script.length - 1)])
+      const data = p.parse({ frustracao: false, ...script[Math.min(n++, script.length - 1)] })
       return { ok: true as const, data, model: 'fake/m', usage: { tokensIn: 10, tokensOut: 5, tokensCache: 0, costUsd: '0.000100' }, latencyMs: 5 }
     },
   }

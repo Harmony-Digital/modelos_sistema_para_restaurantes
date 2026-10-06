@@ -7,11 +7,15 @@ export const QUEUES = {
   processDlq: 'conversation.process.dlq',
   ingest: 'document.ingest',
   ingestDlq: 'document.ingest.dlq',
+  deliver: 'conversation.deliver',
+  deliverDlq: 'conversation.deliver.dlq',
 } as const
 export const PROCESS_DELAY_SECONDS = 4
 export type ProcessJob = { conversationId: string }
 /** Leitura por IA de uma importação de cardápio (knowledge_documents `enviado`, origem `arquivo`). */
 export type IngestJob = { importacaoId: string }
+/** Entrega das mensagens `pendente` da conversa (resposta humana do painel). */
+export type DeliverJob = { conversationId: string }
 export type Enqueue = (tx: Tx, conversationId: string) => Promise<unknown>
 
 export function createBoss(
@@ -51,6 +55,15 @@ export async function ensureQueues(boss: PgBoss): Promise<void> {
     expireInSeconds: 300, // leitura de PDF pela IA (até 120 s) + download
     deadLetter: QUEUES.ingestDlq,
   })
+  await boss.createQueue(QUEUES.deliverDlq, { policy: 'standard' })
+  await boss.createQueue(QUEUES.deliver, {
+    policy: 'stately', // 1 job enfileirado + 1 ativo por singletonKey (= conversa); deliver() envia todas as pendentes
+    retryLimit: 3,
+    retryDelay: 5,
+    retryBackoff: true,
+    expireInSeconds: 120,
+    deadLetter: QUEUES.deliverDlq,
+  })
 }
 
 export function enqueueProcess(boss: PgBoss): Enqueue {
@@ -66,4 +79,10 @@ export function enqueueProcess(boss: PgBoss): Enqueue {
 export function enqueueIngest(boss: PgBoss): (importacaoId: string) => Promise<unknown> {
   return (importacaoId) =>
     boss.send(QUEUES.ingest, { importacaoId } satisfies IngestJob, { singletonKey: importacaoId })
+}
+
+/** Enfileira a entrega da resposta humana (Server Action, depois do commit de `responderConversa`/`reenviarMensagem`). */
+export function enqueueDeliver(boss: PgBoss): (conversationId: string) => Promise<unknown> {
+  return (conversationId) =>
+    boss.send(QUEUES.deliver, { conversationId } satisfies DeliverJob, { singletonKey: conversationId })
 }

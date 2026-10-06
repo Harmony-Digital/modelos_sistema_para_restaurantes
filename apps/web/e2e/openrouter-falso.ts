@@ -20,6 +20,8 @@ export type TriagemFalsa = {
     tag?: string | null
   }[]
   fora_escopo: boolean
+  // triagem v6 (Etapa 06): opcional aqui; o servidor falso completa com false
+  frustracao?: boolean
 }
 
 /** Leitura de cardápio no formato que o modelo devolve (schema `rascunho_cardapio` de `@atd/ai`). */
@@ -89,6 +91,7 @@ export async function iniciarOpenRouterFalso(
       entradas.push(user)
       const r = responder(mensagem, user)
       const triagem = {
+        frustracao: false,
         ...r,
         itens: r.itens.map((i) => ({ convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null, ...i })),
       }

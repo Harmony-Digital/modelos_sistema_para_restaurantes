@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { ASA_NORTE, CONTEXTO, CONTEXTO_PEQUENO } from '../../../ai/evals/s1/fixture.ts'
 import { MODELOS_S1, renderModelo, type ChaveModelo } from '../s1/modelos.ts'
 import type { ContextoS1, ItemExtraido } from '../s1/tipos.ts'
-import { resolverAtendimento } from '../s2/atendimento.ts'
-import { resolverS3 } from './resolver.ts'
+import { resolverAtendimento, retomarPerguntaEvento } from '../s2/atendimento.ts'
+import { itemDoPedidoNaUnidade, resolverS3 } from './resolver.ts'
 import type { EspacoS3Core, PedidoAtivoS3 } from './tipos.ts'
 
 const SEG_14H = new Date('2026-10-05T14:00:00-03:00')
@@ -261,7 +261,14 @@ describe('resolverS3 — cancelar', () => {
     const r = resolverS3([can()], CONTEXTO, ESPACOS, SEG_14H, [p1])
     const texto = 'Pronto, cancelei seu pedido de evento: Asa Sul, sábado (10/10).'
     expect(r.texto).toBe(texto)
-    expect(r.acoes).toEqual([{ tipo: 'cancelar_evento', pedidoId: 'p1', texto, textoSeFalhar: NAO_ACHOU }])
+    // corrida: a equipe confirma o pedido antes do commit ⇒ o banco não cancela e a equipe assume (nunca "não encontrei")
+    expect(r.acoes).toEqual([{
+      tipo: 'cancelar_evento', pedidoId: 'p1', texto,
+      textoSeFalhar: 'Já temos um evento confirmado seu nesse dia. Vou chamar a equipe para te ajudar.', handoffSeFalhar: true,
+      // a equipe recusou ou cancelou o pedido no meio: texto neutro (nunca "confirmado")
+      textoSeAtualizado: 'Seu pedido de evento foi atualizado pela equipe. Vou chamar alguém para te ajudar.',
+    }])
+    expect(r.acoes[0]).not.toMatchObject({ textoSeFalhar: NAO_ACHOU })
     expect(r.handoff).toBe(false)
     expect([r.validos, r.respondidos]).toEqual([1, 1])
   })
@@ -551,5 +558,77 @@ describe('resolverS3 — pedido em dia de evento já confirmado (correção da h
     const r = resolverAtendimento([completo({ convidados: 60 })], CONTEXTO, SEG_14H, [], undefined, { espacos: ESPACOS, pedidos: [pedido('p1', 'u-asa-sul', '2026-10-10')] })
     expect(r.handoff).toBe(true)
     expect(r.acoesS3).toEqual([{ tipo: 'observar_pedido', pedidoId: 'p1', observacao: 'Cliente pediu: 60 convidados' }])
+  })
+})
+
+describe('pendências da Etapa 04 — "pessoas" e evento na mesma mensagem', () => {
+  const aviso = (extra: Partial<ItemExtraido> = {}): ItemExtraido => ({ servico: 'aviso_presenca', tipo: 'registrar', ...nulos, ...extra })
+  const s3 = { espacos: ESPACOS, pedidos: [] }
+
+  it('pergunta pessoas primeiro e guarda a pergunta do evento (antes: o evento se perdia)', () => {
+    const r = resolverAtendimento(
+      [aviso({ unidade: 'asa sul', data: 'sábado' }), ped({ unidade: 'asa sul', data: 'dia 20', tipoEvento: 'aniversário' })],
+      CONTEXTO, SEG_14H, [], undefined, s3,
+    )
+    expect(r.texto).toBe('Para quantas pessoas?')
+    expect(r.perguntarPessoas).toMatchObject({ unitId: 'u-asa-sul' })
+    expect(r.perguntarEvento).toBeNull()
+    expect(r.perguntaEventoAdiada).toEqual({
+      campo: 'convidados', unitId: 'u-asa-sul', texto: 'Para quantos convidados?',
+      item: ped({ unidade: 'Asa Sul', data: '2026-10-20', tipoEvento: 'aniversário' }),
+    })
+  })
+
+  it('respondidas as pessoas, pergunta o que falta do evento e depois registra', () => {
+    const r = resolverAtendimento(
+      [aviso({ unidade: 'asa sul', data: 'sábado' }), ped({ unidade: 'asa sul', data: 'dia 20', tipoEvento: 'aniversário' })],
+      CONTEXTO, SEG_14H, [], undefined, s3,
+    )
+    const pessoas = resolverAtendimento([{ ...r.perguntarPessoas!.item, pessoas: 4 }], CONTEXTO, SEG_14H, [], 'u-asa-sul', s3)
+    const seguida = retomarPerguntaEvento(pessoas, r.perguntaEventoAdiada)
+    expect(seguida.texto).toBe('Anotado: Asa Sul, sábado (10/10), 4 pessoas. Se mudar de ideia, é só me avisar.\n\nPara quantos convidados?')
+    expect(seguida.acoesS2).toHaveLength(1)
+    expect(seguida.perguntarEvento).toEqual({ campo: 'convidados', unitId: 'u-asa-sul', item: r.perguntaEventoAdiada!.item })
+    // a resposta "40" completa o pedido guardado
+    const fim = resolverAtendimento([{ ...seguida.perguntarEvento!.item, convidados: 40 }], CONTEXTO, SEG_14H, [], 'u-asa-sul', s3)
+    expect(fim.acoesS3).toEqual([registrar({ data: '2026-10-20' })])
+  })
+
+  it('sem pergunta adiada ou com outra pergunta na resposta: nada muda', () => {
+    const pessoas = resolverAtendimento([aviso({ unidade: 'asa sul', data: 'sábado', pessoas: 4 })], CONTEXTO, SEG_14H, [])
+    expect(retomarPerguntaEvento(pessoas, null)).toBe(pessoas)
+    const comLista = resolverAtendimento([aviso({ data: 'sábado', pessoas: 4 })], CONTEXTO, SEG_14H, [])
+    const adiada = { campo: 'convidados' as const, unitId: 'u-asa-sul', texto: 'Para quantos convidados?', item: ped({ unidade: 'Asa Sul', data: '2026-10-20' }) }
+    expect(retomarPerguntaEvento(comLista, adiada)).toBe(comLista)
+  })
+
+  it('pergunta do evento escondida pela lista de unidade (de outro item) também fica adiada', () => {
+    const r = resolverAtendimento([aviso({ data: 'sábado' }), ped({ unidade: 'asa sul', data: 'dia 20' })], CONTEXTO, SEG_14H, [], undefined, s3)
+    expect(r.lista).not.toBeNull()
+    expect(r.pendente).toHaveLength(1) // só o aviso espera a unidade
+    expect(r.perguntaEventoAdiada).toMatchObject({ campo: 'convidados', unitId: 'u-asa-sul', texto: 'Para quantos convidados?' })
+  })
+
+  it('evento sem unidade: a própria lista pergunta, nada adiado', () => {
+    const r = resolverAtendimento([aviso({ unidade: 'asa sul', data: 'sábado' }), ped({ data: 'dia 20' })], CONTEXTO, SEG_14H, [], undefined, s3)
+    expect(r.lista).not.toBeNull()
+    expect(r.perguntaEventoAdiada).toBeUndefined()
+  })
+})
+
+describe('pendências da Etapa 04 — lista de unidades antiga durante a coleta do evento', () => {
+  it('a unidade tocada vale para o pedido em coleta, mantendo o que já foi dito (antes: "lista expirada")', () => {
+    const coleta = resolverS3([ped({ unidade: 'asa sul', data: 'dia 20' })], CONTEXTO, ESPACOS, SEG_14H, [])
+    expect(coleta.perguntar).toMatchObject({ campo: 'convidados', unitId: 'u-asa-sul' })
+    const item = itemDoPedidoNaUnidade(coleta.perguntar!, ASA_NORTE)
+    expect(item).toEqual(ped({ unidade: ASA_NORTE.nome, data: '2026-10-20' }))
+    const r = resolverS3([item], CONTEXTO, ESPACOS, SEG_14H, [], ASA_NORTE.id)
+    expect(r.texto).toBe('Para quantos convidados?')
+    expect(r.perguntar).toEqual({ campo: 'convidados', unitId: ASA_NORTE.id, item: ped({ unidade: ASA_NORTE.nome, data: '2026-10-20' }) })
+  })
+
+  it('pedido sem tipo (triagem antiga) vira pedido', () => {
+    const item = itemDoPedidoNaUnidade({ campo: 'data', unitId: 'u-asa-sul', item: ped({ tipo: null, unidade: 'Asa Sul' }) }, ASA_NORTE)
+    expect(item.tipo).toBe('pedido')
   })
 })

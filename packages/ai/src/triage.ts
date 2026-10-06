@@ -6,6 +6,7 @@ import { TRIAGE_V2_PROMPT_VERSION, triageV2JsonSchema, triageV2SystemPrompt } fr
 import { TRIAGE_V3_PROMPT_VERSION, triageV3JsonSchema, triageV3SystemPrompt } from './prompts/triage-v3.ts'
 import { TRIAGE_V4_PROMPT_VERSION, triageV4JsonSchema, triageV4SystemPrompt } from './prompts/triage-v4.ts'
 import { TRIAGE_V5_PROMPT_VERSION, triageV5JsonSchema, triageV5SystemPrompt } from './prompts/triage-v5.ts'
+import { TRIAGE_V6_PROMPT_VERSION, triageV6JsonSchema, triageV6SystemPrompt } from './prompts/triage-v6.ts'
 
 export const INTENTS = ['horario_unidades', 'aviso_presenca', 'evento', 'cardapio', 'humano', 'lgpd', 'multiplo', 'fora_escopo'] as const
 export type Intent = (typeof INTENTS)[number]
@@ -138,7 +139,7 @@ export const parseTriageV4 = (raw: unknown): TriageV4 => triageV4Schema.parse(ra
 /** Pergunta que fizemos ao cliente (texto nosso) e o que já foi validado do pedido (sem texto livre do cliente). */
 export type PendenteTriagem = { pergunta: string; conhecido: Record<string, string | number> }
 
-/** Bloco da pergunta pendente (v4 e v5) seguido da mensagem do cliente, cada um delimitado e neutralizado. */
+/** Bloco da pergunta pendente (v4 a v6) seguido da mensagem do cliente, cada um delimitado e neutralizado. */
 function userComPendente(text: string, pendente?: PendenteTriagem): string {
   const blocoPendente = pendente
     ? `<pergunta_pendente>\n${neutralize(pendente.pergunta)}\n</pergunta_pendente>\n<pedido_em_andamento>\n${neutralize(JSON.stringify(pendente.conhecido))}\n</pedido_em_andamento>\n`
@@ -199,5 +200,34 @@ export function triageV5(
     jsonSchema: triageV5JsonSchema,
     parse: parseTriageV5,
     maxTokens: 500,
+  })
+}
+
+// ------------------------------------------------------------- v6: + frustração com o atendimento (Etapa 06)
+
+const triageV6Schema = z.object({
+  itens: z.array(itemV5Schema).transform((a) => a.slice(0, 5)),
+  fora_escopo: z.boolean(),
+  // obrigatório: ausente = saída inválida (o handoff por frustração depende dele)
+  frustracao: z.boolean(),
+})
+export type TriageV6 = z.infer<typeof triageV6Schema>
+export { TRIAGE_V6_PROMPT_VERSION }
+
+export const parseTriageV6 = (raw: unknown): TriageV6 => triageV6Schema.parse(raw)
+
+/** Triagem que o worker usa a partir da Etapa 06: itens da v5 + `frustracao` da mensagem inteira. */
+export function triageV6(
+  llm: LlmClient,
+  p: { models: string[]; restaurante: string; text: string; pendente?: PendenteTriagem },
+): Promise<JsonCallResult<TriageV6>> {
+  return llm.completeJson({
+    models: p.models,
+    system: triageV6SystemPrompt(p.restaurante),
+    user: userComPendente(p.text, p.pendente),
+    schemaName: 'triagem_v6',
+    jsonSchema: triageV6JsonSchema,
+    parse: parseTriageV6,
+    maxTokens: 520,
   })
 }

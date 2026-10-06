@@ -1,40 +1,31 @@
-import { createHash } from 'node:crypto'
 import { and, asc, count, eq, gt, gte, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import {
-  agoraLocal, decryptPhone, encontrarUnidade, escolhaDeUnidade, ESPACO_QUALQUER, normalizarHorario, normalizeText, lerPessoas, MAX_PESSOAS, normalizarTipoEvento, prefilter, redactPii,
-  renderModelo, renderReply, resolverAtendimento, resolverS4, rotuloTipoEvento, SERVICOS, TAGS_CARDAPIO, TIPOS_S1, TIPOS_S2, TIPOS_S3,
-  TIPOS_S4, unidadesOrdenadas,
-  type AcaoS2, type AcaoS3, type AcaoS4, type ContextoAtendimentoS4, type ContextoS1, type InboundItem, type ItemExtraido, type UnidadeS1,
-  type Lacuna, type ListaUnidades, type Localizacao, type ReplyKey, type ResultadoAtendimento,
+  agoraLocal, encontrarUnidade, escolhaDeUnidade, ESPACO_QUALQUER, itemDoPedidoNaUnidade, normalizarHorario, normalizeText, lerPessoas,
+  MAX_PESSOAS, normalizarTipoEvento, prefilter, redactPii, temAgradecimentoOuDespedida, renderModelo, renderReply, resolverAtendimento, resolverS4, retomarPerguntaEvento,
+  rotuloTipoEvento, SERVICOS, TAGS_CARDAPIO, TIPOS_S1, TIPOS_S2, TIPOS_S3, TIPOS_S4, unidadesOrdenadas, validarModelo,
+  type AcaoS2, type AcaoS3, type AcaoS4, type ChaveModelo, type ContextoAtendimentoS4, type ContextoS1, type InboundItem, type ItemExtraido,
+  type UnidadeS1, type Lacuna, type ListaUnidades, type Localizacao, type ReplyKey, type ResultadoAtendimento,
 } from '@atd/core'
+import { horarioHumanoSchema, proximoHorarioHumano, textoProximoHorario, type HandoffMotivo } from '@atd/core/conversa'
 import {
-  arquivoAtivoPorId, arquivoParaEnvio, avisosAtivosDoCliente, buscarCardapio, cancelarAvisoDoCliente, cancelarPedidoDoCliente,
-  carregarContextoS1, espacosAtivos, guardarMidiaMeta, limparMidiaMeta, observarPedidoDoCliente, pedidosDoCliente, registrarAviso,
+  arquivoParaEnvio, avisosAtivosDoCliente, buscarCardapio, cancelarAvisoDoCliente, cancelarPedidoDoCliente, statusPedidoDoCliente,
+  carregarContextoS1, espacosAtivos, observarPedidoDoCliente, pedidosDoCliente, registrarAviso,
   registrarLacunas, registrarPedidoEvento, releaseBudget, reserveBudget, resumoCardapio, schema, settleBudget, type ArquivoCardapio,
-  type Db, type ItemEncontrado, type Reservation, type ResumoCardapioDb,
+  type Db, type ItemEncontrado, type Reservation, type ResumoCardapioDb, type Tx,
 } from '@atd/db'
 import {
-  TRIAGE_BUDGET_ESTIMATE_USD, TRIAGE_V5_PROMPT_VERSION, triageV5, type JsonCallResult, type LlmClient, type PendenteTriagem,
-  type TriageV5,
+  TRIAGE_BUDGET_ESTIMATE_USD, TRIAGE_V6_PROMPT_VERSION, triageV6, type JsonCallResult, type LlmClient, type PendenteTriagem,
+  type TriageV6,
 } from '@atd/ai'
-import type { SendResult, WhatsAppClient } from '@atd/whatsapp'
-import type { Logger } from '../logger.ts'
-import { mimeDosBytes, type Storage } from '../storage.ts'
+import { deliver, type DeliverDeps } from './deliver.ts'
 
-const { aiRuns, auditLog, conversations, customers, dataSubjectRequests, messages, restaurants } = schema
+const { aiRuns, auditLog, conversations, customers, dataSubjectRequests, messages, replyTemplates, restaurants, units } = schema
 
-export type ProcessDeps = {
-  db: Db
+export type ProcessDeps = DeliverDeps & {
   llm: LlmClient
-  wa: Pick<WhatsAppClient, 'sendText' | 'sendLocation' | 'sendList' | 'sendDocument' | 'sendImage' | 'uploadMedia'>
-  /** arquivos do cardápio (bucket privado) para subir à Meta */
-  storage: Pick<Storage, 'baixarObjeto'>
-  phoneKey: Buffer
   triageModels: string[]
-  log: Logger
   requeue: (conversationId: string) => Promise<unknown>
-  now?: () => Date
 }
 
 export type Outcome = 'not_found' | 'nothing' | 'human_state' | 'blocked' | 'flood' | 'replied'
@@ -45,7 +36,8 @@ const PRIVACY_RENOTICE_MS = 365 * 24 * 3600_000
 type AiRunRow = Omit<typeof aiRuns.$inferInsert, 'restaurantId' | 'conversationId'>
 
 type Saida =
-  | { tipo: 'texto'; texto: string }
+  /** `replyKey`: chave do modelo (mensagem de handoff); sem ela, `s1` */
+  | { tipo: 'texto'; texto: string; replyKey?: ChaveModelo }
   | { tipo: 'localizacao'; texto: string; payload: Localizacao }
   | { tipo: 'lista'; texto: string; payload: Pick<ListaUnidades, 'botao' | 'opcoes'> }
   /** arquivo do cardápio: `texto` é o título; `alternativa` é o resumo em texto se a mídia não puder ser entregue */
@@ -74,6 +66,13 @@ const itemSchema = z.object({
   consulta: z.string().max(120).nullable().default(null),
   tag: z.enum(TAGS_CARDAPIO).nullable().default(null),
 })
+// pergunta do pedido de evento escondida por outra pergunta (pessoas ou lista): feita depois da resposta (pendência 2)
+const eventoAdiadoSchema = z.object({
+  campo: z.enum(['data', 'convidados', 'tipo', 'espaco']),
+  item: itemSchema,
+  unitId: z.string().nullable(),
+  texto: z.string().max(MAX_PERGUNTA_ENVIADA),
+})
 // Em `unidade` e `pessoas`, `pergunta` é a mensagem do cliente (mascarada, para as lacunas) e `perguntaEnviada` é o
 // texto nosso que espera a resposta (contexto da triagem; vazio em pendentes antigos).
 // pendente antigo (sem `tipo`) é lido como 'unidade'
@@ -84,6 +83,7 @@ const pendenteUnidadeSchema = z.object({
   itens: z.array(itemSchema).min(1).max(5),
   opcoes: z.array(z.string()).min(1).max(10),
   expiraEm: z.iso.datetime(),
+  eventoAdiado: eventoAdiadoSchema.optional(),
 })
 const pendentePessoasSchema = z.object({
   tipo: z.literal('pessoas'),
@@ -92,6 +92,7 @@ const pendentePessoasSchema = z.object({
   item: itemSchema,
   unitId: z.string(),
   expiraEm: z.iso.datetime(),
+  eventoAdiado: eventoAdiadoSchema.optional(),
 })
 // coleta guiada do pedido de evento (Etapa 04): `pergunta` é o texto nosso; `item` traz o que o core já validou
 const pendentePedidoEventoSchema = z.object({
@@ -104,25 +105,28 @@ const pendentePedidoEventoSchema = z.object({
 })
 const pendenteSchema = z.union([pendentePessoasSchema, pendentePedidoEventoSchema, pendenteUnidadeSchema])
 type Pendente = z.infer<typeof pendenteSchema>
-const localizacaoPayload = z.object({ lat: z.number(), lng: z.number(), nome: z.string(), endereco: z.string() })
-const listaPayload = z.object({
-  botao: z.string(),
-  opcoes: z.array(z.object({ id: z.string(), titulo: z.string(), descricao: z.string() })).min(1).max(10),
-})
 const interativoSchema = z.object({ interativoId: z.string() })
-const midiaPayload = z.object({ arquivoId: z.uuid(), alternativa: z.string().min(1) })
 
 const PENDENTE_MIN = 30
 const PENDENTE_EVENTO_MIN = 60
 const MAX_PALAVRAS_ESCOLHA = 4
 const MAX_PERGUNTA = 300
+/** Falhas seguidas (triagem que falhou, sem resposta válida, fora do escopo) que passam a conversa para a equipe. */
+const LIMITE_FALHAS = 2
 
 type Pending = InboundItem & { id: number; payload: unknown }
+
+/**
+ * Passa a conversa para a equipe (`aguardando_humano` + motivo). `avisar`: `sempre` acrescenta a mensagem de handoff
+ * (dentro/fora do horário da equipe ou frustração); `so_fora` só quando a equipe está fora do horário (a resposta já
+ * diz que a equipe vai assumir, como no handoff de evento).
+ */
+type Handoff = { motivo: HandoffMotivo; avisar: 'sempre' | 'so_fora' }
 
 type Decision = {
   replies: ReplyKey[]
   autor: 'ia' | 'sistema'
-  novoEstado?: 'aguardando_humano'
+  handoff?: Handoff
   dsr?: 'acesso' | 'exclusao'
   audit?: string
   falhas?: 'incrementar' | 'zerar'
@@ -136,6 +140,8 @@ type Decision = {
   contagem?: { validos: number; respondidos: number }
   /** undefined = não mexe; null = limpa; objeto = grava */
   pendente?: Pendente | null
+  /** unidade resolvida nesta resposta (`unidade_contexto_id`); ausente = mantém a anterior */
+  unidadeId?: string | undefined
 }
 
 type Ctx = {
@@ -192,11 +198,11 @@ async function decide(deps: ProcessDeps, conversationId: string): Promise<Outcom
   const silent: Decision = { replies: [], autor: 'sistema' }
 
   if (ctx.conv.estado === 'humano' || ctx.conv.estado === 'aguardando_humano') {
-    await commit(db, ctx, upTo, silent)
+    await commit(db, ctx, upTo, silent, now)
     return 'human_state'
   }
   if (ctx.customer.bloqueadoAte && ctx.customer.bloqueadoAte > now) {
-    await commit(db, ctx, upTo, silent)
+    await commit(db, ctx, upTo, silent, now)
     return 'blocked'
   }
 
@@ -212,14 +218,16 @@ async function decide(deps: ProcessDeps, conversationId: string): Promise<Outcom
     )
   if ((recent?.n ?? 0) > FLOOD_LIMIT) {
     await db.update(customers).set({ bloqueadoAte: sql`now() + interval '5 minutes'` }).where(eq(customers.id, ctx.customer.id))
-    await commit(db, ctx, upTo, { ...silent, audit: 'cliente.flood_bloqueado' })
+    await commit(db, ctx, upTo, { ...silent, audit: 'cliente.flood_bloqueado' }, now)
     deps.log.warn({ conversationId }, 'flood detectado; cliente bloqueado por 5 minutos')
     return 'flood'
   }
 
   // relógio simulado vale para S1 e pendente; bloqueio, aviso de privacidade e orçamento seguem o real
-  const decision = await classify(deps, ctx, pending, agoraDaConversa(now, ctx.conv))
+  const agora = agoraDaConversa(now, ctx.conv)
+  const decision = await classify(deps, ctx, pending, agora)
   try {
+    await completarHandoff(db, ctx, decision, agora)
     const lastNotice = ctx.customer.privacyNoticeSentAt?.getTime() ?? 0
     const [noticePending] = await db
       .select({ id: messages.id })
@@ -228,7 +236,7 @@ async function decide(deps: ProcessDeps, conversationId: string): Promise<Outcom
       .limit(1)
     const needsNotice = !noticePending && now.getTime() - lastNotice > PRIVACY_RENOTICE_MS
     if (needsNotice) decision.replies.unshift('avisoPrivacidade')
-    return await commit(db, ctx, upTo, decision)
+    return await commit(db, ctx, upTo, decision, agora)
   } catch (err) {
     // a transação desfez a liquidação: contabiliza o que já foi gasto (ou devolve a reserva)
     if (decision.budget) await compensate(deps, decision.budget.reservation, decision.budget.spentMicros, conversationId)
@@ -257,16 +265,60 @@ async function classify(deps: ProcessDeps, ctx: Ctx, pending: Pending[], now: Da
   }
   switch (pre.kind) {
     case 'handoff':
-      return { replies: ['handoff'], autor: 'sistema', novoEstado: 'aguardando_humano', audit: 'conversa.handoff_pedido' }
+      return { replies: [], autor: 'sistema', handoff: { motivo: 'pedido', avisar: 'sempre' }, audit: 'conversa.handoff_pedido' }
     case 'lgpd':
       return { replies: ['lgpdRecebido'], autor: 'sistema', dsr: pre.tipo, audit: 'lgpd.pedido_recebido' }
     case 'canned':
-      return { replies: [pre.reply], autor: 'sistema' }
+      // saudação/agradecimento: conversa normal, zera as falhas seguidas
+      return { replies: [pre.reply], autor: 'sistema', falhas: 'zerar' }
     case 'unsupported_media':
       return { replies: ['midiaNaoSuportada'], autor: 'sistema' }
     case 'pass':
       return triageDecision(deps, ctx, pre.text, now)
   }
+}
+
+/**
+ * Fecha a decisão de handoff: a resposta que leva as falhas seguidas ao limite vira handoff (`falhas`); todo handoff
+ * sai do sistema (a entrega não cancela depois da mudança de estado), sem pendente, com a mensagem de handoff.
+ */
+async function completarHandoff(db: Db, ctx: Ctx, d: Decision, now: Date): Promise<void> {
+  if (!d.handoff && d.falhas === 'incrementar' && ctx.conv.falhasConsecutivas + 1 >= LIMITE_FALHAS) {
+    d.replies = d.replies.filter((k) => k !== 'foraEscopo')
+    d.handoff = { motivo: 'falhas', avisar: 'sempre' }
+    d.audit ??= 'conversa.handoff_falhas'
+  }
+  if (!d.handoff) return
+  d.autor = 'sistema'
+  d.pendente = null
+  const aviso = await mensagemHandoff(db, ctx, d.handoff, now)
+  if (aviso) d.saidas = [...(d.saidas ?? []), aviso]
+}
+
+/**
+ * Mensagem de handoff: fora do horário da equipe (com próxima abertura) ⇒ `handoff_fora` com o próximo horário; senão
+ * `handoff_frustracao` (frustração) ou `handoff_dentro`. Horário vazio ou inválido no banco ⇒ sem promessa de horário.
+ * Modelo personalizado do restaurante vale se for válido.
+ */
+async function mensagemHandoff(db: Db | Tx, ctx: Ctx, h: Handoff, now: Date): Promise<Saida | null> {
+  const tz = ctx.restaurant.timezone
+  const horario = horarioHumanoSchema.safeParse(ctx.restaurant.horarioAtendimentoHumano)
+  const estado = horario.success ? proximoHorarioHumano(horario.data, now, tz) : null
+  const proximo = estado && !estado.aberto ? estado.proximo : null
+  if (!proximo && h.avisar === 'so_fora') return null
+  const chave: ChaveModelo = proximo ? 'handoff_fora' : h.motivo === 'frustracao' ? 'handoff_frustracao' : 'handoff_dentro'
+  const vars = proximo ? { proximo_horario: textoProximoHorario(proximo, now, tz) } : {}
+  return saidaDoModelo(db, ctx, chave, vars)
+}
+
+/** Texto de um modelo editável: o personalizado do restaurante, se for válido; senão o padrão. */
+async function saidaDoModelo(db: Db | Tx, ctx: Ctx, chave: ChaveModelo, vars: Record<string, string>): Promise<Saida> {
+  const [linha] = await db
+    .select({ texto: replyTemplates.texto })
+    .from(replyTemplates)
+    .where(and(eq(replyTemplates.restaurantId, ctx.restaurant.id), eq(replyTemplates.chave, chave)))
+  const personalizado = linha && validarModelo(chave, linha.texto) === null ? { [chave]: linha.texto } : {}
+  return { tipo: 'texto', texto: renderModelo(chave, vars, personalizado), replyKey: chave }
 }
 
 const perguntaMascarada = (texto: string) => redactPii(texto).slice(0, MAX_PERGUNTA)
@@ -364,10 +416,37 @@ async function atender(
   itens: readonly ItemExtraido[],
   now: Date,
   escolhidaId: string | undefined,
-): Promise<{ r: ResultadoAtendimento; midias: Saida[] }> {
+): Promise<{ r: ResultadoAtendimento; midias: Saida[]; unidadeId: string | undefined }> {
   const s4 = await carregarS4(deps, ctx, itens, s1, escolhidaId)
   const r = resolverAtendimento(itens, s1, now, avisos, escolhidaId, s3, s4?.contexto)
-  return { r, midias: midiasS4(r.acoesS4, s4, s1) }
+  return { r, midias: midiasS4(r.acoesS4, s4, s1), unidadeId: unidadeDaResposta(r, itens, s1.unidades, escolhidaId) }
+}
+
+/**
+ * Unidade de contexto da conversa (`unidade_contexto_id`, visibilidade na inbox): a escolhida na lista, a dos pendentes
+ * (pessoas, evento), a das ações (aviso, pedido de evento, cardápio) ou a citada num item — sempre uma unidade ativa.
+ * Restaurante de uma unidade só: a dela, se algo foi atendido. Nenhuma ⇒ mantém a anterior.
+ */
+function unidadeDaResposta(
+  r: ResultadoAtendimento,
+  itens: readonly ItemExtraido[],
+  unidades: readonly UnidadeS1[],
+  escolhidaId: string | undefined,
+): string | undefined {
+  const ativas = new Set(unidades.map((u) => u.id))
+  const candidatas = [
+    escolhidaId,
+    r.perguntarPessoas?.unitId,
+    r.perguntarEvento?.unitId,
+    r.perguntaEventoAdiada?.unitId,
+    ...r.acoesS2.map((a) => (a.tipo === 'registrar' ? a.unitId : null)),
+    ...r.acoesS3.map((a) => (a.tipo === 'registrar_evento' ? a.unitId : null)),
+    ...r.acoesS4.map((a) => a.unitId),
+    ...itens.map((i) => encontrarUnidade(i.unidade, unidades)?.id),
+  ]
+  const achada = candidatas.find((id): id is string => !!id && ativas.has(id))
+  if (achada) return achada
+  return unidades.length === 1 && r.validos > 0 ? unidades[0]!.id : undefined
 }
 
 const DATA_ISO = /^\d{4}-\d{2}-\d{2}$/
@@ -442,8 +521,13 @@ async function respostaDaLista(deps: ProcessDeps, ctx: Ctx, pending: Pending[], 
   const lidoPendente = lerPendente(ctx.conv.pendente)
   const p = lidoPendente?.tipo === 'unidade' ? lidoPendente : null
   if (!p || new Date(p.expiraEm) <= now) {
-    // toque numa lista que já não vale: avisa sem gastar o modelo
     if (!idLista) return null
+    // toque numa lista antiga durante a coleta do evento: a unidade tocada passa a ser a do pedido (pendência 3)
+    if (lidoPendente?.tipo === 'pedido_evento' && new Date(lidoPendente.expiraEm) > now) {
+      const doEvento = await escolhaParaPedidoEvento(deps, ctx, lidoPendente, idLista, now)
+      if (doEvento) return doEvento
+    }
+    // toque numa lista que já não vale: avisa sem gastar o modelo
     const { modelos } = await carregarContextoS1(deps.db, ctx.restaurant.id, now)
     const run: AiRunRow = { etapa: 'resposta', modelo: 'deterministico', promptVersion: 's1-lista', costUsd: '0', intent: 'lista_expirada', resultado: 'ok' }
     return {
@@ -458,12 +542,34 @@ async function respostaDaLista(deps: ProcessDeps, ctx: Ctx, pending: Pending[], 
   const escolhida = idLista ? opcoes.find((u) => u.id === idLista) : escolhaDeUnidade(texto, opcoes)
   if (!escolhida) return null
   // o pedido de evento sem unidade segue a coleta: a decisão guarda o pendente do próximo campo
-  const { r, midias } = await atender(deps, ctx, atendimento, p.itens, now, escolhida.id)
+  const { r, midias, unidadeId } = await atender(deps, ctx, atendimento, p.itens, now, escolhida.id)
   const run: AiRunRow = {
     etapa: 'resposta', modelo: 'deterministico', promptVersion: 's1-lista', costUsd: '0', intent: 'escolha_unidade', resultado: 'ok',
   }
-  // o pendente da decisão vale: o aviso escolhido sem pessoas passa a esperar "Para quantas pessoas?"
-  return { ...decisaoAtendimento(r, now, p.pergunta, midias), runs: [run] }
+  // o pendente da decisão vale: o aviso escolhido sem pessoas passa a esperar "Para quantas pessoas?"; a pergunta do
+  // evento escondida pela lista sai agora (pendência 2)
+  return { ...decisaoAtendimento(retomarPerguntaEvento(r, p.eventoAdiado), now, p.pergunta, midias), unidadeId, runs: [run] }
+}
+
+type PendentePedidoEvento = Extract<Pendente, { tipo: 'pedido_evento' }>
+
+/** Id tocado numa lista antiga com o pedido de evento em coleta: resolve o pedido na unidade tocada (se ativa). */
+async function escolhaParaPedidoEvento(
+  deps: ProcessDeps,
+  ctx: Ctx,
+  p: PendentePedidoEvento,
+  idLista: string,
+  now: Date,
+): Promise<Decision | null> {
+  const atendimento = await carregarAtendimento(deps, ctx, now)
+  const unidade = atendimento.s1.unidades.find((u) => u.id === idLista)
+  if (!unidade) return null
+  const item = itemDoPedidoNaUnidade({ campo: p.campo, item: p.item, unitId: p.unitId }, unidade)
+  const { r, midias, unidadeId } = await atender(deps, ctx, atendimento, [item], now, unidade.id)
+  const run: AiRunRow = {
+    etapa: 'resposta', modelo: 'deterministico', promptVersion: 's1-lista', costUsd: '0', intent: 'escolha_unidade_evento', resultado: 'ok',
+  }
+  return { ...decisaoAtendimento(r, now, '', midias), unidadeId, runs: [run] }
 }
 
 /** Resposta curta ("4", "só eu") ao "Para quantas pessoas?": registra o aviso guardado sem chamar o LLM. */
@@ -476,11 +582,12 @@ async function respostaDePessoas(deps: ProcessDeps, ctx: Ctx, pending: Pending[]
   // "somos 80": o core responde o limite (aviso_pessoas_invalido) e não guarda pendente ⇒ sem laço
   const pessoas = n === 'fora' ? MAX_PESSOAS + 1 : n
   // unidade pelo id guardado: não reabre a lista nem confunde nomes parecidos
-  const { r } = await atender(deps, ctx, await carregarAtendimento(deps, ctx, now), [{ ...p.item, pessoas }], now, p.unitId)
+  const { r, unidadeId } = await atender(deps, ctx, await carregarAtendimento(deps, ctx, now), [{ ...p.item, pessoas }], now, p.unitId)
   const run: AiRunRow = {
     etapa: 'resposta', modelo: 'deterministico', promptVersion: 's2-pessoas', costUsd: '0', intent: 'resposta_pessoas', resultado: 'ok',
   }
-  return { ...decisaoAtendimento(r, now, p.pergunta), runs: [run] }
+  // respondidas as pessoas, a pergunta do evento que ficou para depois sai agora (pendência 2)
+  return { ...decisaoAtendimento(retomarPerguntaEvento(r, p.eventoAdiado), now, p.pergunta), unidadeId, runs: [run] }
 }
 
 /** A pergunta que espera resposta sai por último no texto composto (um parágrafo). */
@@ -494,6 +601,11 @@ function decisaoAtendimento(r: ResultadoAtendimento, now: Date, pergunta: string
   if (r.lista) saidas.push({ tipo: 'lista', texto: r.lista.corpo, payload: { botao: r.lista.botao, opcoes: r.lista.opcoes } })
   const expira = (min: number) => new Date(now.getTime() + min * 60_000).toISOString()
   const ev = r.perguntarEvento
+  const adiada = r.perguntaEventoAdiada
+  // pergunta do evento escondida pela lista ou pelo "Para quantas pessoas?": vai junto do pendente (pendência 2)
+  const eventoAdiado = adiada
+    ? { eventoAdiado: { campo: adiada.campo, item: adiada.item, unitId: adiada.unitId, texto: adiada.texto.slice(0, MAX_PERGUNTA_ENVIADA) } }
+    : {}
   // um pendente por vez: lista (inclui o pedido de evento sem unidade) > pessoas (S2) > próximo campo do evento
   const pendente: Pendente | null = r.handoff
     ? null
@@ -503,11 +615,12 @@ function decisaoAtendimento(r: ResultadoAtendimento, now: Date, pergunta: string
         opcoes: r.lista.opcoes.map((o) => o.id),
         // a lista que espera a unidade do pedido de evento vale o mesmo que as outras perguntas da coleta
         expiraEm: expira(r.pendente.some((i) => i.servico === 'evento') ? PENDENTE_EVENTO_MIN : PENDENTE_MIN),
+        ...eventoAdiado,
       }
       : r.perguntarPessoas
         ? {
           tipo: 'pessoas', pergunta, perguntaEnviada: ultimoTrecho(r.texto), item: r.perguntarPessoas.item,
-          unitId: r.perguntarPessoas.unitId, expiraEm: expira(PENDENTE_MIN),
+          unitId: r.perguntarPessoas.unitId, expiraEm: expira(PENDENTE_MIN), ...eventoAdiado,
         }
         : ev && ev.campo !== 'unidade'
           ? {
@@ -520,14 +633,16 @@ function decisaoAtendimento(r: ResultadoAtendimento, now: Date, pergunta: string
     saidas,
     // handoff: a resposta é do sistema para não ser cancelada na entrega (a conversa já não está com a IA)
     autor: r.handoff ? 'sistema' : 'ia',
-    falhas: 'zerar',
+    // sem resposta válida conta como falha (LIMITE_FALHAS seguidas ⇒ handoff)
+    falhas: saidas.length ? 'zerar' : 'incrementar',
     lacunas: r.lacunas,
     pergunta,
     contagem: { validos: r.validos, respondidos: r.respondidos },
     pendente,
     avisos: r.acoesS2,
     acoesS3: r.acoesS3,
-    ...(r.handoff ? { novoEstado: 'aguardando_humano' as const, audit: 'conversa.handoff_evento' } : {}),
+    // a resposta do evento já diz que a equipe vai assumir: só fora do horário acrescenta quando a equipe volta
+    ...(r.handoff ? { handoff: { motivo: 'servico', avisar: 'so_fora' } satisfies Handoff, audit: 'conversa.handoff_evento' } : {}),
   }
 }
 
@@ -538,23 +653,23 @@ const RESERVE_USD = fmt(2 * ESTIMATE_MICROS)
 
 // Custo desconhecido (null) de chamada possivelmente cobrada é contabilizado pela estimativa;
 // falha sem uso reportado (502, rede) não custa nada.
-function runCostMicros(r: JsonCallResult<TriageV5>): number {
+function runCostMicros(r: JsonCallResult<TriageV6>): number {
   if (r.usage?.costUsd != null) return micros(r.usage.costUsd)
   const maybeBilled = r.ok || r.usage !== null
   return maybeBilled ? ESTIMATE_MICROS : 0
 }
 
 
-function resumoItens(t: TriageV5): string {
+function resumoItens(t: TriageV6): string {
   if (t.itens.length === 0) return 'fora_escopo'
   return [...new Set(t.itens.map((i) => (i.tipo ? `${i.servico}:${i.tipo}` : i.servico)))].join(',')
 }
 
-function toRun(r: JsonCallResult<TriageV5>, fallbackModel: string): AiRunRow {
+function toRun(r: JsonCallResult<TriageV6>, fallbackModel: string): AiRunRow {
   return {
     etapa: 'triagem',
     modelo: r.model ?? fallbackModel,
-    promptVersion: TRIAGE_V5_PROMPT_VERSION,
+    promptVersion: TRIAGE_V6_PROMPT_VERSION,
     tokensIn: r.usage?.tokensIn ?? 0,
     tokensOut: r.usage?.tokensOut ?? 0,
     tokensCache: r.usage?.tokensCache ?? 0,
@@ -576,16 +691,16 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, now: Da
     ref: `conversa:${ctx.conv.id}`,
   })
   if (!reservation) {
-    return { replies: ['modoEconomico'], autor: 'sistema', novoEstado: 'aguardando_humano', audit: 'orcamento.sem_saldo' }
+    return { replies: [], autor: 'sistema', handoff: { motivo: 'economico', avisar: 'sempre' }, audit: 'orcamento.sem_saldo' }
   }
 
   // a resposta a uma pergunta nossa vai com o contexto (Decisão 3); pendente vencido não conta
   const pendenteAtual = lerPendente(ctx.conv.pendente)
   const contexto = pendenteDaTriagem(pendenteAtual, now)
-  let result: JsonCallResult<TriageV5>
+  let result: JsonCallResult<TriageV6>
   const runs: AiRunRow[] = []
   try {
-    const call = () => triageV5(deps.llm, {
+    const call = () => triageV6(deps.llm, {
       models: deps.triageModels, restaurante: ctx.restaurant.nome, text, ...(contexto ? { pendente: contexto } : {}),
     })
     const fallbackModel = deps.triageModels[0]!
@@ -607,27 +722,47 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, now: Da
 
   if (!result.ok) {
     deps.log.error({ conversationId: ctx.conv.id, erro: result.error, status: result.status }, 'triagem falhou')
-    return { replies: ['erro'], autor: 'sistema', novoEstado: 'aguardando_humano', falhas: 'incrementar', audit: 'ia.falha_triagem', runs, budget, pendente: null }
+    // a triagem já tentou de novo: a falha do modelo passa direto para a equipe (e conta como falha)
+    const handoff: Handoff = { motivo: 'falhas', avisar: 'sempre' }
+    return { replies: [], autor: 'sistema', handoff, falhas: 'incrementar', audit: 'ia.falha_triagem', runs, budget }
   }
 
-  const { itens } = result.data
+  const { itens, frustracao, fora_escopo: foraEscopo } = result.data
   if (itens.some((i) => i.servico === 'humano' || i.servico === 'lgpd')) {
     // resposta do sistema: com `ia` a entrega a cancelaria (a conversa já está aguardando humano)
-    return { replies: ['handoff'], autor: 'sistema', novoEstado: 'aguardando_humano', audit: 'conversa.handoff_triagem', runs, budget, pendente: null }
+    const handoff: Handoff = { motivo: frustracao ? 'frustracao' : 'pedido', avisar: 'sempre' }
+    return { replies: [], autor: 'sistema', handoff, audit: 'conversa.handoff_triagem', runs, budget }
   }
-  if (itens.length === 0) return { replies: ['foraEscopo'], autor: 'ia', falhas: 'zerar', runs, budget, pendente: null }
+  // cliente irritado com o atendimento: responde o que der e a equipe continua (sem "só consigo ajudar…")
+  const frustrado = (d: Decision): Decision => ({
+    ...d,
+    replies: d.replies.filter((k) => k !== 'foraEscopo'),
+    handoff: { motivo: 'frustracao', avisar: d.handoff ? 'so_fora' : 'sempre' },
+    audit: 'conversa.handoff_frustracao',
+  })
+  if (itens.length === 0 && !foraEscopo && !frustracao) {
+    // sem item e sem fora de escopo não é falha: agradecimento/despedida que o pré-filtro não pegou ("ok, até sábado
+    // então", "abraço!") ⇒ "Por nada!"; pedido vago ("tenho uma dúvida") ⇒ `cortesia` (com o que a IA ajuda)
+    if (temAgradecimentoOuDespedida(text)) return { replies: ['agradecimento'], autor: 'ia', runs, budget, pendente: null }
+    return { replies: [], saidas: [await saidaDoModelo(db, ctx, 'cortesia', {})], autor: 'ia', runs, budget, pendente: null }
+  }
+  if (itens.length === 0) {
+    const d: Decision = { replies: ['foraEscopo'], autor: 'ia', falhas: 'incrementar', runs, budget, pendente: null }
+    return frustracao ? frustrado(d) : d
+  }
   try {
     const atendimento = await carregarAtendimento(deps, ctx, now)
     const c = completarDoPendente(itens, contexto ? pendenteAtual : null, atendimento.s1.unidades)
-    const { r, midias } = await atender(deps, ctx, atendimento, c.itens, now, c.escolhidaId)
-    return { ...decisaoAtendimento(r, now, perguntaMascarada(text), midias), runs, budget }
+    const { r, midias, unidadeId } = await atender(deps, ctx, atendimento, c.itens, now, c.escolhidaId)
+    const d: Decision = { ...decisaoAtendimento(r, now, perguntaMascarada(text), midias), unidadeId, runs, budget }
+    return frustracao ? frustrado(d) : d
   } catch (err) {
     await compensate(deps, reservation, spentMicros, ctx.conv.id)
     throw err
   }
 }
 
-async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outcome> {
+async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision, now: Date): Promise<Outcome> {
   const restaurantId = ctx.restaurant.id
   const conversationId = ctx.conv.id
   return db.transaction(async (tx): Promise<Outcome> => {
@@ -662,6 +797,8 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outc
       return 'human_state'
     }
 
+    // o banco pode mudar a decisão (cancelamento recusado ⇒ a equipe assume): o que vale é o daqui para baixo
+    let { autor, handoff, pendente, audit } = d
     // avisos de presença: na mesma transação da resposta; com humano no controle, nada é gravado (acima)
     let saidas = d.saidas ?? []
     for (const a of d.avisos ?? []) {
@@ -687,8 +824,22 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outc
         await tx.insert(auditLog).values({ restaurantId, atorTipo: 'ia', acao: 'evento.pedido_criado', entidade: 'event_request', entidadeId: r.id })
       } else if (a.tipo === 'cancelar_evento') {
         const ok = await cancelarPedidoDoCliente(tx, { restaurantId, customerId: ctx.customer.id, pedidoId: a.pedidoId })
-        if (ok) await tx.insert(auditLog).values({ restaurantId, atorTipo: 'ia', acao: 'evento.pedido_cancelado', entidade: 'event_request', entidadeId: a.pedidoId })
-        else saidas = trocarTrecho(saidas, a.texto, a.textoSeFalhar)
+        if (ok) {
+          await tx.insert(auditLog).values({ restaurantId, atorTipo: 'ia', acao: 'evento.pedido_cancelado', entidade: 'event_request', entidadeId: a.pedidoId })
+          continue
+        }
+        // confirmado pela equipe: o texto diz isso; recusado, cancelado ou não é dele: texto neutro (nunca "confirmado")
+        const atual = await statusPedidoDoCliente(tx, { restaurantId, customerId: ctx.customer.id, pedidoId: a.pedidoId })
+        saidas = trocarTrecho(saidas, a.texto, atual === 'confirmado' ? a.textoSeFalhar : a.textoSeAtualizado)
+        // a equipe mexeu no pedido depois da leitura (ex.: confirmou): a resposta já diz que a equipe vai ajudar
+        if (a.handoffSeFalhar && !handoff) {
+          handoff = { motivo: 'servico', avisar: 'so_fora' }
+          autor = 'sistema'
+          pendente = null
+          audit = 'conversa.handoff_evento'
+          const aviso = await mensagemHandoff(tx, ctx, handoff, now)
+          if (aviso) saidas = [...saidas, aviso]
+        }
       } else {
         // mudança pedida: a IA não altera o pedido; só anota (texto nosso, ≤ 300) para a equipe que assume
         const ok = await observarPedidoDoCliente(tx, { restaurantId, customerId: ctx.customer.id, pedidoId: a.pedidoId, observacao: a.observacao })
@@ -702,7 +853,7 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outc
         restaurantId,
         conversationId,
         direcao: 'out',
-        autor: isNotice ? 'sistema' : d.autor,
+        autor: isNotice ? 'sistema' : autor,
         tipo: 'texto',
         texto: renderReply(key, { restaurante: ctx.restaurant.nome, politicaUrl: ctx.restaurant.politicaUrl }),
         statusEnvio: 'pendente',
@@ -716,36 +867,47 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outc
         restaurantId,
         conversationId,
         direcao: 'out',
-        autor: d.autor,
+        autor,
         tipo: s.tipo,
         texto: s.texto,
         payload: s.tipo === 'texto' ? null : s.payload,
         statusEnvio: 'pendente',
         aiRunId: lastRunId,
-        replyKey: 's1',
+        replyKey: (s.tipo === 'texto' ? s.replyKey : undefined) ?? 's1',
       })
     }
     if (d.lacunas?.length && !ctx.conv.simulada) {
       await registrarLacunas(tx, { restaurantId, lacunas: d.lacunas, pergunta: d.pergunta ?? '' })
     }
 
+    // restaurante de uma unidade só: a conversa fica nela desde a primeira resposta (inclusive handoff sem item atendido)
+    const unidadeId = d.unidadeId ?? (ctx.conv.unidadeContextoId ? undefined : await unidadeUnica(tx, restaurantId))
     await tx
       .update(conversations)
       .set({
         processedUpToId: upTo,
-        ...(d.novoEstado ? { estado: d.novoEstado } : {}),
+        // `aguardando_desde` é gravado pelo trigger `marcar_aguardando` ao entrar em aguardando_humano
+        ...(handoff ? { estado: 'aguardando_humano' as const, handoffMotivo: handoff.motivo } : {}),
         ...(d.falhas === 'incrementar' ? { falhasConsecutivas: sql`${conversations.falhasConsecutivas} + 1` } : {}),
         ...(d.falhas === 'zerar' ? { falhasConsecutivas: 0 } : {}),
-        ...(d.pendente !== undefined ? { pendente: d.pendente } : {}),
+        ...(pendente !== undefined ? { pendente } : {}),
+        ...(unidadeId ? { unidadeContextoId: unidadeId } : {}),
       })
       .where(eq(conversations.id, conversationId))
 
     if (d.dsr) await tx.insert(dataSubjectRequests).values({ restaurantId, customerId: ctx.customer.id, tipo: d.dsr })
-    if (d.audit) {
-      await tx.insert(auditLog).values({ restaurantId, atorTipo: d.autor, acao: d.audit, entidade: 'conversation', entidadeId: conversationId })
+    if (audit) {
+      await tx.insert(auditLog).values({ restaurantId, atorTipo: autor, acao: audit, entidade: 'conversation', entidadeId: conversationId })
     }
     return d.replies.length + saidas.length > 0 ? 'replied' : 'nothing'
   })
+}
+
+/** Id da única unidade ativa do restaurante; `undefined` com zero ou várias. */
+async function unidadeUnica(tx: Tx, restaurantId: string): Promise<string | undefined> {
+  const ativas = await tx.select({ id: units.id }).from(units)
+    .where(and(eq(units.restaurantId, restaurantId), eq(units.ativo, true))).limit(2)
+  return ativas.length === 1 ? ativas[0]!.id : undefined
 }
 
 /** Troca um trecho (parágrafo) do texto composto; o substituto aparece uma vez só. */
@@ -757,176 +919,3 @@ function trocarTrecho(saidas: Saida[], de: string, para: string): Saida[] {
     return { ...s, texto }
   })
 }
-
-// ---------------------------------------------------------------- entregar
-
-async function deliver(deps: ProcessDeps, conversationId: string) {
-  const { db } = deps
-  const pendingOut = await db
-    .select({
-      id: messages.id,
-      restaurantId: messages.restaurantId,
-      autor: messages.autor,
-      replyKey: messages.replyKey,
-      texto: messages.texto,
-      tipo: messages.tipo,
-      payload: messages.payload,
-      telefoneCifrado: customers.telefoneCifrado,
-      customerId: customers.id,
-      estado: conversations.estado,
-      simulada: conversations.simulada,
-    })
-    .from(messages)
-    .innerJoin(conversations, eq(conversations.id, messages.conversationId))
-    .innerJoin(customers, eq(customers.id, conversations.customerId))
-    .where(and(eq(messages.conversationId, conversationId), eq(messages.direcao, 'out'), eq(messages.statusEnvio, 'pendente')))
-    .orderBy(asc(messages.id))
-  if (pendingOut.length === 0) return
-
-  // canal simulador: conversa do painel nunca chama a Meta nem decifra telefone
-  const simulada = pendingOut[0]!.simulada
-  const to = simulada ? null : decryptPhone(pendingOut[0]!.telefoneCifrado, deps.phoneKey)
-  for (const m of pendingOut) {
-    // I5: com humano no controle, respostas da IA ainda pendentes são canceladas; as do sistema seguem
-    if (m.autor === 'ia') {
-      const [cur] = await db.select({ estado: conversations.estado }).from(conversations).where(eq(conversations.id, conversationId))
-      if (cur && cur.estado !== 'ia') {
-        await db.update(messages).set({ statusEnvio: 'cancelado' }).where(eq(messages.id, m.id))
-        continue
-      }
-    }
-    if (to === null) {
-      await db.update(messages).set({ statusEnvio: 'simulado' }).where(eq(messages.id, m.id))
-      await marcarAvisoEnviado(deps, m)
-      continue
-    }
-    const entregue = m.tipo === 'documento' || m.tipo === 'imagem' ? await entregarMidia(deps, to, m) : await enviarSimples(deps, to, m)
-    if (entregue === 'payload_invalido') {
-      await db.update(messages).set({ statusEnvio: 'falhou:payload_invalido' }).where(eq(messages.id, m.id))
-      deps.log.warn({ conversationId, messageId: m.id }, 'payload de mensagem inválido; envio descartado')
-      continue
-    }
-    const { r, alternativa } = entregue
-    if (r.ok && alternativa !== null) {
-      // a mídia não pôde ser entregue e o resumo saiu em texto: o registro mostra o que o cliente recebeu
-      await db.update(messages)
-        .set({ tipo: 'texto', texto: alternativa, payload: null, wamid: r.wamid, statusEnvio: 'enviado' })
-        .where(eq(messages.id, m.id))
-    } else if (r.ok) {
-      await db.update(messages).set({ wamid: r.wamid, statusEnvio: 'enviado' }).where(eq(messages.id, m.id))
-      await marcarAvisoEnviado(deps, m)
-    } else if (!r.retryable) {
-      await db.update(messages).set({ statusEnvio: `falhou:${r.code ?? 'desconhecido'}` }).where(eq(messages.id, m.id))
-      deps.log.warn({ conversationId, code: r.code }, 'envio recusado permanentemente pela Meta')
-    } else {
-      throw new Error(`Falha temporária ao enviar pelo WhatsApp (código ${r.code ?? 'rede'})`)
-    }
-  }
-}
-
-async function marcarAvisoEnviado(deps: ProcessDeps, m: { replyKey: string | null; customerId: string }) {
-  if (m.replyKey !== 'avisoPrivacidade') return
-  await deps.db.update(customers).set({ privacyNoticeSentAt: deps.now?.() ?? new Date() }).where(eq(customers.id, m.customerId))
-}
-
-async function enviarSimples(deps: ProcessDeps, to: string, m: { tipo: string; texto: string | null; payload: unknown }): Promise<Entrega | 'payload_invalido'> {
-  const r = await enviar(deps, to, m)
-  return r === 'payload_invalido' ? r : { r, alternativa: null }
-}
-
-function enviar(deps: ProcessDeps, to: string, m: { tipo: string; texto: string | null; payload: unknown }) {
-  if (m.tipo === 'localizacao') {
-    const p = localizacaoPayload.safeParse(m.payload)
-    return p.success ? deps.wa.sendLocation(to, p.data) : 'payload_invalido'
-  }
-  if (m.tipo === 'lista') {
-    const p = listaPayload.safeParse(m.payload)
-    return p.success ? deps.wa.sendList(to, { corpo: m.texto ?? '', ...p.data }) : 'payload_invalido'
-  }
-  return deps.wa.sendText(to, m.texto ?? '')
-}
-
-// ---------------------------------------------------------------- mídia do cardápio
-
-/** O media id da Meta vale 30 dias; guardamos com um dia de folga. */
-const VALIDADE_MIDIA_MS = 29 * 86_400_000
-/** Mídia recusada pela Meta (id vencido ou inválido, falha de upload/tipo): sobe o arquivo de novo uma vez. */
-const MIDIA_RECUSADA = new Set([100, 131009, 131053])
-const EXTENSAO: Readonly<Record<string, string>> = { 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
-
-/** Nome do arquivo que o cliente vê: o título, sem caracteres que quebram nomes de arquivo. */
-function nomeDoArquivo(a: ArquivoCardapio): string {
-  const base = a.titulo.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100) || 'cardapio'
-  return `${base}.${EXTENSAO[a.mime] ?? 'pdf'}`
-}
-
-type Entrega = { r: SendResult; alternativa: string | null }
-
-/**
- * Envia o arquivo do cardápio: usa o media id guardado se ainda vale; senão baixa do Storage e sobe para a Meta (e
- * guarda o id). Mídia recusada: esquece o id e sobe de novo uma vez. Sem como entregar o arquivo (desativado, Storage
- * fora, Meta recusando), manda o resumo em texto (`alternativa`). Falha temporária volta para o job tentar de novo.
- */
-async function entregarMidia(
-  deps: ProcessDeps,
-  to: string,
-  m: { id: number; tipo: string; payload: unknown; restaurantId: string },
-): Promise<Entrega | 'payload_invalido'> {
-  const p = midiaPayload.safeParse(m.payload)
-  if (!p.success) return 'payload_invalido'
-  const { arquivoId, alternativa } = p.data
-  const emTexto = async (): Promise<Entrega> => ({ r: await deps.wa.sendText(to, alternativa), alternativa })
-  const arquivo = await arquivoAtivoPorId(deps.db, { restaurantId: m.restaurantId, arquivoId })
-  if (!arquivo) return emTexto()
-  const agora = deps.now?.() ?? new Date()
-  let mediaId = arquivo.waMediaId && arquivo.waMediaExpiresAt && arquivo.waMediaExpiresAt > agora ? arquivo.waMediaId : null
-  for (let tentativa = 0; ; tentativa++) {
-    if (!mediaId) {
-      const up = await subirArquivo(deps, arquivo, agora)
-      if (up === 'sem_arquivo') return emTexto()
-      if (!up.ok) {
-        if (up.retryable) return { r: up, alternativa: null }
-        deps.log.warn({ messageId: m.id, code: up.code }, 'Meta recusou o upload do cardápio; enviando o resumo em texto')
-        return emTexto()
-      }
-      mediaId = up.mediaId
-    }
-    const r = m.tipo === 'imagem'
-      ? await deps.wa.sendImage(to, { mediaId, caption: arquivo.titulo })
-      : await deps.wa.sendDocument(to, { mediaId, filename: nomeDoArquivo(arquivo), caption: arquivo.titulo })
-    if (r.ok || r.retryable || r.code === null || !MIDIA_RECUSADA.has(r.code)) return { r, alternativa: null }
-    // o id recusado sai do cache em qualquer caso
-    await limparMidiaMeta(deps.db, arquivo.id)
-    if (tentativa >= 1) {
-      deps.log.warn({ messageId: m.id, code: r.code }, 'Meta recusou a mídia do cardápio de novo; enviando o resumo em texto')
-      return emTexto()
-    }
-    mediaId = null
-  }
-}
-
-/** Baixa o arquivo do bucket privado e sobe para a Meta; guarda o media id. `sem_arquivo`: Storage não entregou. */
-async function subirArquivo(deps: ProcessDeps, a: ArquivoCardapio, agora: Date) {
-  const [bucket, ...resto] = a.storagePath.split('/')
-  let bytes: Uint8Array
-  try {
-    bytes = await deps.storage.baixarObjeto(bucket!, resto.join('/'))
-  } catch (err) {
-    deps.log.error({ err, arquivoId: a.id }, 'falha ao baixar o arquivo do cardápio do Storage')
-    return 'sem_arquivo' as const
-  }
-  // o conteúdo precisa ser do tipo gravado (o painel confere no upload; aqui é a última barreira antes da Meta)
-  if (mimeDosBytes(bytes) !== a.mime) {
-    deps.log.error({ arquivoId: a.id }, 'arquivo do cardápio no Storage não corresponde ao tipo gravado')
-    return 'sem_arquivo' as const
-  }
-  // o nome do objeto é o sha256, mas quem tem acesso ao Storage poderia ter gravado outro conteúdo ali antes
-  if (createHash('sha256').update(bytes).digest('hex') !== a.sha256) {
-    deps.log.error({ arquivoId: a.id }, 'arquivo do cardápio no Storage não confere com o sha256 gravado')
-    return 'sem_arquivo' as const
-  }
-  const up = await deps.wa.uploadMedia(bytes, a.mime, nomeDoArquivo(a))
-  if (up.ok) await guardarMidiaMeta(deps.db, { arquivoId: a.id, waMediaId: up.mediaId, expiraEm: new Date(agora.getTime() + VALIDADE_MIDIA_MS) })
-  return up
-}
-

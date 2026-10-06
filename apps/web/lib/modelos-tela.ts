@@ -48,7 +48,8 @@ export const ROTULOS_MODELO: Record<ChaveModelo, { titulo: string; quando: strin
   evento_qual_cancelar: { titulo: 'Qual pedido de evento cancelar', quando: 'O cliente tem vários pedidos e não disse qual cancelar. {exemplo} é uma frase de cancelamento com o primeiro pedido da lista.' },
   evento_confirmado_humano: { titulo: 'Evento já confirmado', quando: 'O cliente quer cancelar um evento confirmado: um atendente assume.' },
   evento_mudanca_humano: { titulo: 'Mudança no pedido de evento', quando: 'O cliente quer mudar um pedido de evento em andamento: a equipe assume e o pedido recebe uma observação.' },
-  evento_ja_confirmado_humano: { titulo: 'Já há evento confirmado no dia', quando: 'O cliente pede um evento na unidade e data de um evento já confirmado: um atendente assume.' },
+  evento_ja_confirmado_humano: { titulo: 'Já há evento confirmado no dia', quando: 'O cliente pede um evento na unidade e data de um evento já confirmado (ou quer cancelar um pedido que a equipe acabou de confirmar): um atendente assume.' },
+  evento_atualizado_humano: { titulo: 'Pedido de evento mudado pela equipe', quando: 'O cliente quer cancelar um pedido que a equipe acabou de recusar ou cancelar: um atendente assume.' },
   // cardápio (Etapa 05)
   cardapio_item: { titulo: 'Item do cardápio', quando: 'O cliente pergunta se tem um item ou quanto custa.' },
   cardapio_indisponivel: { titulo: 'Item indisponível na unidade', quando: 'O item existe, mas está indisponível na unidade perguntada.' },
@@ -57,6 +58,10 @@ export const ROTULOS_MODELO: Record<ChaveModelo, { titulo: string; quando: strin
   cardapio_parecido: { titulo: 'Só item parecido', quando: 'O item pedido não está no cardápio, mas há nomes parecidos: eles são sugeridos (sem preço) e a pergunta vai para "Sem resposta".' },
   cardapio_enviando: { titulo: 'Envio do cardápio', quando: 'Texto que acompanha o arquivo do cardápio.' },
   cardapio_sem_arquivo: { titulo: 'Cardápio sem arquivo', quando: 'O cliente pede o cardápio e não há arquivo cadastrado: vão as categorias com alguns itens.' },
+  cortesia: { titulo: 'Mensagem sem pedido', quando: 'O cliente escreve sem pedir nada que a IA atenda ("tenho uma dúvida", "gostaria de uma informação"): a IA diz com o que pode ajudar.' },
+  handoff_dentro: { titulo: 'Passar para a equipe', quando: 'A IA passa a conversa para a equipe dentro do horário de atendimento humano.' },
+  handoff_fora: { titulo: 'Passar para a equipe fora do horário', quando: 'A IA passa a conversa para a equipe fora do horário de atendimento humano: diz quando a equipe volta.' },
+  handoff_frustracao: { titulo: 'Cliente insatisfeito', quando: 'O cliente parece irritado com o atendimento e a equipe está no horário: a IA pede desculpas e chama alguém.' },
 }
 
 const LINHAS: Partial<Record<ChaveModelo, (nome: string, endereco: string) => string>> = {
@@ -102,6 +107,7 @@ export function exemploDeVariaveis(chave: ChaveModelo, u: UnidadeExemplo | null)
       : '**Picanha** — Corte grelhado na brasa — R$ 59,90',
     item: '**Picanha**',
     tag: 'veganas',
+    proximo_horario: 'amanhã a partir das 9h',
     categorias: '• **Carnes**: Picanha (R$ 59,90), Fraldinha (R$ 49,00)\n• **Sobremesas**: Pudim (R$ 14,00)',
   }
 }

@@ -755,6 +755,25 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > m
       "unidade": null,
     },
   ],
+  "perguntaEventoAdiada": {
+    "campo": "data",
+    "item": {
+      "consulta": null,
+      "convidados": null,
+      "data": null,
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tag": null,
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": null,
+      "unidade": "Asa Sul",
+    },
+    "texto": "Para qual data é o evento?",
+    "unitId": "u-asa-sul",
+  },
   "perguntarEvento": null,
   "perguntarPessoas": null,
   "respondidos": 0,
@@ -855,9 +874,11 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > m
   "acoesS2": [],
   "acoesS3": [
     {
+      "handoffSeFalhar": true,
       "pedidoId": "p-sab",
       "texto": "Pronto, cancelei seu pedido de evento: Asa Sul, sábado (10/10).",
-      "textoSeFalhar": "Não encontrei pedido de evento seu em andamento.",
+      "textoSeAtualizado": "Seu pedido de evento foi atualizado pela equipe. Vou chamar alguém para te ajudar.",
+      "textoSeFalhar": "Já temos um evento confirmado seu nesse dia. Vou chamar a equipe para te ajudar.",
       "tipo": "cancelar_evento",
     },
   ],
@@ -887,6 +908,25 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > m
   "lista": null,
   "localizacoes": [],
   "pendente": [],
+  "perguntaEventoAdiada": {
+    "campo": "data",
+    "item": {
+      "consulta": null,
+      "convidados": null,
+      "data": null,
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tag": null,
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": null,
+      "unidade": "Asa Sul",
+    },
+    "texto": "Para qual data é o evento?",
+    "unitId": "u-asa-sul",
+  },
   "perguntarEvento": null,
   "perguntarPessoas": {
     "item": {
@@ -1844,9 +1884,11 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > x
   "acoesS2": [],
   "acoesS3": [
     {
+      "handoffSeFalhar": true,
       "pedidoId": "p-sab",
       "texto": "Pronto, cancelei seu pedido de evento: Asa Sul, sábado (10/10).",
-      "textoSeFalhar": "Não encontrei pedido de evento seu em andamento.",
+      "textoSeAtualizado": "Seu pedido de evento foi atualizado pela equipe. Vou chamar alguém para te ajudar.",
+      "textoSeFalhar": "Já temos um evento confirmado seu nesse dia. Vou chamar a equipe para te ajudar.",
       "tipo": "cancelar_evento",
     },
   ],
@@ -1890,9 +1932,11 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > x
   "acoesS2": [],
   "acoesS3": [
     {
+      "handoffSeFalhar": true,
       "pedidoId": "p-17",
       "texto": "Pronto, cancelei seu pedido de evento: Asa Norte, sábado (17/10).",
-      "textoSeFalhar": "Não encontrei pedido de evento seu em andamento.",
+      "textoSeAtualizado": "Seu pedido de evento foi atualizado pela equipe. Vou chamar alguém para te ajudar.",
+      "textoSeFalhar": "Já temos um evento confirmado seu nesse dia. Vou chamar a equipe para te ajudar.",
       "tipo": "cancelar_evento",
     },
   ],
@@ -1915,9 +1959,11 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > x
   "acoesS2": [],
   "acoesS3": [
     {
+      "handoffSeFalhar": true,
       "pedidoId": "p-17",
       "texto": "Pronto, cancelei seu pedido de evento: Asa Norte, sábado (17/10).",
-      "textoSeFalhar": "Não encontrei pedido de evento seu em andamento.",
+      "textoSeAtualizado": "Seu pedido de evento foi atualizado pela equipe. Vou chamar alguém para te ajudar.",
+      "textoSeFalhar": "Já temos um evento confirmado seu nesse dia. Vou chamar a equipe para te ajudar.",
       "tipo": "cancelar_evento",
     },
   ],
@@ -2018,9 +2064,11 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > x
   "acoesS2": [],
   "acoesS3": [
     {
+      "handoffSeFalhar": true,
       "pedidoId": "p-sab",
       "texto": "Pronto, cancelei seu pedido de evento: Asa Sul, sábado (10/10).",
-      "textoSeFalhar": "Não encontrei pedido de evento seu em andamento.",
+      "textoSeAtualizado": "Seu pedido de evento foi atualizado pela equipe. Vou chamar alguém para te ajudar.",
+      "textoSeFalhar": "Já temos um evento confirmado seu nesse dia. Vou chamar a equipe para te ajudar.",
       "tipo": "cancelar_evento",
     },
   ],
@@ -2061,9 +2109,11 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > x
   "acoesS2": [],
   "acoesS3": [
     {
+      "handoffSeFalhar": true,
       "pedidoId": "p-17",
       "texto": "Pronto, cancelei seu pedido de evento: Asa Norte, sábado (17/10).",
-      "textoSeFalhar": "Não encontrei pedido de evento seu em andamento.",
+      "textoSeAtualizado": "Seu pedido de evento foi atualizado pela equipe. Vou chamar alguém para te ajudar.",
+      "textoSeFalhar": "Já temos um evento confirmado seu nesse dia. Vou chamar a equipe para te ajudar.",
       "tipo": "cancelar_evento",
     },
   ],

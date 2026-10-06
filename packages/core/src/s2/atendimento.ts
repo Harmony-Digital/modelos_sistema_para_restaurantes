@@ -2,7 +2,7 @@ import { renderModelo } from '../s1/modelos.ts'
 import { listaDeUnidades, resolverS1 } from '../s1/resolver.ts'
 import type { ContextoS1, ItemExtraido, Lacuna } from '../s1/tipos.ts'
 import { perguntaSemTexto, perguntaVisivel, resolverItensS3 } from '../s3/resolver.ts'
-import type { EspacoS3Core, PedidoAtivoS3 } from '../s3/tipos.ts'
+import type { EspacoS3Core, PedidoAtivoS3, PerguntaEventoAdiada } from '../s3/tipos.ts'
 import { resolverItensS4, type AchadosCardapio } from '../s4/resolver.ts'
 import type { ResumoCardapio } from '../s4/tipos.ts'
 import { comporTexto, resolverItensS2 } from './resolver.ts'
@@ -47,6 +47,11 @@ export function resolverAtendimento(
   // um dado por vez: com lista pendente nenhuma outra pergunta sai; pessoas (S2) antes do evento
   const perguntarPessoas = pendente.length ? null : s2.perguntarPessoas
   const perguntaEvento = perguntaVisivel(ev.pergunta, pendente.length > 0 || perguntarPessoas !== null)
+  // escondida por outra pergunta (pessoas ou lista de outro item): fica guardada para depois, nunca se perde
+  const ep = ev.pergunta
+  const perguntaEventoAdiada: PerguntaEventoAdiada | null = ep && !perguntaEvento && ep.campo !== 'unidade' && ep.texto
+    ? { campo: ep.campo, item: ep.item, unitId: ep.unitId, texto: ep.texto }
+    : null
   const pergunta = perguntarPessoas ? renderModelo('aviso_pessoas', {}, ctx.modelos) : null
   const corpo = s1.pendente.length || card.pendenteUnidade.length ? 'escolher_unidade'
     : s2.pendenteUnidade.length ? 'escolher_unidade_aviso' : 'evento_pergunta_unidade'
@@ -64,7 +69,21 @@ export function resolverAtendimento(
     perguntarPessoas,
     acoesS3: ev.acoes,
     perguntarEvento: perguntaSemTexto(perguntaEvento),
+    ...(perguntaEventoAdiada ? { perguntaEventoAdiada } : {}),
     handoff: ev.handoff,
     acoesS4: card.acoes,
+  }
+}
+
+/**
+ * Respondida a pergunta que veio antes (pessoas, lista), faz a pergunta do evento que ficou adiada — se a nova resposta
+ * não tiver outra pergunta (um dado por vez) nem passar para a equipe. Sem adiada, devolve o mesmo resultado.
+ */
+export function retomarPerguntaEvento(r: ResultadoAtendimento, adiada: PerguntaEventoAdiada | null | undefined): ResultadoAtendimento {
+  if (!adiada || r.lista || r.perguntarPessoas || r.perguntarEvento || r.handoff) return r
+  return {
+    ...r,
+    texto: comporTexto([r.texto, adiada.texto]),
+    perguntarEvento: { campo: adiada.campo, item: adiada.item, unitId: adiada.unitId },
   }
 }

@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import { decryptPhone } from '@atd/core'
+import { TRANSICOES_PEDIDO_EVENTO } from '@atd/core/s3'
 import type { Db } from './client.ts'
 import { exigirPapel, falha, ok, registrarAuditoria, semPermissaoVira, type ErroPainel, type ResultadoPainel } from './painel-comum.ts'
 import { withUserContext, type JwtClaims } from './rls.ts'
@@ -150,14 +151,14 @@ export function contarPedidosNovos(db: Db, claims: JwtClaims): Promise<number> {
   })
 }
 
-export type ResultadoAtualizarPedido = ResultadoPainel | { ok: false; erro: 'transicao_invalida' }
+export type ResultadoAtualizarPedido = ResultadoPainel | { ok: false; erro: 'transicao_invalida' } | { ok: false; erro: 'responsavel_sem_acesso' }
 
-const TRANSICOES: Record<StatusPedido, readonly StatusPedido[]> = {
-  novo: ['em_contato', 'confirmado', 'recusado', 'cancelado'],
-  em_contato: ['confirmado', 'recusado', 'cancelado'],
-  confirmado: ['cancelado'],
-  recusado: [],
-  cancelado: [],
+// transições do status: uma fonte só (`@atd/core/s3`), a mesma do painel
+const TRANSICOES: Readonly<Record<StatusPedido, readonly StatusPedido[]>> = TRANSICOES_PEDIDO_EVENTO
+
+/** Mesma regra de `app.acesso_todas_unidades()` / `app.minhas_unidades()`. */
+export function membroAcessaUnidade(m: { papel: string; unidades: readonly string[] }, unitId: string): boolean {
+  return m.papel === 'dono' || m.unidades.length === 0 || m.unidades.includes(unitId)
 }
 
 /** Equipe toda (dono, gerente, atendente) muda status, responsável e notas. Notas nunca vão para a auditoria. */
@@ -171,7 +172,7 @@ export function atualizarPedido(
     if (!(await exigirPapel(tx, EQUIPE))) return falha('sem_permissao')
     const [atual] = await tx
       .select({
-        restaurantId: eventRequests.restaurantId, status: eventRequests.status,
+        restaurantId: eventRequests.restaurantId, unitId: eventRequests.unitId, status: eventRequests.status,
         responsavelId: eventRequests.responsavelId, notasInternas: eventRequests.notasInternas,
       })
       .from(eventRequests)
@@ -186,10 +187,12 @@ export function atualizarPedido(
     const mudaResp = m.responsavelId !== undefined && m.responsavelId !== atual.responsavelId
     if (mudaResp && m.responsavelId !== null) {
       const [membro] = await tx
-        .select({ id: staff.userId })
+        .select({ id: staff.userId, papel: staff.papel, unidades: staff.unidadesPermitidas })
         .from(staff)
         .where(and(eq(staff.userId, m.responsavelId!), eq(staff.ativo, true)))
       if (!membro) return falha('nao_encontrada')
+      // só quem acessa a unidade do pedido: dono, quem tem todas (lista vazia) ou quem a tem na lista
+      if (!membroAcessaUnidade(membro, atual.unitId)) return { ok: false, erro: 'responsavel_sem_acesso' }
     }
     const mudaNotas = m.notasInternas !== undefined && m.notasInternas !== atual.notasInternas
     if (!mudaStatus && !mudaResp && !mudaNotas) return ok(null)
@@ -236,13 +239,19 @@ export function revelarTelefonePedido(
   })
 }
 
-/** Seletor de responsável: staff ativo do restaurante. */
-export function membrosDaEquipe(db: Db, claims: JwtClaims): Promise<{ id: string; nome: string }[]> {
-  return withUserContext(db, claims, (tx) =>
-    tx
-      .select({ id: staff.userId, nome: staff.nome })
+export type MembroEquipe = { id: string; nome: string; todas: boolean; unidades: string[] }
+
+/**
+ * Seletor de responsável: staff ativo do restaurante. `todas` = acessa todas as unidades (dono ou lista vazia);
+ * senão `unidades` traz as permitidas. A tela mostra só quem acessa a unidade do pedido.
+ */
+export function membrosDaEquipe(db: Db, claims: JwtClaims): Promise<MembroEquipe[]> {
+  return withUserContext(db, claims, async (tx) => {
+    const rs = await tx
+      .select({ id: staff.userId, nome: staff.nome, papel: staff.papel, unidades: staff.unidadesPermitidas })
       .from(staff)
       .where(eq(staff.ativo, true))
-      .orderBy(asc(staff.nome), asc(staff.userId)),
-  )
+      .orderBy(asc(staff.nome), asc(staff.userId))
+    return rs.map((r) => ({ id: r.id, nome: r.nome, todas: r.papel === 'dono' || r.unidades.length === 0, unidades: r.unidades }))
+  })
 }

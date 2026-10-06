@@ -53,6 +53,10 @@ describe('eventos: atualizarPedidoAction', () => {
   it('mapeia os erros do banco', async () => {
     atualizarPedido.mockResolvedValue({ ok: false, erro: 'transicao_invalida' })
     expect(await atualizarPedidoAction(P, valores())).toEqual({ ok: false, fieldErrors: { status: 'Esse status não pode mais ser alterado assim.' } })
+    atualizarPedido.mockResolvedValue({ ok: false, erro: 'responsavel_sem_acesso' })
+    expect(await atualizarPedidoAction(P, valores())).toEqual({
+      ok: false, fieldErrors: { responsavelId: 'Essa pessoa não tem acesso à unidade do pedido. Escolha outra.' },
+    })
     atualizarPedido.mockResolvedValue({ ok: false, erro: 'nao_encontrada' })
     expect(await atualizarPedidoAction(P, valores())).toEqual({ ok: false, formError: 'Esse pedido não está mais disponível.' })
     atualizarPedido.mockResolvedValue({ ok: false, erro: 'sem_permissao' })

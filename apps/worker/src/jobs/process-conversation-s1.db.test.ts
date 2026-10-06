@@ -77,7 +77,7 @@ function fakeLlm(script: TriageV5[]) {
     async completeJson(p) {
       calls.push(p.user)
       return {
-        ok: true as const, data: p.parse(script[Math.min(calls.length - 1, script.length - 1)]), model: 'fake/m',
+        ok: true as const, data: p.parse({ frustracao: false, ...script[Math.min(calls.length - 1, script.length - 1)] }), model: 'fake/m',
         usage: { tokensIn: 100, tokensOut: 20, tokensCache: 0, costUsd: '0.000200' }, latencyMs: 10,
       }
     },
@@ -112,7 +112,7 @@ describe('S1 no worker', () => {
       'Domingo (11/10), a unidade Asa Sul abre das 11h30 às 16h.',
     ])
     const [run] = await db.select().from(schema.aiRuns)
-    expect(run).toMatchObject({ promptVersion: 'triage-v5', itensValidos: 1, itensRespondidos: 1, simulado: false, intent: 'horario_unidades:horario_dia' })
+    expect(run).toMatchObject({ promptVersion: 'triage-v6', itensValidos: 1, itensRespondidos: 1, simulado: false, intent: 'horario_unidades:horario_dia' })
   })
 
   it('endereço sai como texto e como localização, nessa ordem', async () => {

@@ -5,6 +5,19 @@ import type { ItemExtraido, Lacuna } from '../s1/tipos.ts'
 export const TIPOS_EVENTO = ['aniversario', 'casamento', 'corporativo', 'confraternizacao', 'outro'] as const
 export type TipoEvento = (typeof TIPOS_EVENTO)[number]
 
+/** Espelho do enum `event_status` do banco, na ordem do ciclo. */
+export const STATUS_PEDIDO_EVENTO = ['novo', 'em_contato', 'confirmado', 'recusado', 'cancelado'] as const
+export type StatusPedidoEvento = (typeof STATUS_PEDIDO_EVENTO)[number]
+
+/** Status que cada status pode virar (painel e DAL usam esta tabela; a IA só cria `novo` e cancela `novo`/`em_contato`). */
+export const TRANSICOES_PEDIDO_EVENTO: Record<StatusPedidoEvento, readonly StatusPedidoEvento[]> = {
+  novo: ['em_contato', 'confirmado', 'recusado', 'cancelado'],
+  em_contato: ['confirmado', 'recusado', 'cancelado'],
+  confirmado: ['cancelado'],
+  recusado: [],
+  cancelado: [],
+}
+
 /** Espaço de evento ativo (lido pelo worker antes de resolver). */
 export type EspacoS3Core = {
   id: string
@@ -44,8 +57,15 @@ export type AcaoS3 =
     tipoTexto: string | null
     observacoes: string | null
   }
-  /** `texto` é o trecho da resposta; se o banco não cancelar (corrida), o worker o troca por `textoSeFalhar`. */
-  | { tipo: 'cancelar_evento'; pedidoId: string; texto: string; textoSeFalhar: string }
+  /**
+   * `texto` é o trecho da resposta. Se o banco não cancelar (corrida: a equipe confirmou ou mudou o pedido depois da
+   * leitura), o worker troca o trecho por `textoSeFalhar` (pedido confirmado) ou `textoSeAtualizado` (recusado,
+   * cancelado ou não encontrado: texto neutro, nunca "confirmado") e, com `handoffSeFalhar`, passa a conversa para a equipe.
+   */
+  | {
+    tipo: 'cancelar_evento'; pedidoId: string; texto: string; textoSeFalhar: string; textoSeAtualizado: string
+    handoffSeFalhar: boolean
+  }
   /** mudança pedida num pedido em andamento: o worker acrescenta `observacao` (texto nosso, ≤ 300) às observações */
   | { tipo: 'observar_pedido'; pedidoId: string; observacao: string }
 
@@ -55,6 +75,13 @@ export type AcaoS3 =
  * `pendenteUnidade` e a pergunta é o corpo da lista "Ver unidades".
  */
 export type PerguntaEvento = { campo: CampoPedido; item: ItemExtraido; unitId: string | null }
+
+/**
+ * Pergunta do pedido de evento que não saiu porque outra pergunta saiu antes ("Para quantas pessoas?" ou a lista de
+ * unidade de outro item). O worker a guarda junto do pendente e, respondida a outra pergunta, a faz com
+ * `retomarPerguntaEvento` — o evento não se perde. `texto` é a pergunta nossa (nunca texto do cliente).
+ */
+export type PerguntaEventoAdiada = PerguntaEvento & { campo: Exclude<CampoPedido, 'unidade'>; texto: string }
 
 export type ResultadoS3 = {
   texto: string | null

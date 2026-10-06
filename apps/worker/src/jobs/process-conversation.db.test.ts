@@ -64,7 +64,7 @@ function fakeLlm(script: Scripted[]) {
         return { ok: false as const, error: 'upstream', retryable: true, status: 502, model: null, usage: null, latencyMs: 1 }
       }
       return {
-        ok: true as const, data: p.parse(step), model: 'fake/m',
+        ok: true as const, data: p.parse({ frustracao: false, ...step }), model: 'fake/m',
         usage: { tokensIn: 100, tokensOut: 5, tokensCache: 0, costUsd: '0.000200' }, latencyMs: 10,
       }
     },
@@ -143,7 +143,7 @@ describe('processConversation', () => {
     expect(wa.sent.at(-1)!.text).toMatch(/só consigo ajudar com assuntos do Casa Teste/)
     const runs = await db.select().from(schema.aiRuns)
     expect(runs.map((r) => [r.etapa, r.intent, r.costUsd, r.promptVersion])).toEqual([
-      ['triagem', 'fora_escopo', '0.000200', 'triage-v5'],
+      ['triagem', 'fora_escopo', '0.000200', 'triage-v6'],
     ])
     const counters = await db.select().from(schema.budgetCounters).orderBy(schema.budgetCounters.periodo)
     expect(counters.map((c) => [c.reservado, c.gasto])).toEqual([
@@ -184,7 +184,7 @@ describe('processConversation', () => {
     const wa = fakeWa()
     await processConversation(deps(llm, wa), conv)
     expect(calls).toHaveLength(0)
-    expect(wa.sent.at(-1)!.text).toMatch(/não consigo responder automaticamente/)
+    expect(wa.sent.at(-1)!.text).toBe('Vou passar você para alguém da nossa equipe. Já já te respondem por aqui.')
     const [c] = await db.select().from(schema.conversations)
     expect(c!.estado).toBe('aguardando_humano')
     const audit = await db.select().from(schema.auditLog)
@@ -208,7 +208,7 @@ describe('processConversation', () => {
     const { llm } = fakeLlm([{ itens: [item(servico)], fora_escopo: false }])
     const wa = fakeWa()
     await processConversation(deps(llm, wa), conv)
-    const handoff = (await outMessages()).find((m) => m.replyKey === 'handoff')
+    const handoff = (await outMessages()).find((m) => m.replyKey === 'handoff_dentro')
     expect(handoff).toMatchObject({ autor: 'sistema', statusEnvio: 'enviado' })
     expect(wa.sent.map((s) => s.text)).toContain(handoff!.texto)
     const [c] = await db.select().from(schema.conversations)
@@ -232,7 +232,7 @@ describe('processConversation', () => {
     const wa = fakeWa()
     await processConversation(deps(llm, wa), conv)
     expect(calls).toHaveLength(2)
-    expect(wa.sent.at(-1)!.text).toMatch(/Tive um problema/)
+    expect(wa.sent.at(-1)!.text).toBe('Vou passar você para alguém da nossa equipe. Já já te respondem por aqui.')
     const [c] = await db.select().from(schema.conversations)
     expect([c!.estado, c!.falhasConsecutivas]).toEqual(['aguardando_humano', 1])
     expect((await db.select().from(schema.aiRuns)).map((r) => r.resultado)).toEqual(['erro', 'erro'])
@@ -328,7 +328,7 @@ describe('processConversation', () => {
     const llm: LlmClient = {
       async completeJson(p) {
         return {
-          ok: true as const, data: p.parse(FORA), model: 'fake/m',
+          ok: true as const, data: p.parse({ frustracao: false, ...FORA }), model: 'fake/m',
           usage: { tokensIn: 1, tokensOut: 1, tokensCache: 0, costUsd: null }, latencyMs: 1,
         }
       },
