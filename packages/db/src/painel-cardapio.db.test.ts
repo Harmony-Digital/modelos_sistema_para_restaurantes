@@ -155,6 +155,22 @@ describe('arquivos de cardápio (painel)', () => {
     expect((await acoes(c.restaurantId)).filter((a) => a.startsWith('cardapio.arquivo'))).toEqual(['cardapio.arquivo_registrado', 'cardapio.arquivo_registrado'])
   })
 
+  it('clique duplo (simultâneo) devolve o mesmo arquivo; reenviar um desativado o reativa', async () => {
+    const c = await cenario()
+    const rs = await Promise.all([
+      registrarArquivoCardapio(db, as(c.dono), arq(c.restaurantId)),
+      registrarArquivoCardapio(db, as(c.dono), arq(c.restaurantId)),
+    ])
+    expect(rs.every((r) => r.ok)).toBe(true)
+    const id = idDe(rs[0]!)
+    expect(idDe(rs[1]!)).toBe(id)
+    expect(await db.select().from(menuFiles)).toHaveLength(1)
+    await ativarArquivo(db, as(c.dono), id, false)
+    expect(await registrarArquivoCardapio(db, as(c.dono), arq(c.restaurantId))).toEqual({ ok: true, valor: { id } })
+    expect((await db.select().from(menuFiles))[0]!.ativo).toBe(true)
+    expect((await acoes(c.restaurantId)).filter((a) => a === 'cardapio.arquivo_ativo')).toHaveLength(2)
+  })
+
   it('permissões: atendente não registra; gerente restrito não registra o geral nem de outra unidade; caminho de outro restaurante recusado', async () => {
     const c = await cenario()
     expect(await registrarArquivoCardapio(db, as(c.atendente, 'aal1'), arq(c.restaurantId))).toEqual({ ok: false, erro: 'sem_permissao' })

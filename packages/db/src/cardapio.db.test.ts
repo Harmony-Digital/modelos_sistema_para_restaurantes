@@ -167,12 +167,25 @@ describe('arquivos de cardápio (worker)', () => {
 describe('resumoCardapio', () => {
   it('categorias ativas em ordem, até 3 itens disponíveis cada, preço base', async () => {
     const c = await cenario()
-    expect(await resumoCardapio(db, c.restaurantId)).toEqual([
+    expect(await resumoCardapio(db, c.restaurantId, null)).toEqual([
       { categoria: 'Carnes', itens: [{ nome: 'Picanha na chapa', precoCentavos: 8990 }, { nome: 'Carne-de-sol', precoCentavos: 5990 }, { nome: 'Fraldinha', precoCentavos: 6490 }] },
       { categoria: 'Saladas', itens: [{ nome: 'Salada caprese', precoCentavos: null }, { nome: 'Salada verde', precoCentavos: 3000 }] },
       { categoria: 'Bebidas', itens: [{ nome: 'Refrigerante lata', precoCentavos: 700 }] },
     ])
     const b = await seedRestaurant(db)
-    expect(await withRole(db, 'worker_app', (tx) => resumoCardapio(tx, b.restaurantId))).toEqual([])
+    expect(await withRole(db, 'worker_app', (tx) => resumoCardapio(tx, b.restaurantId, null))).toEqual([])
+  })
+
+  it('com unidade: preço e disponibilidade efetivos (exceção da unidade sobre o padrão)', async () => {
+    const c = await cenario()
+    // Asa Norte: picanha com preço próprio, carne-de-sol indisponível, costela só disponível aqui
+    expect((await withRole(db, 'worker_app', (tx) => resumoCardapio(tx, c.restaurantId, c.u2)))[0]).toEqual({
+      categoria: 'Carnes',
+      itens: [{ nome: 'Picanha na chapa', precoCentavos: 9500 }, { nome: 'Costela', precoCentavos: 7990 }, { nome: 'Fraldinha', precoCentavos: 6490 }],
+    })
+    expect((await resumoCardapio(db, c.restaurantId, c.u1))[0]).toEqual({
+      categoria: 'Carnes',
+      itens: [{ nome: 'Picanha na chapa', precoCentavos: 8990 }, { nome: 'Carne-de-sol', precoCentavos: 5990 }, { nome: 'Fraldinha', precoCentavos: 6490 }],
+    })
   })
 })

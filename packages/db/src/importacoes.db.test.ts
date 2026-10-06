@@ -24,6 +24,9 @@ const RASCUNHO: RascunhoCardapio = {
       item('picanha ', { precoCentavos: 6490, descricao: 'Nova descrição', tags: ['sem_gluten'], outrosNomes: ['pica'] }),
       item('Fraldinha', { precoCentavos: 4990 }),
       item('Maminha', { incluir: false }),
+      // unidade desconhecida: nunca vira preço padrão
+      item('Picanha', { precoCentavos: 1, unidade: 'Lago Sul' }),
+      item('Cupim', { precoCentavos: 2, unidade: 'Lago Sul' }),
     ] },
     { nome: 'Bebidas', itens: [
       item('Suco de laranja', { precoCentavos: 900, unidade: 'asa norte' }),
@@ -51,6 +54,7 @@ const csv = (c: Cenario, draft: unknown = RASCUNHO) =>
 const arquivo = (c: Cenario, quem = c.dono) =>
   criarImportacao(db, as(quem), { storagePath: `importacoes/${c.restaurantId}/menu.pdf`, mime: 'application/pdf', tamanho: 50_000, sha256: SHA, origem: 'arquivo' })
 const SEM_ARQUIVO = { usarComoArquivoDeEnvio: false, unitIdArquivo: null }
+const hojeBr = () => new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date())
 
 describe('criar e ler importações', () => {
   it('CSV nasce rascunho com o draft; arquivo nasce enviado; audita sem conteúdo', async () => {
@@ -87,6 +91,33 @@ describe('criar e ler importações', () => {
   })
 })
 
+describe('dedup e tipos de importação', () => {
+  it('mesmo arquivo (sha256) ainda não rejeitado devolve a importação existente, inclusive em envio simultâneo; CSV não deduplica', async () => {
+    const c = await cenario()
+    const [a, b] = await Promise.all([arquivo(c), arquivo(c)])
+    expect(idDe(a)).toBe(idDe(b))
+    expect(idDe(await arquivo(c))).toBe(idDe(a))
+    expect(await rejeitarImportacao(db, as(c.dono), idDe(a))).toEqual({ ok: false, erro: 'nao_encontrada' }) // enviado não se rejeita
+    const outra = await seedRestaurant(db)
+    const donoB = await seedStaff(db, sql, { restaurantId: outra.restaurantId, papel: 'dono' })
+    const deB = await criarImportacao(db, as(donoB), { storagePath: `importacoes/${outra.restaurantId}/menu.pdf`, mime: 'application/pdf', tamanho: 1, sha256: SHA, origem: 'arquivo' })
+    expect(idDe(deB)).not.toBe(idDe(a))
+    expect(idDe(await csv(c))).not.toBe(idDe(await csv(c)))
+    // depois de rejeitada, o mesmo arquivo pode ser enviado de novo
+    await marcarProcessando(db, idDe(a))
+    await concluirIngestao(db, idDe(a), { ok: false, erro: 'falhou' })
+    expect(await rejeitarImportacao(db, as(c.dono), idDe(a))).toEqual({ ok: true, valor: null })
+    expect(idDe(await arquivo(c))).not.toBe(idDe(a))
+  })
+
+  it('tipo fora da lista (pdf, jpeg, png, webp, csv) é recusado pelo banco', async () => {
+    const c = await cenario()
+    await expect(criarImportacao(db, as(c.dono), {
+      storagePath: `importacoes/${c.restaurantId}/x.html`, mime: 'text/html', tamanho: 1, sha256: 'd'.repeat(64), origem: 'arquivo',
+    })).rejects.toMatchObject({ cause: { constraint_name: 'knowledge_documents_mime_ck' } })
+  })
+})
+
 describe('worker: processamento', () => {
   it('marcarProcessando só de enviado; concluirIngestao só de processando', async () => {
     const c = await cenario()
@@ -109,7 +140,7 @@ describe('worker: processamento', () => {
   it('erro de leitura ou rascunho inválido ⇒ status erro com mensagem amigável', async () => {
     const c = await cenario()
     const a = idDe(await arquivo(c))
-    const b = idDe(await criarImportacao(db, as(c.dono), { storagePath: `importacoes/${c.restaurantId}/b.png`, mime: 'image/png', tamanho: 9, sha256: SHA, origem: 'arquivo' }))
+    const b = idDe(await criarImportacao(db, as(c.dono), { storagePath: `importacoes/${c.restaurantId}/b.png`, mime: 'image/png', tamanho: 9, sha256: 'b'.repeat(64), origem: 'arquivo' }))
     await marcarProcessando(db, a)
     await marcarProcessando(db, b)
     await concluirIngestao(db, a, { ok: false, erro: 'Não consegui ler esse arquivo.' })
@@ -125,7 +156,16 @@ describe('aplicarRascunho', () => {
     const c = await cenario()
     const id = idDe(await csv(c))
     const r = await aplicarRascunho(db, as(c.dono), id, RASCUNHO, SEM_ARQUIVO)
-    expect(r).toEqual({ ok: true, valor: { criados: 2, atualizados: 1 } })
+    expect(r).toEqual({
+      ok: true,
+      valor: {
+        criados: 2, atualizados: 1,
+        ignorados: [
+          { categoria: 'CARNES', nome: 'Picanha', motivo: 'unidade_desconhecida' },
+          { categoria: 'CARNES', nome: 'Cupim', motivo: 'unidade_desconhecida' },
+        ],
+      },
+    })
 
     const cats = await db.select().from(menuCategories).where(eq(menuCategories.restaurantId, c.restaurantId))
     expect(cats.map((x) => x.nome).sort()).toEqual(['Bebidas', 'Carnes'])
@@ -133,8 +173,8 @@ describe('aplicarRascunho', () => {
     expect(its.map((x) => x.nome).sort()).toEqual(['Fraldinha', 'Picanha', 'Suco de laranja'])
     expect(its.find((x) => x.id === c.picanha)).toMatchObject({ nome: 'Picanha', precoCentavos: 6490, descricao: 'Nova descrição', tags: ['sem_gluten'], outrosNomes: ['pica'] })
     const suco = its.find((x) => x.nome === 'Suco de laranja')!
-    // item só com preço por unidade: base = primeiro preço; cada unidade ganha seu preço próprio
-    expect(suco.precoCentavos).toBe(900)
+    // item novo só com preço por unidade: padrão "sob consulta"; cada unidade ganha seu preço próprio
+    expect(suco.precoCentavos).toBeNull()
     const exc = await db.select().from(menuItemUnits).where(eq(menuItemUnits.itemId, suco.id))
     expect(exc.map((e) => [e.unitId, e.precoOverrideCentavos, e.disponivel]).sort()).toEqual(
       [[c.u1, 950, null], [c.u2, 900, null]].sort(),
@@ -145,8 +185,8 @@ describe('aplicarRascunho', () => {
     expect(doc!.revisadoAt).toBeInstanceOf(Date)
     const [log] = await db.select().from(auditLog).where(eq(auditLog.acao, 'cardapio.importacao_aplicada'))
     expect(log).toMatchObject({ entidadeId: id, atorId: c.dono })
-    expect(log!.diff).toMatchObject({ criados: 2, atualizados: 1 })
-    expect(JSON.stringify(log!.diff)).not.toMatch(/Fraldinha|Picanha|Suco/)
+    expect(log!.diff).toMatchObject({ criados: 2, atualizados: 1, ignorados: 2 })
+    expect(JSON.stringify(log!.diff)).not.toMatch(/Fraldinha|Picanha|Suco|Cupim|Lago/)
   })
 
   it('segunda aplicação ⇒ ja_aplicado; rejeitada ⇒ ja_aplicado', async () => {
@@ -186,8 +226,24 @@ describe('aplicarRascunho', () => {
     const fs = await db.select().from(menuFiles)
     expect(fs).toEqual([expect.objectContaining({
       restaurantId: c.restaurantId, unitId: c.u2, storagePath: `importacoes/${c.restaurantId}/menu.pdf`, mime: 'application/pdf',
-      tamanho: 50_000, sha256: SHA, ativo: true,
+      tamanho: 50_000, sha256: SHA, ativo: true, titulo: `Cardápio importado em ${hojeBr()}`,
     })])
+  })
+
+  it('usarComoArquivoDeEnvio sem arquivo (CSV) ou com tipo que não é de cardápio ⇒ arquivo_invalido, nada aplicado', async () => {
+    const c = await cenario()
+    const doCsv = idDe(await csv(c))
+    const usar = { usarComoArquivoDeEnvio: true, unitIdArquivo: null }
+    expect(await aplicarRascunho(db, as(c.dono), doCsv, RASCUNHO, usar)).toEqual({ ok: false, erro: 'arquivo_invalido' })
+    const planilha = idDe(await criarImportacao(db, as(c.dono), {
+      storagePath: `importacoes/${c.restaurantId}/menu.csv`, mime: 'text/csv', tamanho: 10, sha256: 'c'.repeat(64), origem: 'arquivo',
+    }))
+    await marcarProcessando(db, planilha)
+    await concluirIngestao(db, planilha, { ok: true, draft: RASCUNHO })
+    expect(await aplicarRascunho(db, as(c.dono), planilha, RASCUNHO, usar)).toEqual({ ok: false, erro: 'arquivo_invalido' })
+    expect(await db.select().from(menuItems).where(eq(menuItems.restaurantId, c.restaurantId))).toHaveLength(1)
+    expect(await db.select().from(menuFiles)).toEqual([])
+    expect((await lerImportacao(db, as(c.dono), doCsv))!.status).toBe('rascunho')
   })
 
   it('atendente e gerente restrito não aplicam; nada muda', async () => {

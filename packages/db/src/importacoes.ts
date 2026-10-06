@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, notInArray, sql } from 'drizzle-orm'
 import { normalizeText } from '@atd/core'
 import { rascunhoSchema, type RascunhoCardapio } from '@atd/core/s4'
 import type { Db } from './client.ts'
@@ -6,7 +6,7 @@ import { exigirPapel, falha, ok, registrarAuditoria, semPermissaoVira, type Resu
 import { gravarArquivo, podeEditarCardapioGeral } from './painel-cardapio.ts'
 import { withUserContext, type JwtClaims, type Tx } from './rls.ts'
 import { units } from './schema/restaurant.ts'
-import { knowledgeDocuments, menuCategories, menuFiles, menuItems, type STATUS_IMPORTACAO } from './schema/s4.ts'
+import { knowledgeDocuments, menuCategories, menuItems, type STATUS_IMPORTACAO } from './schema/s4.ts'
 
 const GESTAO = ['dono', 'gerente'] as const
 
@@ -61,12 +61,28 @@ export async function criarImportacao(db: Db, claims: JwtClaims, v: NovaImportac
   const status: StatusImportacao = v.origem === 'csv' ? 'rascunho' : 'enviado'
   return semPermissaoVira(() => withUserContext(db, claims, async (tx) => {
     if (!(await exigirPapel(tx, GESTAO))) return falha('sem_permissao')
-    // SQL explícito: authenticated só tem INSERT nas colunas permitidas (0027); a policy confere status e autor
+    // SQL explícito: authenticated só tem INSERT nas colunas permitidas (0027); a policy confere status e autor.
+    // Arquivo já enviado e não rejeitado/com erro (índice parcial da 0028) ⇒ devolve a importação existente,
+    // também no envio simultâneo (on conflict do nothing + releitura).
     const [d] = await tx.execute<{ id: string; restaurant_id: string }>(sql`
       insert into public.knowledge_documents (restaurant_id, origem, status, storage_path, mime, tamanho, sha256, draft, enviado_por)
       values ((select app.my_restaurant_id()), ${v.origem}, ${status}, ${v.storagePath}, ${v.mime}, ${v.tamanho}, ${v.sha256},
               ${draft === null ? null : JSON.stringify(draft)}::jsonb, ${claims.sub})
+      on conflict (restaurant_id, sha256) where origem = 'arquivo' and status not in ('rejeitado', 'erro') do nothing
       returning id, restaurant_id`)
+    if (!d) {
+      const [existente] = await tx
+        .select({ id: knowledgeDocuments.id })
+        .from(knowledgeDocuments)
+        .where(and(
+          eq(knowledgeDocuments.sha256, v.sha256),
+          eq(knowledgeDocuments.origem, 'arquivo'),
+          notInArray(knowledgeDocuments.status, ['rejeitado', 'erro']),
+        ))
+      // conflito com importação que este usuário não enxerga não acontece (mesmo restaurante, dono/gerente)
+      if (!existente) throw new Error('importação duplicada não encontrada')
+      return ok({ id: existente.id })
+    }
     await registrarAuditoria(tx, claims, {
       restaurantId: d!.restaurant_id, acao: 'cardapio.importacao_criada', entidade: 'knowledge_document', entidadeId: d!.id,
       diff: { origem: v.origem, mime: v.mime, tamanho: v.tamanho },
@@ -96,7 +112,16 @@ export function listarImportacoes(db: Db, claims: JwtClaims): Promise<Importacao
 }
 
 export type OpcoesAplicar = { usarComoArquivoDeEnvio: boolean; unitIdArquivo: string | null }
-export type ResultadoAplicar = ResultadoPainel<{ criados: number; atualizados: number }> | { ok: false; erro: 'ja_aplicado' }
+/** Item do rascunho que não foi aplicado (ex.: unidade que não existe — nunca vira preço padrão). */
+export type ItemIgnorado = { categoria: string; nome: string; motivo: 'unidade_desconhecida' }
+export type ResultadoAplicar =
+  | ResultadoPainel<{ criados: number; atualizados: number; ignorados: ItemIgnorado[] }>
+  | { ok: false; erro: 'ja_aplicado' | 'arquivo_invalido' }
+
+/** Tipos aceitos como arquivo de cardápio para envio (iguais ao check de menu_files). */
+export const MIMES_ARQUIVO_CARDAPIO = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'] as const
+const dataBr = (d: Date) =>
+  new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric' }).format(d)
 
 /**
  * Confirmação humana do rascunho (PRD I10), numa transação: trava a importação, exige `rascunho`, cria categorias e
@@ -125,14 +150,19 @@ export async function aplicarRascunho(
       .for('update')
     if (!doc) return (await existe(tx, id)) ? { ok: false, erro: 'ja_aplicado' } : falha('nao_encontrada')
     if (doc.status !== 'rascunho') return { ok: false, erro: 'ja_aplicado' }
+    // arquivo de envio só de PDF/imagem enviado (CSV não tem arquivo): recusa antes de mexer no cardápio
+    if (opcoes.usarComoArquivoDeEnvio && (doc.storagePath === null || !(MIMES_ARQUIVO_CARDAPIO as readonly string[]).includes(doc.mime))) {
+      return { ok: false, erro: 'arquivo_invalido' }
+    }
 
     const contagem = await aplicarNoCardapio(tx, doc.restaurantId, r)
 
     if (opcoes.usarComoArquivoDeEnvio && doc.storagePath !== null) {
-      const f = await gravarArquivo(tx, {
-        unitId: opcoes.unitIdArquivo, titulo: 'Cardápio', storagePath: doc.storagePath, mime: doc.mime, tamanho: doc.tamanho, sha256: doc.sha256,
+      // o nome original não é guardado (o caminho no Storage é gerado): título com a data da importação
+      await gravarArquivo(tx, {
+        unitId: opcoes.unitIdArquivo, titulo: `Cardápio importado em ${dataBr(new Date())}`, storagePath: doc.storagePath,
+        mime: doc.mime, tamanho: doc.tamanho, sha256: doc.sha256,
       })
-      if (!f.novo) await tx.update(menuFiles).set({ ativo: true }).where(eq(menuFiles.id, f.id))
     }
 
     await tx
@@ -141,9 +171,13 @@ export async function aplicarRascunho(
       .where(eq(knowledgeDocuments.id, id))
     await registrarAuditoria(tx, claims, {
       restaurantId: doc.restaurantId, acao: 'cardapio.importacao_aplicada', entidade: 'knowledge_document', entidadeId: id,
-      diff: { ...contagem, arquivoDeEnvio: opcoes.usarComoArquivoDeEnvio && doc.storagePath !== null },
+      diff: {
+        criados: contagem.criados, atualizados: contagem.atualizados, ignorados: contagem.ignorados.length,
+        categoriasCriadas: contagem.categoriasCriadas, precosPorUnidade: contagem.precosPorUnidade,
+        arquivoDeEnvio: opcoes.usarComoArquivoDeEnvio,
+      },
     })
-    return ok({ criados: contagem.criados, atualizados: contagem.atualizados })
+    return ok({ criados: contagem.criados, atualizados: contagem.atualizados, ignorados: contagem.ignorados })
   }), { menu_files_storage_path_ck: 'sem_permissao' })
 }
 
@@ -156,7 +190,7 @@ async function aplicarNoCardapio(
   tx: Tx,
   restaurantId: string,
   r: RascunhoCardapio,
-): Promise<{ criados: number; atualizados: number; categoriasCriadas: number; precosPorUnidade: number }> {
+): Promise<{ criados: number; atualizados: number; ignorados: ItemIgnorado[]; categoriasCriadas: number; precosPorUnidade: number }> {
   const cats = await tx
     .select({ id: menuCategories.id, nome: menuCategories.nome, ordem: menuCategories.ordem })
     .from(menuCategories)
@@ -170,11 +204,19 @@ async function aplicarNoCardapio(
 
   const criados = new Set<string>()
   const atualizados = new Set<string>()
+  const ignorados: ItemIgnorado[] = []
   let categoriasCriadas = 0
   let precosPorUnidade = 0
 
   for (const c of r.categorias) {
-    const itens = c.itens.filter((i) => i.incluir)
+    // unidade informada e não reconhecida: o item fica de fora (nunca vira preço padrão de todas as unidades)
+    const itens: { i: (typeof c.itens)[number]; unitId: string | null }[] = []
+    for (const i of c.itens) {
+      if (!i.incluir) continue
+      const unitId = i.unidade === null ? null : (unidadePorNome.get(normalizeText(i.unidade)) ?? null)
+      if (i.unidade !== null && unitId === null) ignorados.push({ categoria: c.nome, nome: i.nome, motivo: 'unidade_desconhecida' })
+      else itens.push({ i, unitId })
+    }
     if (itens.length === 0) continue
     let categoryId = categoriaPorNome.get(normalizeText(c.nome))
     if (!categoryId) {
@@ -185,16 +227,16 @@ async function aplicarNoCardapio(
       categoriaPorNome.set(normalizeText(c.nome), categoryId)
       categoriasCriadas++
     }
-    for (const [ordem, i] of itens.entries()) {
-      const unitId = i.unidade === null ? null : (unidadePorNome.get(normalizeText(i.unidade)) ?? null)
+    for (const [ordem, { i, unitId }] of itens.entries()) {
       const chave = `${categoryId}|${normalizeText(i.nome)}`
       let itemId = itemPorChave.get(chave)
       if (!itemId) {
         const [novo] = await tx.execute<{ id: string }>(sql`
           insert into public.menu_items (restaurant_id, category_id, nome, descricao, preco_centavos, tags, outros_nomes, disponivel, ordem)
-          values (${restaurantId}, ${categoryId}, ${i.nome}, ${i.descricao}, ${i.precoCentavos},
+          values (${restaurantId}, ${categoryId}, ${i.nome}, ${i.descricao}, ${unitId === null ? i.precoCentavos : null},
                   ${sql.param(i.tags)}::text[], ${sql.param(i.outrosNomes)}::text[], true, ${ordem + 1})
           returning id`)
+        // item novo só com preço de unidade: padrão "sob consulta"; o preço fica na exceção da unidade
         itemId = novo!.id
         itemPorChave.set(chave, itemId)
         criados.add(itemId)
@@ -218,7 +260,7 @@ async function aplicarNoCardapio(
       }
     }
   }
-  return { criados: criados.size, atualizados: atualizados.size, categoriasCriadas, precosPorUnidade }
+  return { criados: criados.size, atualizados: atualizados.size, ignorados, categoriasCriadas, precosPorUnidade }
 }
 
 /** Descarta o rascunho (ou a importação com erro). Já aprovada/rejeitada ⇒ `nao_encontrada`. */

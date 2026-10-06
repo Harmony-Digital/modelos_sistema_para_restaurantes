@@ -145,15 +145,21 @@ export async function guardarMidiaMeta(db: Db | Tx, p: { arquivoId: string; waMe
 
 export type ResumoCardapioDb = { categoria: string; itens: { nome: string; precoCentavos: number | null }[] }[]
 
-/** Resumo para quando não há arquivo: categorias ativas em ordem, até 3 itens disponíveis (padrão) cada. */
-export async function resumoCardapio(db: Db | Tx, restaurantId: string): Promise<ResumoCardapioDb> {
+/**
+ * Resumo para quando não há arquivo: categorias ativas em ordem, até 3 itens disponíveis cada. Com unidade, usa
+ * disponibilidade e preço efetivos dela (exceção sobre o padrão — entra item indisponível no padrão mas disponível
+ * ali); sem unidade, o padrão.
+ */
+export async function resumoCardapio(db: Db | Tx, restaurantId: string, unitId: string | null): Promise<ResumoCardapioDb> {
   const rows = await db.execute<{ categoria: string; nome: string; preco_centavos: number | null }>(sql`
     select categoria, nome, preco_centavos from (
-      select c.nome as categoria, c.ordem as ordem_categoria, c.id as category_id, i.nome, i.preco_centavos, i.ordem,
+      select c.nome as categoria, c.ordem as ordem_categoria, c.id as category_id, i.nome, i.ordem,
+             coalesce(x.preco_override_centavos, i.preco_centavos) as preco_centavos,
              row_number() over (partition by c.id order by i.ordem, i.nome, i.id) as n
         from public.menu_categories c
-        join public.menu_items i on i.category_id = c.id and i.disponivel
-       where c.restaurant_id = ${restaurantId} and c.ativo
+        join public.menu_items i on i.category_id = c.id
+        left join public.menu_item_units x on x.item_id = i.id and x.unit_id = ${unitId}::uuid
+       where c.restaurant_id = ${restaurantId} and c.ativo and coalesce(x.disponivel, i.disponivel)
     ) t
      where n <= 3
      order by ordem_categoria, categoria, category_id, ordem, nome`)

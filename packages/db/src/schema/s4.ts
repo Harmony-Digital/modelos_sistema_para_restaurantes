@@ -161,9 +161,14 @@ export const knowledgeDocuments = pgTable(
   },
   (t) => [
     check('knowledge_documents_storage_ck', sql`(${t.origem} = 'csv' and ${t.storagePath} is null) or (${t.origem} = 'arquivo' and ${t.storagePath} ~ '^importacoes/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[^/]+$')`),
+    check('knowledge_documents_mime_ck', sql`${t.mime} in ('application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'text/csv')`),
     check('knowledge_documents_tamanho_ck', sql`${t.tamanho} between 1 and 20971520`),
     check('knowledge_documents_sha256_ck', sql`${t.sha256} ~ '^[0-9a-f]{64}$'`),
     check('knowledge_documents_erro_ck', sql`${t.erro} is null or char_length(${t.erro}) <= 300`),
     index('knowledge_documents_restaurant_idx').on(t.restaurantId, t.createdAt),
+    // dedup de arquivo enviado: o mesmo arquivo em andamento ou aprovado é uma importação só (rejeitada/erro liberam)
+    uniqueIndex('knowledge_documents_arquivo_sha256_uq')
+      .on(t.restaurantId, t.sha256)
+      .where(sql`${t.origem} = 'arquivo' and ${t.status} not in ('rejeitado', 'erro')`),
   ],
 )

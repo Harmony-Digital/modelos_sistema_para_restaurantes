@@ -193,7 +193,7 @@ export function salvarExcecaoItem(db: Db, claims: JwtClaims, v: DadosExcecao): P
 
 export type DadosArquivo = { unitId: string | null; titulo: string; storagePath: string; mime: string; tamanho: number; sha256: string }
 
-/** Arquivo já enviado ao Storage (`cardapio/<restaurant_id>/…`). Mesmo sha256 no mesmo escopo ⇒ devolve o existente. */
+/** Arquivo já enviado ao Storage (`cardapio/<restaurant_id>/…`). Mesmo sha256 no mesmo escopo ⇒ devolve o existente (reativado). */
 export function registrarArquivoCardapio(db: Db, claims: JwtClaims, v: DadosArquivo): Promise<ResultadoPainel<{ id: string }>> {
   return semPermissaoVira(() => withUserContext(db, claims, async (tx) => {
     if (!(await exigirPapel(tx, GESTAO))) return falha('sem_permissao')
@@ -204,25 +204,39 @@ export function registrarArquivoCardapio(db: Db, claims: JwtClaims, v: DadosArqu
         diff: { unitId: v.unitId, titulo: v.titulo, mime: v.mime, tamanho: v.tamanho },
       })
     }
+    if (r.reativado) {
+      await registrarAuditoria(tx, claims, { restaurantId: r.restaurantId, acao: 'cardapio.arquivo_ativo', entidade: 'menu_file', entidadeId: r.id, diff: { ativo: true } })
+    }
     return ok({ id: r.id })
   }), { menu_files_storage_path_ck: 'sem_permissao' })
 }
 
-/** Dedup + insert sob RLS (a policy confere papel, unidade e a pasta do restaurante no caminho). */
-export async function gravarArquivo(tx: Tx, v: DadosArquivo): Promise<{ id: string; restaurantId: string; novo: boolean }> {
+/**
+ * Insert sob RLS (a policy confere papel, unidade e a pasta do restaurante no caminho) com dedup pelo índice
+ * `menu_files_escopo_sha256_uq`: `on conflict do nothing` + releitura, então clique duplo não estoura. Reenviar um
+ * arquivo desativado o reativa.
+ */
+export async function gravarArquivo(
+  tx: Tx,
+  v: DadosArquivo,
+): Promise<{ id: string; restaurantId: string; novo: boolean; reativado: boolean }> {
+  const [f] = await tx.execute<{ id: string; restaurant_id: string }>(sql`
+    insert into public.menu_files (restaurant_id, unit_id, titulo, storage_path, mime, tamanho, sha256, ativo)
+    values ((select app.my_restaurant_id()), ${v.unitId}, ${v.titulo}, ${v.storagePath}, ${v.mime}, ${v.tamanho}, ${v.sha256}, true)
+    on conflict do nothing
+    returning id, restaurant_id`)
+  if (f) return { id: f.id, restaurantId: f.restaurant_id, novo: true, reativado: false }
   const [existente] = await tx
-    .select({ id: menuFiles.id, restaurantId: menuFiles.restaurantId })
+    .select({ id: menuFiles.id, restaurantId: menuFiles.restaurantId, ativo: menuFiles.ativo })
     .from(menuFiles)
     .where(and(
       eq(menuFiles.sha256, v.sha256),
       v.unitId === null ? isNull(menuFiles.unitId) : eq(menuFiles.unitId, v.unitId),
     ))
-  if (existente) return { ...existente, novo: false }
-  const [f] = await tx.execute<{ id: string; restaurant_id: string }>(sql`
-    insert into public.menu_files (restaurant_id, unit_id, titulo, storage_path, mime, tamanho, sha256, ativo)
-    values ((select app.my_restaurant_id()), ${v.unitId}, ${v.titulo}, ${v.storagePath}, ${v.mime}, ${v.tamanho}, ${v.sha256}, true)
-    returning id, restaurant_id`)
-  return { id: f!.id, restaurantId: f!.restaurant_id, novo: true }
+  // o insert passou pela policy, então o escopo é visível; sem linha aqui seria outro conflito
+  if (!existente) throw new Error('arquivo duplicado não encontrado')
+  if (!existente.ativo) await tx.update(menuFiles).set({ ativo: true }).where(eq(menuFiles.id, existente.id))
+  return { id: existente.id, restaurantId: existente.restaurantId, novo: false, reativado: !existente.ativo }
 }
 
 /** Remover um arquivo de cardápio = desativar (sem DELETE). */
