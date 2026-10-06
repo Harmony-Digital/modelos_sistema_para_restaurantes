@@ -167,6 +167,11 @@ export const knowledgeDocuments = pgTable(
     /** próximo lote a ler (0 = nenhum lido); lotes_total calculado no primeiro passo do worker */
     loteAtual: integer('lote_atual').notNull().default(0),
     lotesTotal: integer('lotes_total'),
+    /**
+     * Concessão do lote: quando um leitor (job) pegou o lote corrente. Viva (< prazo do job) ⇒ ninguém mais lê;
+     * vencida ⇒ o leitor morreu e outro retoma. Limpa ao salvar o lote, ao concluir e ao reenfileirar.
+     */
+    loteLendoDesde: timestamp('lote_lendo_desde', { withTimezone: true }),
     /** junção dos lotes já lidos (some ao concluir) */
     draftParcial: jsonb('draft_parcial'),
     /** mensagem amigável para o painel (nunca detalhe técnico nem conteúdo do documento) */

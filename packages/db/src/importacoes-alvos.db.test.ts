@@ -1,5 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { and, eq, sql as dsql } from 'drizzle-orm'
 import type { RascunhoEspacos, RascunhoHorarios, RascunhoInformacoes, RascunhoSoPrecos } from '@atd/core/importacao'
 import type { RascunhoCardapio } from '@atd/core/s4'
@@ -96,7 +98,10 @@ describe('banco: alvos, modo, lotes e arquivos', () => {
     expect(ordens.map((r) => (r as { valor: { ordem: number } }).valor.ordem).sort()).toEqual([1, 2, 3])
     // repetido: devolve a ordem que já tem
     const ordemDo2 = (await db.select().from(knowledgeDocumentFiles).where(eq(knowledgeDocumentFiles.sha256, sha(2))))[0]!.ordem
-    expect(await anexarArquivo(db, as(c.dono), id, arq(c, 2))).toEqual({ ok: true, valor: { ordem: ordemDo2 } })
+    expect(await anexarArquivo(db, as(c.dono), id, arq(c, 2))).toEqual({ ok: true, valor: { ordem: ordemDo2, descartarCaminho: null } })
+    // o mesmo conteúdo enviado de novo com outro nome: o objeto novo no Storage deve ser apagado por quem chamou
+    expect(await anexarArquivo(db, as(c.dono), id, { ...arq(c, 2), storagePath: caminho(c, 'copia.jpg') }))
+      .toEqual({ ok: true, valor: { ordem: ordemDo2, descartarCaminho: caminho(c, 'copia.jpg') } })
     for (let n = 4; n <= 10; n++) expect((await anexarArquivo(db, as(c.dono), id, arq(c, n))).ok).toBe(true)
     expect(await anexarArquivo(db, as(c.dono), id, arq(c, 11))).toEqual({ ok: false, erro: 'limite_arquivos' })
     // remover o 3º: os seguintes sobem uma posição, e cabe mais um
@@ -115,7 +120,7 @@ describe('banco: alvos, modo, lotes e arquivos', () => {
     expect(await anexarArquivo(db, as(c.dono), crypto.randomUUID(), arq(c, 12))).toEqual({ ok: false, erro: 'nao_encontrada' })
     // tipo que não é PDF/imagem
     await expect(anexarArquivo(db, as(c.dono), id, { ...arq(c, 13), mime: 'text/csv' })).rejects.toThrow()
-    expect(await anexarArquivo(db, as(c.dono), id, arq(c, 11))).toEqual({ ok: true, valor: { ordem: 10 } })
+    expect(await anexarArquivo(db, as(c.dono), id, arq(c, 11))).toEqual({ ok: true, valor: { ordem: 10, descartarCaminho: null } })
   })
 
   it('RLS dos arquivos: só dono/gerente do restaurante leem; sem MFA nada; web_app sem DELETE', async () => {
@@ -495,5 +500,142 @@ describe('aplicar cardápio', () => {
     const outro = await seedRestaurant(db)
     const donoB = await seedStaff(db, sql, { restaurantId: outro.restaurantId, papel: 'dono' })
     expect(await revisaoImportacao(db, as(donoB), id)).toBeNull()
+  })
+})
+
+describe('fix round 1', () => {
+  it('concessão do lote: duas leituras simultâneas ⇒ só uma recebe o lote; salvarLote devolve se salvou e libera', async () => {
+    const c = await cenario()
+    const id = idDe(await criarImportacaoArquivos(db, as(c.dono), { alvo: 'informacoes', modo: 'completo' }))
+    await anexarArquivo(db, as(c.dono), id, arq(c, 1))
+    await iniciarLeitura(db, as(c.dono), id)
+    const [a, b] = await Promise.all([proximoLote(db, id), proximoLote(db, id)])
+    expect([a, b].filter((x) => x !== null)).toHaveLength(1)
+    expect(await proximoLote(db, id)).toBeNull() // concessão viva: ninguém mais lê
+    expect(await withRole(db, 'worker_app', (tx) => salvarLote(tx, id, { lote: 0, lotesTotal: 3, draftParcial: { p: 1 } }))).toBe(true)
+    expect(await salvarLote(db, id, { lote: 0, lotesTotal: 3, draftParcial: { p: 2 } })).toBe(false) // reentrega
+    const [d] = await db.select().from(knowledgeDocuments).where(eq(knowledgeDocuments.id, id))
+    expect(d).toMatchObject({ loteAtual: 1, loteLendoDesde: null, draftParcial: { p: 1 } })
+    // próximo passo pega o lote 1 normalmente (sem retomada)
+    expect(await withRole(db, 'worker_app', (tx) => proximoLote(tx, id))).toMatchObject({ loteAtual: 1, retomada: false })
+    expect(await proximoLote(db, id)).toBeNull()
+    // job expirado (300–420 s) com o leitor ainda vivo: a repetição não pega o lote (nem libera a reserva dele)
+    await db.update(knowledgeDocuments).set({ loteLendoDesde: dsql`now() - interval '6 minutes'` }).where(eq(knowledgeDocuments.id, id))
+    expect(await proximoLote(db, id)).toBeNull()
+    // o leitor morreu: concessão vencida (> prazo do job) ⇒ outro retoma o mesmo lote
+    await db.update(knowledgeDocuments).set({ loteLendoDesde: dsql`now() - interval '8 minutes'` }).where(eq(knowledgeDocuments.id, id))
+    expect(await proximoLote(db, id)).toMatchObject({ loteAtual: 1, retomada: true })
+    expect(await proximoLote(db, id)).toBeNull()
+    // concluir libera a concessão
+    await concluirIngestao(db, id, { ok: true, draft: { fatos: [fato('Wi-Fi')] } })
+    expect((await db.select().from(knowledgeDocuments).where(eq(knowledgeDocuments.id, id)))[0]!.loteLendoDesde).toBeNull()
+  })
+
+  it('gatilho: transições inválidas recusadas, inclusive gravar o hash e aprovar sem leitura num UPDATE só', async () => {
+    const c = await cenario()
+    const id = idDe(await criarImportacaoArquivos(db, as(c.dono), { alvo: 'informacoes', modo: 'completo' }))
+    await anexarArquivo(db, as(c.dono), id, arq(c, 1))
+    await expect(withUserContext(db, as(c.dono), (tx) => tx.update(knowledgeDocuments)
+      .set({ sha256: sha(9), status: 'aprovado', draft: { fatos: [] }, revisadoPor: c.dono }).where(eq(knowledgeDocuments.id, id)))).rejects.toMatchObject(negado)
+    await iniciarLeitura(db, as(c.dono), id)
+    await expect(db.update(knowledgeDocuments).set({ status: 'aprovado' }).where(eq(knowledgeDocuments.id, id))).rejects.toMatchObject(negado)
+    await db.update(knowledgeDocuments).set({ status: 'processando' }).where(eq(knowledgeDocuments.id, id))
+    await expect(db.update(knowledgeDocuments).set({ status: 'aprovado' }).where(eq(knowledgeDocuments.id, id))).rejects.toMatchObject(negado)
+    await expect(db.update(knowledgeDocuments).set({ status: 'rejeitado' }).where(eq(knowledgeDocuments.id, id))).rejects.toMatchObject(negado)
+    await db.update(knowledgeDocuments).set({ status: 'erro' }).where(eq(knowledgeDocuments.id, id))
+    await expect(db.update(knowledgeDocuments).set({ status: 'aprovado' }).where(eq(knowledgeDocuments.id, id))).rejects.toMatchObject(negado)
+    // descartar antes de ler é permitido (enviado sem hash → rejeitado)
+    const outra = idDe(await criarImportacaoArquivos(db, as(c.dono), { alvo: 'espacos', modo: 'completo' }))
+    await db.update(knowledgeDocuments).set({ status: 'rejeitado' }).where(eq(knowledgeDocuments.id, outra))
+  })
+
+  it('aplicar: ja_aplicado só na aprovada; enviado/processando/erro/rejeitada ⇒ nao_pronta', async () => {
+    const c = await cenario()
+    const r = { fatos: [fato('Wi-Fi')] }
+    const id = idDe(await criarImportacaoArquivos(db, as(c.dono), { alvo: 'informacoes', modo: 'completo' }))
+    expect(await aplicarImportacao(db, as(c.dono), id, r)).toEqual({ ok: false, erro: 'nao_pronta' })
+    await anexarArquivo(db, as(c.dono), id, arq(c, 1))
+    await iniciarLeitura(db, as(c.dono), id)
+    expect(await aplicarImportacao(db, as(c.dono), id, r)).toEqual({ ok: false, erro: 'nao_pronta' })
+    await proximoLote(db, id)
+    expect(await aplicarImportacao(db, as(c.dono), id, r)).toEqual({ ok: false, erro: 'nao_pronta' })
+    await concluirIngestao(db, id, { ok: false, erro: 'falhou' })
+    expect(await aplicarImportacao(db, as(c.dono), id, r)).toEqual({ ok: false, erro: 'nao_pronta' })
+    await rejeitarImportacao(db, as(c.dono), id)
+    expect(await aplicarImportacao(db, as(c.dono), id, r)).toEqual({ ok: false, erro: 'nao_pronta' })
+    const ok2 = await comRascunho(c, 'informacoes', r, 'completo', 2)
+    expect((await aplicarImportacao(db, as(c.dono), ok2, r)).ok).toBe(true)
+    expect(await aplicarImportacao(db, as(c.dono), ok2, r)).toEqual({ ok: false, erro: 'ja_aplicado' })
+  })
+
+  it('tema/nome repetido no rascunho: um cadastro só, e a soma das contagens fecha com as linhas', async () => {
+    const c = await cenario()
+    const r: RascunhoInformacoes = { fatos: [fato('Wi-Fi', { texto: 'Primeiro' }), fato('wi fi', { texto: 'Segundo' }), fato('Pets')] }
+    const id = await comRascunho(c, 'informacoes', r)
+    expect(await aplicarImportacao(db, as(c.dono), id, r)).toEqual({ ok: true, valor: { criados: 2, atualizados: 1, ignorados: 0 } })
+    const fs = await db.select().from(knowledgeFacts)
+    expect(fs.map((f) => f.texto).sort()).toEqual(['Segundo', 'Texto de Pets'])
+    const e: RascunhoEspacos = { espacos: [
+      { nome: 'Varanda', capacidadeMin: 1, capacidadeMax: 10, descricao: null, condicoes: null, unidade: 'Asa Sul', incluir: true },
+      { nome: 'VARANDA', capacidadeMin: 2, capacidadeMax: 20, descricao: null, condicoes: null, unidade: 'Asa Sul', incluir: true },
+    ] }
+    const id2 = await comRascunho(c, 'espacos', e, 'completo', 2)
+    expect(await aplicarImportacao(db, as(c.dono), id2, e)).toEqual({ ok: true, valor: { criados: 1, atualizados: 1, ignorados: 0 } })
+    expect(await db.select().from(eventSpaces)).toEqual([expect.objectContaining({ nome: 'Varanda', capacidadeMin: 2, capacidadeMax: 20 })])
+  })
+
+  it('unidade: id, slug e nome exato vencem o apelido de outra unidade (escolha na revisão nunca fica ambígua)', async () => {
+    const c = await cenario()
+    // "Centro" é o nome de uma unidade e apelido de outra
+    const [centro] = await db.insert(units).values({ restaurantId: c.restaurantId, nome: 'Centro', slug: 'centro-novo' }).returning()
+    await db.update(units).set({ apelidos: ['centro'] }).where(eq(units.id, c.u1))
+    const h = (unidade: string) => ({ unidade, semana: [{ dia: 1, turnos: [{ abre: '10:00', fecha: '14:00' }], conflito: false }], excecoes: [], incluir: true })
+    const r: RascunhoHorarios = { unidades: [h('Centro'), h('asa-norte'), h(c.u1)] }
+    const id = await comRascunho(c, 'horarios', r)
+    const rev = await revisaoImportacao(db, as(c.dono), id)
+    expect(rev!.alvo === 'horarios' && rev!.unidades.map((u) => u.unitId)).toEqual([centro!.id, c.u2, c.u1])
+    expect((await aplicarImportacao(db, as(c.dono), id, r)).ok).toBe(true)
+    expect(await db.select().from(unitHours).where(eq(unitHours.unitId, centro!.id))).toHaveLength(1)
+  })
+
+  it('gerente restrito não vê a revisão', async () => {
+    const c = await cenario()
+    const id = await comRascunho(c, 'informacoes', { fatos: [fato('Wi-Fi')] })
+    expect(await revisaoImportacao(db, as(c.gerenteU1), id)).toBeNull()
+    expect(await revisaoImportacao(db, as(c.gerente), id)).not.toBeNull()
+  })
+
+  it('migração 0040 sobre dados existentes: a recriação do enum preserva as importações da Etapa 05 e o default', async () => {
+    // Reaplica, numa tabela de ensaio com o formato de antes (enum só com cardapio, default 'cardapio'), exatamente as
+    // instruções de recriação do enum da 0040 (lidas do arquivo, com os nomes trocados para os de ensaio).
+    const texto = readFileSync(fileURLToPath(new URL('../migrations/0040_importacao_alvos.sql', import.meta.url)), 'utf8')
+    const instrucoes = texto.split('--> statement-breakpoint').map((x) => x.replace(/^\s*--.*$/gm, '').trim())
+      .filter((x) => /knowledge_document_target|ALTER COLUMN "alvo"/.test(x))
+    expect(instrucoes).toHaveLength(6)
+    const ensaio = (x: string) => x
+      .replaceAll('"public"."knowledge_document_target_v2"', '"public"."ens_target_v2"')
+      .replaceAll('"knowledge_document_target_v2"', '"ens_target_v2"')
+      .replaceAll('"public"."knowledge_document_target"', '"public"."ens_target"')
+      .replaceAll('"knowledge_document_target"', '"ens_target"')
+      .replaceAll('"public"."knowledge_documents"', '"public"."ens_docs"')
+    await sql.begin(async (tx) => {
+      await tx.unsafe(`create type public.ens_target as enum ('cardapio');
+        create table public.ens_docs (id serial primary key, alvo public.ens_target not null default 'cardapio', origem text not null);
+        insert into public.ens_docs (origem) values ('csv'), ('arquivo');`)
+      for (const i of instrucoes) await tx.unsafe(ensaio(i))
+      const linhas = await tx.unsafe(`select alvo::text as alvo, origem from public.ens_docs order by id`)
+      expect(linhas.map((l) => [l.alvo, l.origem])).toEqual([['cardapio', 'csv'], ['cardapio', 'arquivo']])
+      await tx.unsafe(`insert into public.ens_docs (origem, alvo) values ('arquivo', 'horarios'); insert into public.ens_docs (origem) values ('x')`)
+      const [{ n }] = await tx.unsafe(`select count(*)::int as n from public.ens_docs where alvo = 'cardapio'`) as unknown as [{ n: number }]
+      expect(n).toBe(3)
+      await tx.unsafe('drop table public.ens_docs; drop type public.ens_target')
+    })
+    // e as linhas da Etapa 05 (CSV e um arquivo) cabem no check novo
+    const c = await cenario()
+    await db.insert(knowledgeDocuments).values([
+      { restaurantId: c.restaurantId, origem: 'csv', status: 'rascunho', mime: 'text/csv', tamanho: 1, sha256: sha(1), draft: { categorias: [] } },
+      { restaurantId: c.restaurantId, origem: 'arquivo', status: 'enviado', storagePath: caminho(c, 'm.pdf'), mime: 'application/pdf', tamanho: 9, sha256: sha(2) },
+    ])
+    expect((await db.select().from(knowledgeDocuments)).map((d) => [d.alvo, d.modo, d.loteAtual])).toEqual([['cardapio', 'completo', 0], ['cardapio', 'completo', 0]])
   })
 })

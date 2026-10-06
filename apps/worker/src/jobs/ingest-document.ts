@@ -330,9 +330,11 @@ async function lerLote(deps: IngestDeps, importacaoId: string, estado: EstadoLot
         }
         const lotes = planejarLotes(arquivos)
         if (lotes.length > MAX_LOTES_IMPORTACAO) return erro(ERRO_LOTES_DEMAIS)
-        await db.update(knowledgeDocuments).set({ lotesTotal: lotes.length })
-          .where(and(eq(knowledgeDocuments.id, importacaoId), eq(knowledgeDocuments.status, 'processando')))
-        proximo = String(estado.loteAtual)
+        // grava o plano e devolve a concessão do lote (o passo seguinte lê); só quem tem o lote corrente reenfileira
+        const planejado = await db.update(knowledgeDocuments).set({ lotesTotal: lotes.length, loteLendoDesde: null })
+          .where(and(eq(knowledgeDocuments.id, importacaoId), eq(knowledgeDocuments.status, 'processando'), eq(knowledgeDocuments.loteAtual, estado.loteAtual)))
+          .returning({ id: knowledgeDocuments.id })
+        if (planejado.length > 0) proximo = String(estado.loteAtual)
         return 'lote'
       }
 
@@ -417,7 +419,7 @@ async function lerLote(deps: IngestDeps, importacaoId: string, estado: EstadoLot
         switch (desfecho.tipo) {
           case 'parcial': {
             // só no lote corrente e ainda processando: quem chegar depois (reentrega) não sobrescreve nem reenfileira
-            const salvos = await tx.update(knowledgeDocuments).set({ draftParcial: desfecho.parcial, lotesTotal: lotes.length })
+            const salvos = await tx.update(knowledgeDocuments).set({ draftParcial: desfecho.parcial, lotesTotal: lotes.length, loteLendoDesde: null })
               .where(and(eq(knowledgeDocuments.id, importacaoId), eq(knowledgeDocuments.status, 'processando'), eq(knowledgeDocuments.loteAtual, n)))
               .returning({ id: knowledgeDocuments.id })
             status = 'lote'
@@ -425,18 +427,23 @@ async function lerLote(deps: IngestDeps, importacaoId: string, estado: EstadoLot
             break
           }
           case 'avanca': {
-            // `!== false`: salvarLote passa a devolver boolean (false = o lote já foi salvo por outro leitor, que reenfileira)
-            const salvo = (await salvarLote(tx, importacaoId, { lote: n, lotesTotal: lotes.length, draftParcial: desfecho.parcial }) as unknown) !== false
+            // false = o lote já foi salvo por outro leitor, que reenfileira
+            const salvo = await salvarLote(tx, importacaoId, { lote: n, lotesTotal: lotes.length, draftParcial: desfecho.parcial })
             status = 'lote'
             if (salvo) proximo = desfecho.passo
             break
           }
           case 'conclui':
           case 'erro': {
-            // concluído: o progresso fica "n de n" (o painel mostra o total lido)
-            if (desfecho.tipo === 'conclui') {
-              await tx.update(knowledgeDocuments).set({ loteAtual: n + 1, lotesTotal: lotes.length })
-                .where(and(eq(knowledgeDocuments.id, importacaoId), eq(knowledgeDocuments.status, 'processando'), eq(knowledgeDocuments.loteAtual, n)))
+            // só quem ainda tem o lote corrente conclui e audita (reentrega do mesmo lote não faz nada).
+            // Concluído: o progresso fica "n de n" (o painel mostra o total lido)
+            const doLoteCorrente = await tx.update(knowledgeDocuments)
+              .set(desfecho.tipo === 'conclui' ? { loteAtual: n + 1, lotesTotal: lotes.length } : { loteLendoDesde: null })
+              .where(and(eq(knowledgeDocuments.id, importacaoId), eq(knowledgeDocuments.status, 'processando'), eq(knowledgeDocuments.loteAtual, n)))
+              .returning({ id: knowledgeDocuments.id })
+            if (doLoteCorrente.length === 0) {
+              status = 'ignorado'
+              break
             }
             status = await concluirIngestao(tx, importacaoId, desfecho.tipo === 'conclui'
               ? { ok: true, draft: desfecho.draft }

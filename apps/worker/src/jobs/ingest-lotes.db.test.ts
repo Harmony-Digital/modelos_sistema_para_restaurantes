@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { eq } from 'drizzle-orm'
+import { eq, sql as dsql } from 'drizzle-orm'
 import { PDFDocument } from 'pdf-lib'
 import { createDb, reserveBudget, schema } from '@atd/db'
 import { getTestDb, resetDb, seedRestaurant, setupPgbossRoles, WORKER_URL } from '@atd/db/test-utils'
@@ -316,6 +316,42 @@ describe('job document.ingest — importação em lotes (Etapa 07)', () => {
     const { llm } = fakeLlm([{ espacos: [] }])
     expect(await ingestDocument(deps(llm, objetos).d, id)).toBe('erro')
     expect((await importacao(id)).status).toBe('erro')
+  })
+
+  it('job expirado com o leitor ainda vivo (concessão < prazo do job): a repetição não lê nem devolve a reserva dele', async () => {
+    const { restaurantId, id, objetos } = await setup({ arquivos: [{ bytes: png(1), mime: 'image/png' }], alvo: 'informacoes' })
+    await db.update(schema.knowledgeDocuments).set({ status: 'processando', loteLendoDesde: dsql`now() - interval '6 minutes'` })
+      .where(eq(schema.knowledgeDocuments.id, id))
+    await reserveBudget(db, { restaurantId, scope: 'ia', amountUsd: '0.50', timeZone: 'America/Sao_Paulo', ref: `importacao:${id}` })
+    const { llm, chamadas } = fakeLlm([{ fatos: [] }])
+    const { d, passos } = deps(llm, objetos)
+    expect(await ingestDocument(d, id)).toBe('ignorado')
+    expect(chamadas).toHaveLength(0)
+    expect(passos).toEqual([])
+    expect((await contadores(restaurantId)).map((c) => c.reservado)).toEqual(['0.500000', '0.500000'])
+    // concessão vencida (o leitor morreu): retoma, devolve a reserva dele e lê
+    await db.update(schema.knowledgeDocuments).set({ loteLendoDesde: dsql`now() - interval '8 minutes'` })
+      .where(eq(schema.knowledgeDocuments.id, id))
+    const lido = fakeLlm([{ fatos: [{ tema: 'Wi-Fi', texto: 'Senha na mesa', exemplos: [], unidade: null }] }])
+    expect(await ingestDocument(deps(lido.llm, objetos).d, id)).toBe('rascunho')
+    expect((await contadores(restaurantId)).map((c) => c.reservado)).toEqual(['0.000000', '0.000000'])
+  })
+
+  it('outro leitor concluiu enquanto este lia: este não conclui de novo nem audita', async () => {
+    const { id, objetos } = await setup({ arquivos: [{ bytes: png(1), mime: 'image/png' }], alvo: 'informacoes' })
+    const base = fakeLlm([{ fatos: [{ tema: 'Wi-Fi', texto: 'Senha na mesa', exemplos: [], unidade: null }] }])
+    const llm: LlmClient = {
+      async completeJson(p) {
+        // o outro leitor (concessão retomada) termina o mesmo lote primeiro
+        await db.update(schema.knowledgeDocuments).set({ loteAtual: 1, lotesTotal: 1 }).where(eq(schema.knowledgeDocuments.id, id))
+        await db.update(schema.knowledgeDocuments).set({ status: 'rascunho', draft: { fatos: [] } }).where(eq(schema.knowledgeDocuments.id, id))
+        return base.llm.completeJson(p)
+      },
+    }
+    expect(await ingestDocument(deps(llm, objetos).d, id)).toBe('ignorado')
+    expect(await importacao(id)).toMatchObject({ status: 'rascunho', draft: { fatos: [] } })
+    expect(await db.select().from(schema.auditLog).where(eq(schema.auditLog.entidadeId, id))).toEqual([])
+    expect(await runs()).toHaveLength(1) // a chamada paga fica registrada
   })
 
   describe('com o role de produção (worker_app)', () => {

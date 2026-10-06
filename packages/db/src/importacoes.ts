@@ -376,9 +376,9 @@ export async function concluirIngestao(
   const d = r.ok ? validarRascunho(alvo, modo, r.draft) : null
   const vazio = d !== null && rascunhoVazio(d)
   const set = d !== null && !vazio
-    ? { status: 'rascunho' as const, draft: d.draft, erro: null, draftParcial: null }
+    ? { status: 'rascunho' as const, draft: d.draft, erro: null, draftParcial: null, loteLendoDesde: null }
     : {
-        status: 'erro' as const, draft: null,
+        status: 'erro' as const, draft: null, loteLendoDesde: null,
         ...(!r.ok && r.manterParcial ? {} : { draftParcial: null }),
         erro: (vazio ? mensagemVazio(alvo, modo) : r.ok ? ERRO_RASCUNHO_INVALIDO : r.erro).slice(0, 300),
       }

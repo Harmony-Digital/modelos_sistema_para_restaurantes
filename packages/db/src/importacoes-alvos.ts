@@ -6,6 +6,7 @@ import type {
 } from '@atd/core/importacao'
 import type { Db } from './client.ts'
 import { aplicarNoCardapio, PRAZO_PROCESSANDO, type StatusImportacao } from './importacoes.ts'
+import { PRAZO_CONCESSAO_LOTE } from './queue.ts'
 import { validarRascunho, type AlvoImportacao, type ModoImportacao, type RascunhoDoAlvo } from './importacoes-rascunho.ts'
 import { falha, ok, registrarAuditoria, semPermissaoVira, type ErroPainel, type ResultadoPainel } from './painel-comum.ts'
 import { podeEditarCardapioGeral } from './painel-cardapio.ts'
@@ -72,6 +73,12 @@ async function travarRecebendo(tx: Tx, id: string): Promise<DocRecebendo | 'nao_
 }
 
 /**
+ * `descartarCaminho`: o conteúdo já estava na importação (mesmo sha256) com outro caminho — o objeto recém-enviado
+ * ficou sem uso e quem chamou deve apagá-lo do Storage. Null quando o arquivo entrou ou é o mesmo objeto (reenvio).
+ */
+export type ResultadoAnexar = ResultadoPainel<{ ordem: number; descartarCaminho: string | null }> | { ok: false; erro: ErroArquivos }
+
+/**
  * Anexa um arquivo já enviado ao Storage (`importacoes/<restaurant_id>/…`) no fim da lista. O mesmo arquivo (sha256)
  * na mesma importação devolve a posição que já tem. Mais de 10 ⇒ `limite_arquivos`; depois de "Ler arquivos" ⇒
  * `ja_iniciada`. Caminho de outro restaurante ⇒ `sem_permissao` (RLS); tipo fora de PDF/imagem lança (check).
@@ -81,25 +88,25 @@ export function anexarArquivo(
   claims: JwtClaims,
   importacaoId: string,
   a: { storagePath: string; mime: string; tamanho: number; sha256: string },
-): Promise<ResultadoPainel<{ ordem: number }> | { ok: false; erro: ErroArquivos }> {
-  return semPermissaoVira<ResultadoPainel<{ ordem: number }> | { ok: false; erro: ErroArquivos }>(() => withUserContext(db, claims, async (tx) => {
+): Promise<ResultadoAnexar> {
+  return semPermissaoVira<ResultadoAnexar>(() => withUserContext(db, claims, async (tx) => {
     if (!(await podeEditarCardapioGeral(tx))) return falha('sem_permissao')
     const doc = await travarRecebendo(tx, importacaoId)
     if (doc === 'nao_encontrada') return falha('nao_encontrada')
     if (doc === 'ja_iniciada') return { ok: false, erro: 'ja_iniciada' }
     const atuais = await tx
-      .select({ ordem: knowledgeDocumentFiles.ordem, sha256: knowledgeDocumentFiles.sha256 })
+      .select({ ordem: knowledgeDocumentFiles.ordem, sha256: knowledgeDocumentFiles.sha256, storagePath: knowledgeDocumentFiles.storagePath })
       .from(knowledgeDocumentFiles)
       .where(eq(knowledgeDocumentFiles.importacaoId, importacaoId))
     const repetido = atuais.find((f) => f.sha256 === a.sha256)
-    if (repetido) return ok({ ordem: repetido.ordem })
+    if (repetido) return ok({ ordem: repetido.ordem, descartarCaminho: repetido.storagePath === a.storagePath ? null : a.storagePath })
     if (atuais.length >= MAX_ARQUIVOS_IMPORTACAO) return { ok: false, erro: 'limite_arquivos' }
     // a lista é sempre 1..n (remover renumera)
     const ordem = atuais.length + 1
     await tx.execute(sql`
       insert into public.knowledge_document_files (restaurant_id, importacao_id, ordem, storage_path, mime, tamanho, sha256)
       values (${doc.restaurantId}, ${importacaoId}, ${ordem}, ${a.storagePath}, ${a.mime}, ${a.tamanho}, ${a.sha256})`)
-    return ok({ ordem })
+    return ok({ ordem, descartarCaminho: null })
   }))
 }
 
@@ -206,13 +213,17 @@ export type EstadoLote = {
   lotesTotal: number | null
   arquivos: ArquivoImportacao[]
   draftParcial: unknown
-  /** `processando` parado há mais que PRAZO_PROCESSANDO (worker morreu no meio do lote) */
+  /** o leitor anterior morreu no meio do lote (concessão vencida, ou `processando` parado há mais que o prazo) */
   retomada: boolean
 }
 
 /**
- * Próximo passo da leitura de uma importação de vários arquivos já iniciada: `enviado` ⇒ `processando`; `processando`
- * continua de `lote_atual` (o próprio job se reenfileira; retomada depois de queda). Qualquer outro caso ⇒ null.
+ * Próximo passo da leitura de uma importação de vários arquivos já iniciada, com **concessão do lote**: `enviado` ⇒
+ * `processando`; `processando` continua de `lote_atual`. Quem recebe o estado fica com o lote (`lote_lendo_desde`)
+ * até `salvarLote`/`concluirIngestao` ou o reenfileiramento liberarem; enquanto a concessão estiver viva
+ * (< PRAZO_CONCESSAO_LOTE = prazo do job, acima do pior caso de um lote) qualquer outra chamada recebe null — duas
+ * execuções nunca pagam o mesmo lote, e a repetição de um job expirado não libera a reserva de um leitor vivo.
+ * Concessão vencida (leitor morreu) ⇒ retoma com `retomada: true`. Qualquer outro caso ⇒ null.
  */
 export function proximoLote(db: Db | Tx, id: string): Promise<EstadoLote | null> {
   return (db as Db).transaction(async (tx) => {
@@ -223,6 +234,8 @@ export function proximoLote(db: Db | Tx, id: string): Promise<EstadoLote | null>
         restaurantId: knowledgeDocuments.restaurantId, loteAtual: knowledgeDocuments.loteAtual, lotesTotal: knowledgeDocuments.lotesTotal,
         draftParcial: knowledgeDocuments.draftParcial,
         parado: sql<boolean>`${knowledgeDocuments.updatedAt} < now() - ${PRAZO_PROCESSANDO}::interval`,
+        concessao: sql<'livre' | 'viva' | 'vencida'>`case when ${knowledgeDocuments.loteLendoDesde} is null then 'livre'
+          when ${knowledgeDocuments.loteLendoDesde} >= now() - ${PRAZO_CONCESSAO_LOTE}::interval then 'viva' else 'vencida' end`,
       })
       .from(knowledgeDocuments)
       .where(eq(knowledgeDocuments.id, id))
@@ -230,9 +243,11 @@ export function proximoLote(db: Db | Tx, id: string): Promise<EstadoLote | null>
     if (!d || d.origem !== 'arquivo' || d.storagePath !== null || d.sha256 === null) return null
     let retomada = false
     if (d.status === 'enviado') {
-      await tx.update(knowledgeDocuments).set({ status: 'processando' }).where(eq(knowledgeDocuments.id, id))
+      await tx.update(knowledgeDocuments).set({ status: 'processando', loteLendoDesde: sql`now()` }).where(eq(knowledgeDocuments.id, id))
     } else if (d.status === 'processando') {
-      retomada = d.parado
+      if (d.concessao === 'viva') return null
+      retomada = d.concessao === 'vencida' || d.parado
+      await tx.update(knowledgeDocuments).set({ loteLendoDesde: sql`now()` }).where(eq(knowledgeDocuments.id, id))
     } else {
       return null
     }
@@ -252,29 +267,58 @@ export function proximoLote(db: Db | Tx, id: string): Promise<EstadoLote | null>
 }
 
 /**
- * Grava o lote `lote` lido (parcial já juntado) e avança para `lote + 1` — só se `lote` é o lote corrente e a
- * importação está `processando` (reentrega do mesmo lote não faz nada).
+ * Grava o lote `lote` lido (parcial já juntado), avança para `lote + 1` e libera a concessão — só se `lote` é o lote
+ * corrente e a importação está `processando`. Devolve true só para quem salvou (reentrega do mesmo lote ⇒ false, e
+ * quem recebe false não reenfileira).
  */
-export async function salvarLote(db: Db | Tx, id: string, p: { lote: number; lotesTotal: number; draftParcial: unknown }): Promise<void> {
-  await db
+export async function salvarLote(db: Db | Tx, id: string, p: { lote: number; lotesTotal: number; draftParcial: unknown }): Promise<boolean> {
+  const r = await db
     .update(knowledgeDocuments)
-    .set({ loteAtual: p.lote + 1, lotesTotal: p.lotesTotal, draftParcial: p.draftParcial })
+    .set({ loteAtual: p.lote + 1, lotesTotal: p.lotesTotal, draftParcial: p.draftParcial, loteLendoDesde: null })
     .where(and(eq(knowledgeDocuments.id, id), eq(knowledgeDocuments.status, 'processando'), eq(knowledgeDocuments.loteAtual, p.lote)))
+    .returning({ id: knowledgeDocuments.id })
+  return r.length > 0
+}
+
+/**
+ * Libera a concessão do lote sem avançar (passo que só planeja ou lê meia parte e se reenfileira). Só no lote
+ * esperado: devolve true se liberou.
+ */
+export async function liberarLote(db: Db | Tx, id: string, lote: number): Promise<boolean> {
+  const r = await db
+    .update(knowledgeDocuments)
+    .set({ loteLendoDesde: null })
+    .where(and(eq(knowledgeDocuments.id, id), eq(knowledgeDocuments.status, 'processando'), eq(knowledgeDocuments.loteAtual, lote)))
+    .returning({ id: knowledgeDocuments.id })
+  return r.length > 0
 }
 
 // ============ revisão e aplicação por alvo ============
 
 type MapaUnidades = { resolver: (nome: string | null) => string | null }
+/**
+ * Resolve a unidade lida/escolhida, por ordem de precedência: id da unidade → slug (único) → nome → apelido, sempre
+ * sem diferenciar caixa/acento. Ambiguidade só dentro do mesmo nível (dois nomes iguais, ou o mesmo apelido em duas
+ * unidades) ⇒ não resolve. A revisão (Task 5) grava em `unidade` o slug da unidade escolhida (ou o id/nome exato).
+ */
 async function mapaUnidades(tx: Tx): Promise<MapaUnidades> {
   const us = await tx.select({ id: units.id, nome: units.nome, slug: units.slug, apelidos: units.apelidos }).from(units)
-  const porNome = new Map<string, string | null>()
-  for (const u of us) {
-    for (const n of new Set([u.nome, u.slug, ...u.apelidos].map(normalizeText))) {
-      // o mesmo nome em duas unidades é ambíguo: não resolve
-      porNome.set(n, porNome.has(n) && porNome.get(n) !== u.id ? null : u.id)
+  const nivel = (chaves: (u: (typeof us)[number]) => string[]) => {
+    const m = new Map<string, string | null>()
+    for (const u of us) {
+      for (const n of new Set(chaves(u).map(normalizeText))) m.set(n, m.has(n) && m.get(n) !== u.id ? null : u.id)
     }
+    return m
   }
-  return { resolver: (nome) => (nome === null ? null : (porNome.get(normalizeText(nome)) ?? null)) }
+  const niveis = [nivel((u) => [u.id]), nivel((u) => [u.slug]), nivel((u) => [u.nome]), nivel((u) => u.apelidos)]
+  return {
+    resolver: (nome) => {
+      if (nome === null) return null
+      const k = normalizeText(nome)
+      for (const m of niveis) if (m.has(k)) return m.get(k) ?? null
+      return null
+    },
+  }
 }
 
 // ---- cardápio completo ----
@@ -393,10 +437,13 @@ export type RevisaoImportacao = BaseRevisao & (
  * Rascunho para a tela de revisão, com os rótulos calculados contra o cadastro atual: cardápio (novo/atualizar por
  * categoria+nome), só preços (antes → depois de itens existentes; o resto à parte com o motivo), informações (tema
  * normalizado + unidade), horários (unidade reconhecida ou a escolher), espaços (nome normalizado na unidade).
- * Sem rascunho (ainda lendo, erro) ⇒ `draft: null` e listas vazias. Atendente/outro restaurante ⇒ null.
+ * Sem rascunho (ainda lendo, erro) ⇒ `draft: null` e listas vazias. Atendente, gerente restrito ou outro
+ * restaurante ⇒ null.
  */
 export function revisaoImportacao(db: Db, claims: JwtClaims, id: string): Promise<RevisaoImportacao | null> {
   return withUserContext(db, claims, async (tx) => {
+    // permissão igual à de aplicar: gerente restrito a unidades não revisa
+    if (!(await podeEditarCardapioGeral(tx))) return null
     const [d] = await tx
       .select({
         id: knowledgeDocuments.id, alvo: knowledgeDocuments.alvo, modo: knowledgeDocuments.modo, status: knowledgeDocuments.status,
@@ -436,7 +483,8 @@ export function revisaoImportacao(db: Db, claims: JwtClaims, id: string): Promis
 
 // ---- aplicação ----
 type Contagem = { criados: number; atualizados: number; ignorados: number }
-export type ErroAplicarImportacao = 'ja_aplicado' | 'rascunho_invalido' | 'unidade_nao_escolhida'
+/** `ja_aplicado`: já aprovada; `nao_pronta`: ainda sem rascunho (recebendo arquivos, lendo), com erro ou descartada. */
+export type ErroAplicarImportacao = 'ja_aplicado' | 'nao_pronta' | 'rascunho_invalido' | 'unidade_nao_escolhida'
 export type ResultadoAplicarImportacao = ResultadoPainel<Contagem> | { ok: false; erro: ErroAplicarImportacao }
 
 /**
@@ -454,11 +502,14 @@ export function aplicarImportacao(db: Db, claims: JwtClaims, id: string, rascunh
       .from(knowledgeDocuments)
       .where(eq(knowledgeDocuments.id, id))
       .for('update')
+    const naoRascunho = (status: StatusImportacao): ResultadoAplicarImportacao =>
+      ({ ok: false, erro: status === 'aprovado' ? 'ja_aplicado' : 'nao_pronta' })
     if (!doc) {
-      const [existe] = await tx.select({ id: knowledgeDocuments.id }).from(knowledgeDocuments).where(eq(knowledgeDocuments.id, id))
-      return existe ? { ok: false, erro: 'ja_aplicado' } : falha('nao_encontrada')
+      // a trava passa pelas policies de UPDATE (rascunho/erro, ou recebendo arquivos): fora delas, o status diz o motivo
+      const [atual] = await tx.select({ status: knowledgeDocuments.status }).from(knowledgeDocuments).where(eq(knowledgeDocuments.id, id))
+      return atual ? naoRascunho(atual.status) : falha('nao_encontrada')
     }
-    if (doc.status !== 'rascunho') return { ok: false, erro: 'ja_aplicado' }
+    if (doc.status !== 'rascunho') return naoRascunho(doc.status)
     const r = validarRascunho(doc.alvo, doc.modo, rascunho)
     if (r === null) return { ok: false, erro: 'rascunho_invalido' }
 
@@ -518,7 +569,8 @@ async function aplicarInformacoes(tx: Tx, restaurantId: string, r: RascunhoInfor
     } else {
       // exemplos vazios mantêm os atuais; o tema cadastrado fica
       await tx.update(knowledgeFacts).set({ texto: f.texto, ...(f.exemplos.length ? { exemplos: f.exemplos } : {}) }).where(eq(knowledgeFacts.id, factId))
-      if (p.factId !== null) n.atualizados++
+      // tema repetido no rascunho também conta como atualização (a soma fecha com as linhas)
+      n.atualizados++
     }
   }
   return n
@@ -588,7 +640,7 @@ async function aplicarEspacos(tx: Tx, restaurantId: string, r: RascunhoEspacos):
           updatedAt: sql`now()`,
         })
         .where(eq(eventSpaces.id, spaceId))
-      if (p.spaceId !== null) n.atualizados++
+      n.atualizados++
     }
   }
   return n
