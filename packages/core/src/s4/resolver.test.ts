@@ -96,6 +96,18 @@ describe('resolverS4 — buscar/preço', () => {
     expect([r.validos, r.respondidos]).toEqual([0, 0])
   })
 
+  it('etiqueta de saúde (sem glúten/sem lactose) nunca espera a lista: responde direto com o preço de cada unidade (M7, PRD I9)', () => {
+    const p = item({ nome: 'Risoto', descricao: null, unidades: UNIDADES, precos: [5990, 6200, 5990, 5990], tags: ['sem_gluten'] })
+    for (const i of [c('filtro', { tag: 'sem_gluten' }), c('buscar', { consulta: 'risoto', tag: 'sem_lactose' })]) {
+      const r = resolverS4([i], CONTEXTO, achados([p]), RESUMO, semArquivo)
+      expect(r.pendenteUnidade).toEqual([])
+      expect(r.texto).toContain('*Risoto*: Asa Sul R$ 59,90 · Asa Norte R$ 62,00')
+      expect([r.validos, r.respondidos]).toEqual([1, 1])
+    }
+    // outras etiquetas seguem esperando a lista
+    expect(resolverS4([c('filtro', { tag: 'vegano' })], CONTEXTO, achados([p]), RESUMO, semArquivo).pendenteUnidade).toHaveLength(1)
+  })
+
   it('sem unidade, muitas unidades e preço igual: responde direto', () => {
     const p = item({ unidades: UNIDADES })
     const r = resolverS4([c('buscar', { consulta: 'picanha' })], CONTEXTO, achados([p]), RESUMO, semArquivo)

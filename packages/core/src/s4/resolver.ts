@@ -13,6 +13,11 @@ const MAX_LISTADOS = 8
 /** Sem unidade e preços diferentes: o preço de cada unidade cabe numa linha só até 3 unidades (como o S1). */
 const MAX_UNIDADES_SEM_LISTA = 3
 export const LACUNA_CARDAPIO = 'cardapio'
+/**
+ * Etiquetas que revelam dado de saúde: o item nunca vai para o pendente da conversa (campo estruturado — PRD I9);
+ * sem unidade, a resposta sai direto com o preço de cada unidade.
+ */
+const TAGS_SAUDE: ReadonlySet<TagCardapio> = new Set(['sem_gluten', 'sem_lactose'])
 
 /** "Opções {tag}:" */
 const ROTULO_TAG: Readonly<Record<TagCardapio, string>> = {
@@ -96,8 +101,8 @@ export function resolverItensS4(
   const lista = (linhas: readonly string[]) => linhas.map((l) => `• ${l}`).join('\n')
 
   /** Muitas unidades com preços diferentes e nenhuma citada: espera a escolha na lista "Ver unidades". */
-  const precisaUnidade = (encontrados: readonly ItemCardapioCore[], u: UnidadeS1 | null) =>
-    !u && unidades.length > MAX_UNIDADES_SEM_LISTA && encontrados.some((i) => precoDe(i, null).tipo === 'porUnidade')
+  const precisaUnidade = (item: ItemExtraido, encontrados: readonly ItemCardapioCore[], u: UnidadeS1 | null) =>
+    !u && !(item.tag && TAGS_SAUDE.has(item.tag)) && unidades.length > MAX_UNIDADES_SEM_LISTA && encontrados.some((i) => precoDe(i, null).tipo === 'porUnidade')
 
   function naoEncontrado(termo: string | null, u: UnidadeS1 | null): void {
     lacuna(chaveLacunaCardapio(termo), u?.id ?? null)
@@ -118,7 +123,7 @@ export function resolverItensS4(
       trechos.push(m('cardapio_parecido', { itens: sugestoes.map((i) => negrito(i.nome)).join(', ') }))
       return
     }
-    if (precisaUnidade(encontrados, u)) {
+    if (precisaUnidade(item, encontrados, u)) {
       pendenteUnidade.push(item) // conta quando o cliente escolher
       return
     }
@@ -147,7 +152,7 @@ export function resolverItensS4(
   }
 
   function filtrar(item: ItemExtraido, tag: TagCardapio, encontrados: readonly ItemCardapioCore[], u: UnidadeS1 | null): void {
-    if (precisaUnidade(encontrados, u)) {
+    if (precisaUnidade(item, encontrados, u)) {
       pendenteUnidade.push(item)
       return
     }
