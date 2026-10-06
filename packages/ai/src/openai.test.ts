@@ -190,6 +190,43 @@ describe('cliente da OpenAI: reserva entre modelos', () => {
     expect(chamadas[0]!.init.signal).toBeInstanceOf(AbortSignal)
   })
 
+  it('prazo único por chamada: um AbortSignal.timeout com o valor configurado, o mesmo sinal para todos os modelos', async () => {
+    const espiao = vi.spyOn(AbortSignal, 'timeout')
+    const { f, chamadas } = fetchFalso([json(503, {}), ok('{"intencao":"x"}')])
+    await cliente(f, { timeoutMs: 1234 }).completeJson(base)
+    expect(espiao).toHaveBeenCalledTimes(1)
+    expect(espiao).toHaveBeenCalledWith(1234)
+    expect(chamadas).toHaveLength(2)
+    expect(chamadas[1]!.init.signal).toBe(chamadas[0]!.init.signal)
+  })
+
+  it('timeoutMs da chamada vence o do cliente; sem nenhum, 20 s', async () => {
+    const espiao = vi.spyOn(AbortSignal, 'timeout')
+    const a = fetchFalso([ok('{"intencao":"x"}')])
+    await cliente(a.f, { timeoutMs: 1234 }).completeJson({ ...base, timeoutMs: 120_000 })
+    const b = fetchFalso([ok('{"intencao":"x"}')])
+    await cliente(b.f).completeJson(base)
+    expect(espiao.mock.calls).toEqual([[120_000], [20_000]])
+  })
+
+  it('prazo esgotado no primeiro modelo ⇒ não chama o segundo (o total nunca passa do timeout)', async () => {
+    const esperaAbortar = (init: RequestInit) =>
+      new Promise<Response>((_, rejeita) => init.signal!.addEventListener('abort', () => rejeita(init.signal!.reason)))
+    const { f, chamadas } = fetchFalso([esperaAbortar, ok('{"intencao":"x"}')])
+    const r = await cliente(f, { timeoutMs: 20 }).completeJson(base)
+    expect(r).toMatchObject({ ok: false, retryable: true, status: null })
+    expect(chamadas).toHaveLength(1)
+  })
+
+  it('erro transitório que chega com o prazo já esgotado ⇒ não chama o segundo', async () => {
+    const lento = (init: RequestInit) =>
+      new Promise<Response>((resolve) => init.signal!.addEventListener('abort', () => resolve(json(503, {}))))
+    const { f, chamadas } = fetchFalso([lento, ok('{"intencao":"x"}')])
+    const r = await cliente(f, { timeoutMs: 20 }).completeJson(base)
+    expect(r).toMatchObject({ ok: false, retryable: true, status: 503 })
+    expect(chamadas).toHaveLength(1)
+  })
+
   it('todos esgotados por erro transitório ⇒ retryable true, com o status do último', async () => {
     const { f, chamadas } = fetchFalso([json(429, { error: { message: 'Rate limit' } }), json(502, {})])
     const r = await cliente(f).completeJson(base)
@@ -209,6 +246,35 @@ describe('cliente da OpenAI: reserva entre modelos', () => {
     const r = await cliente(f).completeJson(base)
     expect(r).toMatchObject({ ok: false, retryable: false, status: 400, error: "Invalid schema for response_format 'triagem'" })
     expect(chamadas).toHaveLength(1)
+  })
+
+  it('429 insufficient_quota (sem saldo) ⇒ para na hora, não retryable, com prefixo sem_cota', async () => {
+    const { f, chamadas } = fetchFalso([
+      json(429, { error: { message: 'You exceeded your current quota, please check your plan and billing details.', type: 'insufficient_quota', code: 'insufficient_quota' } }),
+      ok('{"intencao":"x"}'),
+    ])
+    const r = await cliente(f).completeJson(base)
+    expect(r).toMatchObject({ ok: false, retryable: false, status: 429 })
+    if (r.ok) throw new Error('esperava falha')
+    expect(r.error).toMatch(/^sem_cota: /)
+    expect(chamadas).toHaveLength(1)
+  })
+
+  it('429 rate_limit_exceeded ⇒ continua passageiro (tenta o próximo)', async () => {
+    const { f, chamadas } = fetchFalso([
+      json(429, { error: { message: 'Rate limit reached for gpt-4.1-mini', type: 'tokens', code: 'rate_limit_exceeded' } }),
+      ok('{"intencao":"x"}'),
+    ])
+    expect((await cliente(f).completeJson(base)).ok).toBe(true)
+    expect(chamadas).toHaveLength(2)
+  })
+
+  it('401 ecoando pedaço da chave ⇒ a mensagem não leva o pedaço (vai para log e ai_runs.erro)', async () => {
+    const { f } = fetchFalso([json(401, { error: { message: 'Incorrect API key provided: sk-proj-****abcd. You can find your API key at https://platform.openai.com/account/api-keys.', code: 'invalid_api_key' } })])
+    const r = await cliente(f).completeJson(base)
+    if (r.ok) throw new Error('esperava falha')
+    expect(r.error).not.toMatch(/sk-proj|abcd/)
+    expect(r.error).toContain('sk-…')
   })
 
   it('401 (chave inválida) ⇒ para', async () => {

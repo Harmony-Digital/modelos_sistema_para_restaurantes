@@ -11,6 +11,11 @@ export const QUEUES = {
   deliverDlq: 'conversation.deliver.dlq',
 } as const
 export const PROCESS_DELAY_SECONDS = 4
+/**
+ * Prazo do job de leitura de cardápio: 2 chamadas à IA (cada uma com prazo TOTAL de `INGESTAO_TIMEOUT_MS`, somando os
+ * modelos da lista) + download. Não pode passar de `PRAZO_PROCESSANDO`, senão a retomada libera a reserva em voo.
+ */
+export const INGEST_EXPIRE_SECONDS = 300
 export type ProcessJob = { conversationId: string }
 /** Leitura por IA de uma importação de cardápio (knowledge_documents `enviado`, origem `arquivo`). */
 export type IngestJob = { importacaoId: string }
@@ -52,7 +57,7 @@ export async function ensureQueues(boss: PgBoss): Promise<void> {
     retryLimit: 2,
     retryDelay: 30,
     retryBackoff: true,
-    expireInSeconds: 300, // leitura de PDF pela IA (até 120 s) + download
+    expireInSeconds: INGEST_EXPIRE_SECONDS,
     deadLetter: QUEUES.ingestDlq,
   })
   await boss.createQueue(QUEUES.deliverDlq, { policy: 'standard' })

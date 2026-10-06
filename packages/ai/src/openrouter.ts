@@ -24,7 +24,10 @@ export interface LlmClient {
     jsonSchema: Record<string, unknown>
     parse: (raw: unknown) => T
     maxTokens: number
-    /** Sobrepõe o timeout do cliente (leitura de documento é mais lenta que a triagem). */
+    /**
+     * Prazo TOTAL da chamada, somando todos os modelos da lista (não é por modelo); sobrepõe o do cliente (leitura de
+     * documento é mais lenta que a triagem).
+     */
     timeoutMs?: number
     /**
      * Padrão false: manda `reasoning: { enabled: false }` — modelo de raciocínio gastava o max_tokens pensando e
@@ -129,6 +132,7 @@ export function createOpenRouterClient(cfg: {
   apiKey: string
   appTitle: string
   fetch?: typeof fetch
+  /** Prazo total de cada `completeJson` (a troca de modelo é no servidor do OpenRouter). Padrão 20 s. */
   timeoutMs?: number
   /** Só para teste (OpenRouter falso do e2e). */
   baseUrl?: string
