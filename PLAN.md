@@ -151,7 +151,7 @@ Spec aprovada: [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-
 
 ## Etapa 07 — Ingestão de documentos
 > A importação de **cardápio** (CSV, PDF e foto, com revisão e confirmação) foi feita na Etapa 05 (06/10/2026), por decisão do dono: upload seguro, `knowledge_documents`, job `document.ingest` e tela de revisão já existem para `alvo = 'cardapio'`. Aqui fica a extensão para os outros alvos (horários, unidades, eventos, geral).
-- [ ] Refinamento · Plano detalhado
+- [x] Refinamento · Plano detalhado (06/10/2026) — spec [docs/specs/2026-10-06-etapa-07-importacao-design.md](docs/specs/2026-10-06-etapa-07-importacao-design.md); plano enxuto [docs/plans/etapa-07-importacao.md](docs/plans/etapa-07-importacao.md) (6 tarefas, 4 blocos; alvos informações, horários e espaços; cardápio com várias fotos, PDF em lotes e modo só preços)
 - [ ] Upload seguro (magic bytes, tamanho, sha256), job `document.ingest`, Structured Outputs por alvo — feito para `cardapio` na Etapa 05; falta estender aos outros alvos
 - [ ] Tela de revisão/aprovação do rascunho → tabelas oficiais — feita para `cardapio` na Etapa 05; falta para os outros alvos
 - [ ] Evals de extração · Homologação
