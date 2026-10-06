@@ -2,7 +2,16 @@ import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 
 export type TriagemFalsa = {
-  itens: { servico: string; tipo: string | null; unidade: string | null; data: string | null; tema: string | null }[]
+  itens: {
+    servico: string
+    tipo: string | null
+    unidade: string | null
+    data: string | null
+    tema: string | null
+    // triagem v3 (Etapa 03): campos obrigatórios, null quando não se aplicam
+    pessoas: number | null
+    horario: string | null
+  }[]
   fora_escopo: boolean
 }
 

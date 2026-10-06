@@ -7,6 +7,7 @@
 
 ## Onde paramos
 
+- **05/10/2026** — Etapa 03 (S2, avisos de presença) implementada na branch `etapa-03-s2-avisos` (34d0650..HEAD): tabela `attendance_notices` com RLS/MFA, domínio `@atd/core/s2`, `triage-v3`, worker com pendente de pessoas, tela Previsão e cartão Previstos hoje; `pnpm check` com 1040 testes em 114 arquivos; e2e 23/23. Homologação em docs/homologacao/etapa-03.md. Pendentes externos: crédito no OpenRouter (camada 1 dos evals S1/S2 e escolha do modelo de triagem). Próximo: revisão final da branch, homologação do dono e fechamento da Etapa 03.
 - **05/10/2026** — Plano 02-C implementado (painel de S1, simulador ligado ao pipeline real, e2e). Revisão final da branch feita e leva de correções aplicada (`f008e26..5e809ed`; `pnpm check` com 782 testes; e2e 19/19). Homologação em docs/homologacao/etapa-02c.md. Pendentes externos: crédito no OpenRouter e escolha do modelo de triagem; Postgres 17 no Supabase hospedado. Próximo: homologação do dono e fechamento da Etapa 02.
 - **05/10/2026** — Plano 02-C escrito (`docs/plans/etapa-02c-painel-simulador.md`, 15 tarefas: banco do painel com RLS/auditoria e initplan por unidade, telas Unidades/Respostas/Início/Restaurante, simulador ligado ao pipeline real com canal sem Meta e relógio simulado, e2e com worker real e OpenRouter falso). Próximo: revisão do dono e execução.
 - **05/10/2026** — Plano 02-B (dados por unidade, feriados, resolução/composição, triage-v2, lacunas, localização/lista, evals; camada 2 com 101 casos) implementado. Pendente: chave do OpenRouter para escolher o modelo de triagem (`docs/homologacao/etapa-02b.md`). Leva final de correções aplicada (`pnpm check` com 661 testes). Próximo: plano 02-C.
@@ -84,10 +85,10 @@ Spec aprovada: [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-
 - [ ] Homologação do dono (simulador + celular)
 
 ## Etapa 03 — Avisos de presença (S2)
-- [ ] Refinamento · Plano detalhado — spec [docs/specs/2026-10-05-etapa-03-s2-design.md](docs/specs/2026-10-05-etapa-03-s2-design.md); plano enxuto [docs/plans/etapa-03-s2-avisos.md](docs/plans/etapa-03-s2-avisos.md) (6 tarefas, 4 blocos de revisão)
-- [ ] Registro/cancelamento de aviso (resolvidos pelo código, como o S1 — não são tools de LLM)
-- [ ] Painel "previsão do dia" por unidade
-- [ ] Evals S2 · Homologação
+- [x] Refinamento · Plano detalhado (05/10/2026) — spec [docs/specs/2026-10-05-etapa-03-s2-design.md](docs/specs/2026-10-05-etapa-03-s2-design.md); plano enxuto [docs/plans/etapa-03-s2-avisos.md](docs/plans/etapa-03-s2-avisos.md) (6 tarefas, 4 blocos de revisão)
+- [x] Registro/cancelamento de aviso (resolvidos pelo código, como o S1 — não são tools de LLM) — 05/10/2026; commits 34d0650..HEAD da branch `etapa-03-s2-avisos` (tabela `attendance_notices` com RLS/MFA, migrations 0018–0021; domínio `@atd/core/s2`; `triage-v3`; worker com pendente de pessoas); `pnpm check` verde com 1040 testes em 114 arquivos; e2e celular 23/23 (4 do S2: registrar, pergunta de pessoas sem nova chamada à IA, aviso simulado fora da previsão, painel e atendente)
+- [x] Painel "previsão do dia" por unidade — 05/10/2026; tela **Previsão** (hoje até +30, filtro por unidade, Novo aviso/Cancelar com auditoria, atendente só lê) e cartão **Previstos hoje** no Início; mesmas evidências acima
+- [ ] Evals S2 · Homologação — evals de composição (camada 2, 55 casos, no `pnpm test`) e 37 frases de extração prontos em 05/10/2026; pendentes: camada 1 (`pnpm --filter @atd/ai eval:s2`, precisa de crédito no OpenRouter) e homologação do dono ([docs/homologacao/etapa-03.md](docs/homologacao/etapa-03.md))
 
 ## Etapa 04 — Eventos (S3)
 - [ ] Refinamento · Plano detalhado
