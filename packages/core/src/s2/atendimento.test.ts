@@ -5,7 +5,7 @@ import type { ItemExtraido } from '../s1/tipos.ts'
 import { resolverAtendimento } from './atendimento.ts'
 
 const SEG_14H = new Date('2026-10-05T14:00:00-03:00')
-const base = { unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null }
+const base = { unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null }
 const h = (tipo: ItemExtraido['tipo'], extra: Partial<ItemExtraido> = {}): ItemExtraido =>
   ({ servico: 'horario_unidades', tipo, ...base, ...extra })
 const reg = (extra: Partial<ItemExtraido> = {}): ItemExtraido => ({ servico: 'aviso_presenca', tipo: 'registrar', ...base, ...extra })

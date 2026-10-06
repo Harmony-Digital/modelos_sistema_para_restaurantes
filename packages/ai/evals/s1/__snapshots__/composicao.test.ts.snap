@@ -152,12 +152,14 @@ exports[`evals S1 — camada 2 (resolução + composição, determinística) > a
   "localizacoes": [],
   "pendente": [
     {
+      "consulta": null,
       "convidados": null,
       "data": null,
       "espaco": null,
       "horario": null,
       "pessoas": null,
       "servico": "horario_unidades",
+      "tag": null,
       "tema": null,
       "tipo": "aberto_agora",
       "tipoEvento": null,
@@ -364,12 +366,14 @@ exports[`evals S1 — camada 2 (resolução + composição, determinística) > d
   "localizacoes": [],
   "pendente": [
     {
+      "consulta": null,
       "convidados": null,
       "data": "amanhã",
       "espaco": null,
       "horario": null,
       "pessoas": null,
       "servico": "horario_unidades",
+      "tag": null,
       "tema": null,
       "tipo": "horario_dia",
       "tipoEvento": null,
@@ -644,12 +648,14 @@ exports[`evals S1 — camada 2 (resolução + composição, determinística) > e
   "localizacoes": [],
   "pendente": [
     {
+      "consulta": null,
       "convidados": null,
       "data": null,
       "espaco": null,
       "horario": null,
       "pessoas": null,
       "servico": "horario_unidades",
+      "tag": null,
       "tema": null,
       "tipo": "endereco",
       "tipoEvento": null,
@@ -795,12 +801,14 @@ exports[`evals S1 — camada 2 (resolução + composição, determinística) > f
   "localizacoes": [],
   "pendente": [
     {
+      "consulta": null,
       "convidados": null,
       "data": null,
       "espaco": null,
       "horario": null,
       "pessoas": null,
       "servico": "horario_unidades",
+      "tag": null,
       "tema": null,
       "tipo": "feriado",
       "tipoEvento": null,
@@ -1199,12 +1207,14 @@ exports[`evals S1 — camada 2 (resolução + composição, determinística) > m
   "localizacoes": [],
   "pendente": [
     {
+      "consulta": null,
       "convidados": null,
       "data": "amanhã",
       "espaco": null,
       "horario": null,
       "pessoas": null,
       "servico": "horario_unidades",
+      "tag": null,
       "tema": null,
       "tipo": "horario_dia",
       "tipoEvento": null,

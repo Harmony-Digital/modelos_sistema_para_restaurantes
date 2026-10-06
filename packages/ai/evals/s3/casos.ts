@@ -31,7 +31,7 @@ export type Caso = {
   espera: Espera
 }
 
-const nulos = { unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null }
+const nulos = { unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null }
 type Extra = Partial<Pick<ItemExtraido, 'unidade' | 'data' | 'convidados' | 'tipoEvento' | 'espaco'>>
 export const ped = (extra: Extra = {}): ItemExtraido => ({ servico: 'evento', tipo: 'pedido', ...nulos, ...extra })
 export const can = (extra: Pick<Extra, 'unidade' | 'data'> = {}): ItemExtraido => ({ servico: 'evento', tipo: 'cancelar', ...nulos, ...extra })

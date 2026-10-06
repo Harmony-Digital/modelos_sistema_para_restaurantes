@@ -79,6 +79,16 @@ export const MODELOS_S1 = {
     variaveis: ['linhas', 'exemplo'],
   },
   evento_confirmado_humano: { texto: 'Esse evento já foi confirmado pela equipe. Vou chamar um atendente para te ajudar.', variaveis: [] },
+  // correções da homologação da Etapa 04 (Etapa 05): mudança de pedido e pedido em dia já confirmado vão para a equipe
+  evento_mudanca_humano: { texto: 'Anotei o que você pediu e vou chamar a equipe para ajustar seu pedido de evento.', variaveis: [] },
+  evento_ja_confirmado_humano: { texto: 'Já temos um evento confirmado seu nesse dia. Vou chamar a equipe para te ajudar.', variaveis: [] },
+  // S4 — cardápio (Etapa 05). Preço só do banco (`R$ 1.234,56`); nunca texto extraído pelo LLM.
+  cardapio_item: { texto: 'Temos sim: {itens}', variaveis: ['itens'] },
+  cardapio_indisponivel: { texto: 'Na unidade {unidade}, {item} está indisponível no momento.', variaveis: ['unidade', 'item'] },
+  cardapio_filtro: { texto: 'Opções {tag}:\n{itens}', variaveis: ['tag', 'itens'] },
+  cardapio_nao_encontrado: { texto: 'Não encontrei esse item no cardápio. Quer que eu mande o cardápio completo?', variaveis: [] },
+  cardapio_enviando: { texto: 'Aqui está o nosso cardápio.', variaveis: [] },
+  cardapio_sem_arquivo: { texto: 'Nosso cardápio:\n{categorias}', variaveis: ['categorias'] },
 } as const satisfies Record<string, { texto: string; variaveis: readonly string[] }>
 
 export type ChaveModelo = keyof typeof MODELOS_S1

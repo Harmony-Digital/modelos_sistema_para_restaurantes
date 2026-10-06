@@ -15,15 +15,23 @@ export type TipoS2 = (typeof TIPOS_S2)[number]
 export const TIPOS_S3 = ['pedido', 'cancelar', 'espacos'] as const
 export type TipoS3 = (typeof TIPOS_S3)[number]
 
+export const TIPOS_S4 = ['enviar', 'buscar', 'preco', 'filtro'] as const
+export type TipoS4 = (typeof TIPOS_S4)[number]
+
+/** Tags conhecidas do cardápio (filtro "tem opção vegana?"); o painel pode gravar outras, a triagem só extrai estas. */
+export const TAGS_CARDAPIO = ['vegano', 'vegetariano', 'sem_gluten', 'sem_lactose', 'infantil', 'bebida', 'sobremesa'] as const
+export type TagCardapio = (typeof TAGS_CARDAPIO)[number]
+
 /**
  * Um pedido extraído da mensagem pela triagem. Textos como o cliente escreveu.
  * `pessoas`/`horario` só vêm em avisos de presença (triage-v3); a v2 preenche null.
  * `convidados`/`tipoEvento`/`espaco` só vêm em eventos (triage-v4); v2/v3 preenchem null.
  * `espaco === '*'`: o cliente disse que tanto faz o espaço ("pode ser qualquer um").
+ * `consulta`/`tag` só vêm em perguntas do cardápio (triage-v5); v2–v4 preenchem null.
  */
 export type ItemExtraido = {
   servico: Servico
-  tipo: TipoS1 | TipoS2 | TipoS3 | null
+  tipo: TipoS1 | TipoS2 | TipoS3 | TipoS4 | null
   unidade: string | null
   data: string | null
   tema: string | null
@@ -32,6 +40,8 @@ export type ItemExtraido = {
   convidados: number | null
   tipoEvento: string | null
   espaco: string | null
+  consulta: string | null
+  tag: TagCardapio | null
 }
 
 export type UnidadeS1 = AgendaUnidade & {

@@ -2,7 +2,7 @@ import { and, asc, count, eq, gt, gte, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import {
   agoraLocal, decryptPhone, encontrarUnidade, escolhaDeUnidade, ESPACO_QUALQUER, normalizarHorario, normalizeText, lerPessoas, MAX_PESSOAS, normalizarTipoEvento, prefilter, redactPii,
-  renderModelo, renderReply, resolverAtendimento, rotuloTipoEvento, SERVICOS, TIPOS_S1, TIPOS_S2, TIPOS_S3,
+  renderModelo, renderReply, resolverAtendimento, rotuloTipoEvento, SERVICOS, TAGS_CARDAPIO, TIPOS_S1, TIPOS_S2, TIPOS_S3, TIPOS_S4,
   type AcaoS2, type AcaoS3, type InboundItem, type ItemExtraido, type UnidadeS1, type Lacuna, type ListaUnidades, type Localizacao, type ReplyKey,
   type ResultadoAtendimento,
 } from '@atd/core'
@@ -47,7 +47,7 @@ const MAX_PERGUNTA_ENVIADA = 2000
 
 const itemSchema = z.object({
   servico: z.enum(SERVICOS),
-  tipo: z.enum([...TIPOS_S1, ...TIPOS_S2, ...TIPOS_S3]).nullable(),
+  tipo: z.enum([...TIPOS_S1, ...TIPOS_S2, ...TIPOS_S3, ...TIPOS_S4]).nullable(),
   unidade: z.string().nullable(),
   data: z.string().nullable(),
   tema: z.string().nullable(),
@@ -59,6 +59,9 @@ const itemSchema = z.object({
   convidados: z.number().nullable().default(null), // o core valida 1–1000 (o item cru espera a lista de unidade)
   tipoEvento: z.string().max(120).nullable().default(null),
   espaco: z.string().max(120).nullable().default(null),
+  // cardápio (Etapa 05): idem
+  consulta: z.string().max(120).nullable().default(null),
+  tag: z.enum(TAGS_CARDAPIO).nullable().default(null),
 })
 // Em `unidade` e `pessoas`, `pergunta` é a mensagem do cliente (mascarada, para as lacunas) e `perguntaEnviada` é o
 // texto nosso que espera a resposta (contexto da triagem; vazio em pendentes antigos).
@@ -586,7 +589,7 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outc
           tipo: a.tipoEvento, tipoTexto: a.tipoTexto, observacoes: a.observacoes, nome: ctx.customer.nomePerfil, simulado: ctx.conv.simulada,
         })
         await tx.insert(auditLog).values({ restaurantId, atorTipo: 'ia', acao: 'evento.pedido_criado', entidade: 'event_request', entidadeId: r.id })
-      } else {
+      } else if (a.tipo === 'cancelar_evento') {
         const ok = await cancelarPedidoDoCliente(tx, { restaurantId, customerId: ctx.customer.id, pedidoId: a.pedidoId })
         if (ok) await tx.insert(auditLog).values({ restaurantId, atorTipo: 'ia', acao: 'evento.pedido_cancelado', entidade: 'event_request', entidadeId: a.pedidoId })
         else saidas = trocarTrecho(saidas, a.texto, a.textoSeFalhar)

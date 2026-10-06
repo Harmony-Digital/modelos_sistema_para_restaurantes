@@ -42,7 +42,7 @@ const SEG_14H = new Date('2026-10-05T14:00:00-03:00')
 type Item = TriageV4['itens'][number]
 const ev = (extra: Partial<Item> = {}): Item => ({
   servico: 'evento', tipo: 'pedido', unidade: null, data: null, tema: null, pessoas: null, horario: null,
-  convidados: null, tipoEvento: null, espaco: null, ...extra,
+  convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null, ...extra,
 })
 const cancelarEv = (extra: Partial<Item> = {}) => ev({ tipo: 'cancelar', ...extra })
 const triagem = (...itens: Item[]): TriageV4 => ({ itens, fora_escopo: false })

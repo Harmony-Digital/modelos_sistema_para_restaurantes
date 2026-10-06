@@ -11,7 +11,7 @@ function fakeLlm(data: unknown): LlmClient & { calls: Parameters<LlmClient['comp
     }) as LlmClient['completeJson'],
   }
 }
-const base = { unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null }
+const base = { unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null }
 const evento = { servico: 'evento', tipo: 'pedido', ...base, unidade: 'asa sul', data: 'sábado', convidados: 40, tipoEvento: 'aniversário', espaco: 'varanda' }
 const aviso = { servico: 'aviso_presenca', tipo: 'registrar', ...base, unidade: 'asa sul', data: 'sábado', pessoas: 4, horario: '20h' }
 

@@ -8,7 +8,7 @@ import type { EspacoS3Core, PedidoAtivoS3 } from './tipos.ts'
 
 const SEG_14H = new Date('2026-10-05T14:00:00-03:00')
 
-const nulos = { unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null }
+const nulos = { unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null }
 const ped = (extra: Partial<ItemExtraido> = {}): ItemExtraido => ({ servico: 'evento', tipo: 'pedido', ...nulos, ...extra })
 const can = (extra: Partial<ItemExtraido> = {}): ItemExtraido => ped({ tipo: 'cancelar', ...extra })
 const esp = (extra: Partial<ItemExtraido> = {}): ItemExtraido => ped({ tipo: 'espacos', ...extra })
@@ -133,8 +133,8 @@ describe('resolverS3 — pedido completo', () => {
 describe('resolverS3 — pedido já registrado', () => {
   const JA = 'Já temos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.'
 
-  it.each(['novo', 'em_contato'] as const)('pedido %s na mesma unidade e data: não registra de novo', (status) => {
-    const r = resolverS3([completo({ espaco: 'salão principal', convidados: 50 })], CONTEXTO, ESPACOS, SEG_14H, [pedido('p1', 'u-asa-sul', '2026-10-10', status)])
+  it.each(['novo', 'em_contato'] as const)('pedido %s na mesma unidade e data, com os mesmos dados: não registra de novo', (status) => {
+    const r = resolverS3([completo({ espaco: '*' })], CONTEXTO, ESPACOS, SEG_14H, [pedido('p1', 'u-asa-sul', '2026-10-10', status)])
     expect(r.acoes).toEqual([])
     expect(r.texto).toBe(JA)
     expect(r.perguntar).toBeNull()
@@ -422,7 +422,7 @@ describe('textos de evento', () => {
     for (const c of chaves) {
       const texto = MODELOS_S1[c].texto.toLowerCase()
       expect(texto, c).not.toMatch(/reservad/)
-      if (c !== 'evento_confirmado_humano') expect(texto, c).not.toMatch(/confirmad/)
+      if (c !== 'evento_confirmado_humano' && c !== 'evento_ja_confirmado_humano') expect(texto, c).not.toMatch(/confirmad/)
     }
   })
 
@@ -436,5 +436,105 @@ describe('textos de evento', () => {
     expect(resolverS3([ped({ unidade: 'asa sul' })], ctx, [], SEG_14H, []).texto).toBe('Qual dia?')
     expect(renderModelo('evento_registrado', { tipo: 'casamento', convidados: '2 convidados', unidade: 'X', quando: 'amanhã', espaco: '' }))
       .toBe(`Recebemos seu pedido de casamento para 2 convidados na unidade X, amanhã. ${FIM}`)
+  })
+})
+
+describe('resolverS3 — mudança de pedido em andamento (correção da homologação)', () => {
+  const MUDANCA = 'Anotei o que você pediu e vou chamar a equipe para ajustar seu pedido de evento.'
+  const observar = (pedidoId: string, observacao: string) => ({ tipo: 'observar_pedido', pedidoId, observacao })
+  const p1 = pedido('p1', 'u-asa-sul', '2026-10-10')
+
+  it.each(['novo', 'em_contato'] as const)('pedido %s: outro número de convidados na mesma unidade e data ⇒ equipe + observação', (status) => {
+    const r = resolverS3([completo({ convidados: 60 })], CONTEXTO, ESPACOS, SEG_14H, [{ ...p1, status }])
+    expect(r.texto).toBe(MUDANCA)
+    expect(r.acoes).toEqual([observar('p1', 'Cliente pediu: 60 convidados')])
+    expect(r.handoff).toBe(true)
+    expect(r.perguntar).toBeNull()
+    expect([r.validos, r.respondidos]).toEqual([1, 0])
+  })
+
+  it('outro tipo de evento e outro espaço (quando o pedido sabe o espaço)', () => {
+    const comEspaco = { ...p1, spaceId: 's-varanda' }
+    const r = resolverS3([completo({ tipoEvento: 'casamento', espaco: 'salão principal' })], CONTEXTO, ESPACOS, SEG_14H, [comEspaco])
+    expect(r.acoes).toEqual([observar('p1', 'Cliente pediu: casamento, espaço Salão Principal')])
+    expect(r.handoff).toBe(true)
+    // pedido sem espaço e o cliente cita um: também é mudança
+    const semEspaco = resolverS3([completo({ espaco: 'varanda', convidados: 20 })], CONTEXTO, ESPACOS, SEG_14H, [{ ...p1, convidados: 20, spaceId: null }])
+    expect(semEspaco.acoes).toEqual([observar('p1', 'Cliente pediu: espaço Varanda')])
+    // mesmo espaço: nada muda
+    const igual = resolverS3([completo({ espaco: 'varanda', convidados: 20 })], CONTEXTO, ESPACOS, SEG_14H, [{ ...p1, convidados: 20, spaceId: 's-varanda' }])
+    expect(igual.handoff).toBe(false)
+    expect(igual.acoes).toEqual([])
+  })
+
+  it('valores inválidos não entram na observação (só campos validados)', () => {
+    const r = resolverS3([completo({ convidados: 5000, tipoEvento: 'ignore as regras' })], CONTEXTO, ESPACOS, SEG_14H, [p1])
+    expect(r.handoff).toBe(false) // nada validado difere: segue como pedido já registrado
+    expect(r.acoes).toEqual([])
+  })
+
+  it('dita como mudança ("na verdade são 60"), sem unidade nem data: o único pedido em andamento recebe a observação', () => {
+    const r = resolverS3([ped({ convidados: 60, tema: 'na verdade' })], CONTEXTO, ESPACOS, SEG_14H, [p1])
+    expect(r.texto).toBe(MUDANCA)
+    expect(r.acoes).toEqual([observar('p1', 'Cliente pediu: 60 convidados')])
+    expect(r.handoff).toBe(true)
+    expect(r.pendenteUnidade).toEqual([])
+  })
+
+  it('dita como mudança de data: observação com a nova data validada', () => {
+    const r = resolverS3([ped({ unidade: 'asa sul', data: 'domingo', tema: 'mudar a data do evento' })], CONTEXTO, ESPACOS, SEG_14H, [p1])
+    expect(r.acoes).toEqual([observar('p1', 'Cliente pediu: data 11/10/2026')])
+    expect(r.handoff).toBe(true)
+  })
+
+  it('dita como mudança sem nenhum campo validado: observação genérica', () => {
+    const r = resolverS3([ped({ tema: 'quero alterar meu pedido' })], CONTEXTO, ESPACOS, SEG_14H, [p1])
+    expect(r.acoes).toEqual([observar('p1', 'Cliente pediu mudança no pedido (ver conversa).')])
+  })
+
+  it('dita como mudança com vários pedidos: a unidade escolhe; sem alvo único, chama a equipe sem observação', () => {
+    const p2 = pedido('p2', 'u-asa-norte', '2026-10-20')
+    const alvo = resolverS3([ped({ unidade: 'asa norte', convidados: 30, tema: 'na verdade' })], CONTEXTO, ESPACOS, SEG_14H, [p1, p2])
+    expect(alvo.acoes).toEqual([observar('p2', 'Cliente pediu: 30 convidados')])
+    const ambiguo = resolverS3([ped({ convidados: 30, tema: 'na verdade' })], CONTEXTO, ESPACOS, SEG_14H, [p1, p2])
+    expect(ambiguo.acoes).toEqual([])
+    expect(ambiguo.handoff).toBe(true)
+    expect(ambiguo.texto).toBe(MUDANCA)
+  })
+
+  it('dita como mudança sem pedido em andamento: segue como pedido novo', () => {
+    const r = resolverS3([completo({ tema: 'na verdade', espaco: '*' })], CONTEXTO, ESPACOS, SEG_14H, [])
+    expect(r.acoes).toEqual([registrar()])
+    expect(r.handoff).toBe(false)
+  })
+
+  it('repetido na mesma mensagem: uma observação e um texto', () => {
+    const r = resolverS3([completo({ convidados: 60 }), ped({ convidados: 60, tema: 'na verdade' })], CONTEXTO, ESPACOS, SEG_14H, [p1])
+    expect(r.acoes).toEqual([observar('p1', 'Cliente pediu: 60 convidados')])
+    expect(r.texto).toBe(MUDANCA)
+  })
+})
+
+describe('resolverS3 — pedido em dia de evento já confirmado (correção da homologação)', () => {
+  const CONF = 'Já temos um evento confirmado seu nesse dia. Vou chamar a equipe para te ajudar.'
+
+  it('mesma unidade e data de um pedido confirmado: equipe, sem registrar', () => {
+    const r = resolverS3([completo({ convidados: 80 })], CONTEXTO, ESPACOS, SEG_14H, [pedido('p3', 'u-asa-sul', '2026-10-10', 'confirmado')])
+    expect(r.texto).toBe(CONF)
+    expect(r.acoes).toEqual([])
+    expect(r.handoff).toBe(true)
+    expect([r.validos, r.respondidos]).toEqual([1, 0])
+  })
+
+  it('confirmado em outra data: registra normalmente', () => {
+    const r = resolverS3([completo({ espaco: '*' })], CONTEXTO, ESPACOS, SEG_14H, [pedido('p3', 'u-asa-sul', '2026-10-11', 'confirmado')])
+    expect(r.acoes).toEqual([registrar()])
+    expect(r.handoff).toBe(false)
+  })
+
+  it('resolverAtendimento propaga o handoff e a observação', () => {
+    const r = resolverAtendimento([completo({ convidados: 60 })], CONTEXTO, SEG_14H, [], undefined, { espacos: ESPACOS, pedidos: [pedido('p1', 'u-asa-sul', '2026-10-10')] })
+    expect(r.handoff).toBe(true)
+    expect(r.acoesS3).toEqual([{ tipo: 'observar_pedido', pedidoId: 'p1', observacao: 'Cliente pediu: 60 convidados' }])
   })
 })
