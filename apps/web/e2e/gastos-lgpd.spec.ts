@@ -141,6 +141,11 @@ test('dono ajusta cotação e limite; a simulação estoura só o próprio limit
   test.setTimeout(120_000) // três rodadas do worker (duas simuladas e uma real)
   await page.setViewportSize({ width: 360, height: 740 })
   const { email } = await entrarComoGestor(page)
+  // contador `ia` de hoje (gasto + reservado): as simulações nunca mexem nele
+  const usoIaHoje = async () => String((await getSql()`select coalesce(sum(gasto + reservado), 0)::text as v from budget_counters
+    where restaurant_id = ${restaurantId} and escopo = 'ia' and periodo = 'dia'
+      and inicio_periodo = (now() at time zone (select timezone from restaurants where id = ${restaurantId}))::date`)[0]!.v)
+  const iaAntes = await usoIaHoje()
 
   // 1) uma pergunta simulada com folga: gera gasto de simulação hoje
   await abrirSimuladorLimpo(page)
@@ -184,6 +189,8 @@ test('dono ajusta cotação e limite; a simulação estoura só o próprio limit
   const segunda = await conversaSimuladaDe(email)
   expect(segunda!.id).not.toBe(primeira!.id)
   expect(Number((await getSql()`select count(*)::int as n from ai_runs where conversation_id = ${segunda!.id}`)[0]!.n)).toBe(0)
+  // as duas rodadas simuladas (uma paga, uma recusada) não tocaram no contador dos clientes reais
+  expect(await usoIaHoje()).toBe(iaAntes)
 
   // 4) a conversa real, no mesmo minuto, é atendida pela IA (escopo ia, fora do limite da simulação)
   const real = await clienteReal(`Cliente Real ${SUFIXO}`, 'qual o preço do pão de queijo da padaria vizinha?')
@@ -275,6 +282,9 @@ test('pedido do titular: resumo de acesso e exclusão confirmada apagam os dados
 })
 
 test('retenção (chamada direto, como o agendamento das 03:00) apaga a simulação antiga e poupa a recente', async () => {
+  // Atenção: roda a retenção de verdade no restaurante inteiro do banco local, com o `now()` real. Ela também apaga o que
+  // já venceu de outras suítes e do uso local do desenvolvedor (ex.: simulações com mais de 7 dias). Aceitável no e2e:
+  // é o mesmo efeito do agendamento diário do worker.
   const sql = getSql()
   const criar = async (diasAtras: number) => {
     const [c] = await sql`insert into customers (restaurant_id, wa_id_hash, telefone_cifrado, nome_perfil, simulado, ultima_interacao_at, created_at)
