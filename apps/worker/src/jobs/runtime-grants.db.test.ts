@@ -5,7 +5,7 @@ import type { PgBoss } from 'pg-boss'
 import { encryptPhone, keyFromBase64 } from '@atd/core'
 import { applyStatus, createBoss, createDb, enqueueProcess, ingestInbound, schema } from '@atd/db'
 import { getTestBoss, getTestDb, resetDb, seedRestaurant, setupPgbossRoles, WEB_URL, WORKER_URL } from '@atd/db/test-utils'
-import type { LlmClient, TriageV2 } from '@atd/ai'
+import type { LlmClient, TriageV3 } from '@atd/ai'
 import type { SendResult } from '@atd/whatsapp'
 import { createLogger } from '../logger.ts'
 import { processConversation, type ProcessDeps } from './process-conversation.ts'
@@ -62,10 +62,10 @@ async function receiveAsWeb(restaurantId: string, texto: string, waIdHash = 'has
   return { conversationId: r.conversationId, wamid }
 }
 
-const FORA: TriageV2 = { itens: [], fora_escopo: true }
+const FORA: TriageV3 = { itens: [], fora_escopo: true }
 const h = (tipo: string, tema: string | null = null) =>
-  ({ servico: 'horario_unidades', tipo, unidade: null, data: null, tema }) as TriageV2['itens'][number]
-function fakeLlm(step: TriageV2 | 'erro') {
+  ({ servico: 'horario_unidades', tipo, unidade: null, data: null, tema, pessoas: null, horario: null }) as TriageV3['itens'][number]
+function fakeLlm(step: TriageV3 | 'erro') {
   let calls = 0
   const llm: LlmClient = {
     async completeJson(p) {
@@ -180,5 +180,21 @@ describe('grants de runtime (web_app → worker_app)', () => {
     expect(conv!.pendente).not.toBeNull()
     const listas = await admin.db.select().from(schema.messages).where(eq(schema.messages.tipo, 'lista'))
     expect(listas).toHaveLength(1)
+  })
+
+  it('S2 com worker_app: lê, registra e cancela aviso de presença com audit_log', async () => {
+    const rid = await seed()
+    const [u] = await admin.db.select().from(schema.units)
+    for (let d = 0; d < 7; d++) await admin.db.insert(schema.unitHours).values({ restaurantId: rid, unitId: u!.id, weekday: d, turno: 1, abre: '00:00', fecha: '23:59' })
+    const aviso = (tipo: 'registrar' | 'cancelar', pessoas: number | null) =>
+      ({ itens: [{ servico: 'aviso_presenca', tipo, unidade: null, data: null, tema: null, pessoas, horario: null }], fora_escopo: false }) as TriageV3
+    const { conversationId } = await receiveAsWeb(rid, 'vou hoje com 2')
+    await processConversation(depsAsWorker(fakeLlm(aviso('registrar', 2)).llm, fakeWa()), conversationId)
+    expect(await admin.db.select().from(schema.attendanceNotices)).toMatchObject([{ pessoas: 2, status: 'ativo', simulado: false }])
+    await receiveAsWeb(rid, 'não vou mais')
+    await processConversation(depsAsWorker(fakeLlm(aviso('cancelar', null)).llm, fakeWa()), conversationId)
+    expect(await admin.db.select().from(schema.attendanceNotices)).toMatchObject([{ status: 'cancelado' }])
+    const acoes = (await admin.db.select().from(schema.auditLog)).map((x) => x.acao).filter((a) => a.startsWith('aviso.'))
+    expect(acoes.sort()).toEqual(['aviso.cancelado', 'aviso.registrado'])
   })
 })

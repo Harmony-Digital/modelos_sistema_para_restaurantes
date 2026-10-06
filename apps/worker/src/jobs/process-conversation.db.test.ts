@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm'
 import { encryptPhone, keyFromBase64 } from '@atd/core'
 import { ingestInbound, schema, type Enqueue } from '@atd/db'
 import { getTestDb, resetDb, seedRestaurant } from '@atd/db/test-utils'
-import type { LlmClient, TriageV2 } from '@atd/ai'
+import type { LlmClient, TriageV3 } from '@atd/ai'
 import type { SendResult } from '@atd/whatsapp'
 import { createLogger } from '../logger.ts'
 import { processConversation, type ProcessDeps } from './process-conversation.ts'
@@ -47,12 +47,12 @@ async function receive(restaurantId: string, msgs: Msg[]) {
   return conversationId
 }
 
-type Scripted = TriageV2 | 'erro_temporario'
+type Scripted = TriageV3 | 'erro_temporario'
 const item = (servico: string, tipo: string | null = null) =>
-  ({ servico, tipo, unidade: null, data: null, tema: null }) as TriageV2['itens'][number]
-const FORA: TriageV2 = { itens: [], fora_escopo: true }
-const LISTA: TriageV2 = { itens: [item('horario_unidades', 'lista_unidades')], fora_escopo: false }
-const CARDAPIO: TriageV2 = { itens: [item('cardapio')], fora_escopo: false }
+  ({ servico, tipo, unidade: null, data: null, tema: null, pessoas: null, horario: null }) as TriageV3['itens'][number]
+const FORA: TriageV3 = { itens: [], fora_escopo: true }
+const LISTA: TriageV3 = { itens: [item('horario_unidades', 'lista_unidades')], fora_escopo: false }
+const CARDAPIO: TriageV3 = { itens: [item('cardapio')], fora_escopo: false }
 function fakeLlm(script: Scripted[]) {
   const calls: { user: string }[] = []
   const llm: LlmClient = {
@@ -142,7 +142,7 @@ describe('processConversation', () => {
     expect(wa.sent.at(-1)!.text).toMatch(/só consigo ajudar com assuntos do Casa Teste/)
     const runs = await db.select().from(schema.aiRuns)
     expect(runs.map((r) => [r.etapa, r.intent, r.costUsd, r.promptVersion])).toEqual([
-      ['triagem', 'fora_escopo', '0.000200', 'triage-v2'],
+      ['triagem', 'fora_escopo', '0.000200', 'triage-v3'],
     ])
     const counters = await db.select().from(schema.budgetCounters).orderBy(schema.budgetCounters.periodo)
     expect(counters.map((c) => [c.reservado, c.gasto])).toEqual([
