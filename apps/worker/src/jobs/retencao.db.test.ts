@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { asc, eq } from 'drizzle-orm'
+import { asc, eq, type SQL } from 'drizzle-orm'
+import { PgDialect } from 'drizzle-orm/pg-core'
 import { createDb, DEFAULT_RETENTION, QUEUES, schema } from '@atd/db'
 import { getTestBoss, getTestDb, resetDb, seedRestaurant, setupPgbossRoles, WORKER_URL } from '@atd/db/test-utils'
 import { createLogger } from '../logger.ts'
@@ -9,6 +10,7 @@ import { agendarRetencao, aplicarRetencaoDiaria, executarRetencaoDiaria, RETENCA
 const admin = getTestDb()
 let worker: ReturnType<typeof createDb>
 const log = createLogger('silent')
+const dialeto = new PgDialect()
 const AGORA = new Date('2026-10-06T06:00:00Z') // 03:00 em São Paulo
 const diasAtras = (n: number) => new Date(AGORA.getTime() - n * 86_400_000)
 
@@ -104,7 +106,7 @@ describe('retenção diária (worker)', () => {
       get(alvo, prop, recv) {
         if (prop === 'execute') {
           return (...args: Parameters<typeof alvo.execute>) => {
-            const { params } = worker.db.dialect.sqlToQuery(args[0] as Parameters<typeof worker.db.dialect.sqlToQuery>[0])
+            const { params } = dialeto.sqlToQuery(args[0] as SQL)
             if (params.includes(restaurantId) && falhas < n) {
               falhas++
               return Promise.reject(new Error('falha simulada'))
