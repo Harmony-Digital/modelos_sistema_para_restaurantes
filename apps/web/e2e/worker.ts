@@ -15,8 +15,37 @@ export function workersQueBloqueiam(vivos: readonly { worker_id: string }[]): st
   return vivos.map((w) => w.worker_id).filter((id) => id !== WORKER_DO_TESTE_DE_BANCO)
 }
 
-/** Sobe o worker de verdade apontando para o OpenRouter falso. Para com erro se já houver outro worker no banco. */
-export async function iniciarWorkerE2e(openrouterUrl: string): Promise<ChildProcess> {
+/**
+ * Env do worker do e2e: o caminho de PRODUÇÃO (`AI_PROVIDER=openai`) com a base da OpenAI no servidor falso e modelos
+ * da tabela de preços (o custo é calculado como em produção). Nada do OpenRouter do `.env` local passa adiante.
+ */
+export function ambienteDoWorkerE2e(env: Record<string, string | undefined>, iaUrl: string): Record<string, string | undefined> {
+  return {
+    ...env,
+    DATABASE_URL: env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres',
+    PHONE_ENC_KEY: env.PHONE_ENC_KEY ?? chave(),
+    WA_ID_PEPPER: env.WA_ID_PEPPER ?? chave(),
+    WHATSAPP_APP_SECRET: env.WHATSAPP_APP_SECRET ?? 'e2e',
+    WHATSAPP_VERIFY_TOKEN: env.WHATSAPP_VERIFY_TOKEN ?? 'e2e',
+    WHATSAPP_ACCESS_TOKEN: 'e2e', // simulação nunca chama a Meta; token inválido de propósito
+    WHATSAPP_PHONE_NUMBER_ID: env.WHATSAPP_PHONE_NUMBER_ID ?? '1',
+    AI_PROVIDER: 'openai',
+    OPENAI_API_KEY: 'e2e',
+    OPENAI_BASE_URL: iaUrl, // o servidor falso confere store:false e json_schema estrito
+    OPENROUTER_API_KEY: '',
+    OPENROUTER_BASE_URL: '',
+    OPENROUTER_DEV_SEM_ZDR: '0',
+    AI_TRIAGE_MODELS: 'gpt-4.1-mini',
+    SUPABASE_URL: env.SUPABASE_URL ?? env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321',
+    SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
+    AI_INGEST_MODELS: 'gpt-4.1-mini,gpt-4.1', // leitura de PDF/foto também vai ao servidor falso (nunca a um modelo de verdade)
+    LOG_LEVEL: 'info',
+    SENTRY_DSN: '',
+  }
+}
+
+/** Sobe o worker de verdade apontando para o servidor de IA falso. Para com erro se já houver outro worker no banco. */
+export async function iniciarWorkerE2e(iaUrl: string): Promise<ChildProcess> {
   if (!existsSync(`${PASTA_WORKER}src/main.ts`)) throw new Error(`worker não encontrado em ${PASTA_WORKER}`)
   const vivos = await getSql()<{ worker_id: string }[]>`select worker_id from worker_heartbeats where last_seen_at > now() - interval '90 seconds'`
   if (workersQueBloqueiam(vivos).length > 0) {
@@ -30,25 +59,7 @@ export async function iniciarWorkerE2e(openrouterUrl: string): Promise<ChildProc
   const filho = spawn(process.execPath, ['src/main.ts'], {
     cwd: PASTA_WORKER,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: {
-      ...env,
-      DATABASE_URL: env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres',
-      PHONE_ENC_KEY: env.PHONE_ENC_KEY ?? chave(),
-      WA_ID_PEPPER: env.WA_ID_PEPPER ?? chave(),
-      WHATSAPP_APP_SECRET: env.WHATSAPP_APP_SECRET ?? 'e2e',
-      WHATSAPP_VERIFY_TOKEN: env.WHATSAPP_VERIFY_TOKEN ?? 'e2e',
-      WHATSAPP_ACCESS_TOKEN: 'e2e', // simulação nunca chama a Meta; token inválido de propósito
-      WHATSAPP_PHONE_NUMBER_ID: env.WHATSAPP_PHONE_NUMBER_ID ?? '1',
-      OPENROUTER_API_KEY: 'e2e',
-      OPENROUTER_DEV_SEM_ZDR: '0', // o OpenRouter falso exige deny + zdr
-      OPENROUTER_BASE_URL: openrouterUrl,
-      AI_TRIAGE_MODELS: 'e2e/falso',
-      SUPABASE_URL: env.SUPABASE_URL ?? env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321',
-      SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
-      AI_INGEST_MODELS: 'e2e/falso', // leitura de PDF/foto também vai ao OpenRouter falso (nunca a um modelo de verdade)
-      LOG_LEVEL: 'info',
-      SENTRY_DSN: '',
-    },
+    env: { ...env, ...ambienteDoWorkerE2e(env, iaUrl) },
   })
   // erros do worker aparecem na saída do e2e (e o pipe nunca enche e trava o processo)
   filho.stderr!.pipe(process.stderr)

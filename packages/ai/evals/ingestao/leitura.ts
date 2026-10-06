@@ -1,27 +1,25 @@
 /**
- * Eval de leitura de cardápio por IA (PDF/imagem ⇒ rascunho) com modelo real via OpenRouter.
- * Uso: pnpm --filter @atd/ai eval:ingestao [--modelos a,b] [--teto 1.00]
- * Só roda com OPENROUTER_API_KEY e AI_INGEST_MODELS (ou --modelos). Meta: ≥ 90% de nome + preço corretos por modelo.
+ * Eval de leitura de cardápio por IA (PDF/imagem ⇒ rascunho) com modelo real via OpenRouter ou OpenAI (--provider ou AI_PROVIDER; padrão openrouter).
+ * Uso: pnpm --filter @atd/ai eval:ingestao [--modelos a,b] [--provider openrouter|openai] [--teto 1.00]
+ * Só roda com a chave do provedor (OPENROUTER_API_KEY ou OPENAI_API_KEY) e AI_INGEST_MODELS (ou --modelos). Meta: ≥ 90% de nome + preço corretos por modelo.
  * Arquivos de exemplo INVENTADOS em evals/ingestao/exemplos/ (regenerar com gerar-exemplos.ts).
  * Grava o relatório em evals/ingestao/resultados/AAAA-MM-DD-leitura.md.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import { INGESTAO_BUDGET_ESTIMATE_USD, lerCardapioPorIa } from '../../src/ingestao.ts'
-import { createOpenRouterClient } from '../../src/openrouter.ts'
 import { EXEMPLOS } from './gabarito.ts'
 import { PASTA_EXEMPLOS } from './gerar-exemplos.ts'
 import { pontuarIngestao } from './pontuar.ts'
+import { clienteDoEval } from '../provedor.ts'
 
-const { values } = parseArgs({ options: { modelos: { type: 'string' }, teto: { type: 'string', default: '1.00' } } })
-const apiKey = process.env.OPENROUTER_API_KEY
-if (!apiKey) throw new Error('Defina OPENROUTER_API_KEY (no .env da raiz ou no ambiente)')
+const { values } = parseArgs({ options: { modelos: { type: 'string' }, provider: { type: 'string' }, teto: { type: 'string', default: '1.00' } } })
 const modelos = (values.modelos ?? process.env.AI_INGEST_MODELS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
 if (modelos.length === 0) throw new Error('Informe --modelos ou AI_INGEST_MODELS')
 const teto = Number(values.teto)
 if (!(teto > 0)) throw new Error('--teto deve ser um valor em dólares maior que zero')
 
-const llm = createOpenRouterClient({ apiKey, appTitle: 'ia-atendimento-evals', semZdrDev: process.env.OPENROUTER_DEV_SEM_ZDR === '1' && process.env.NODE_ENV !== 'production' })
+const { llm } = clienteDoEval({ provider: values.provider, env: process.env, modelos })
 const custo = (u: { costUsd: string | null } | null) => {
   const real = u?.costUsd == null ? Number.NaN : Number(u.costUsd)
   return Number.isFinite(real) && real >= 0 ? real : Number(INGESTAO_BUDGET_ESTIMATE_USD)

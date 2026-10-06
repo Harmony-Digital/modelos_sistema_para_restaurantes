@@ -8,7 +8,7 @@
     "build": "node build.mjs",
     "start": "node dist/main.js",
     "perguntar": "node --env-file=../../.env scripts/perguntar.ts",
-    "smoke:openrouter:prod": "node --env-file=../../.env.worker-producao scripts/smoke-openrouter.ts",
+    "smoke:ia:prod": "node scripts/smoke-ia.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {

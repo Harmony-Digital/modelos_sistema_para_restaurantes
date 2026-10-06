@@ -36,28 +36,64 @@ export const whatsappEnvSchema = whatsappWebhookEnvSchema.extend({
   WHATSAPP_GRAPH_VERSION: z.string().regex(/^v\d+\.\d+$/).default('v24.0'),
 })
 
-export const openrouterEnvSchema = z.object({
-  OPENROUTER_API_KEY: z.string().min(1),
+const optionalString = z.preprocess((v) => (v === '' ? undefined : v), z.string().min(1).optional())
+
+// só para teste (servidores falsos do e2e): nunca aponta para fora da máquina
+const urlSoLocal = z.preprocess(
+  (v) => (v === '' ? undefined : v),
+  z.url({ protocol: /^https?$/, hostname: /^(127\.0\.0\.1|localhost)$/ }).optional(),
+)
+
+/**
+ * IA do worker. `AI_PROVIDER`: `openrouter` (padrão; desenvolvimento local, modelos grátis) | `openai` (produção).
+ * A chave obrigatória depende do provedor (ver `refinarIa`). Os nomes em `AI_*_MODELS` são os do provedor escolhido.
+ */
+const iaEnvBase = z.object({
+  AI_PROVIDER: z.preprocess((v) => (v === '' ? undefined : v), z.enum(['openrouter', 'openai']).default('openrouter')),
+  OPENROUTER_API_KEY: optionalString,
+  OPENAI_API_KEY: optionalString,
   AI_TRIAGE_MODELS: csvList,
+  /** Modelos (csv) que leem PDF/imagem na importação do cardápio; vazio = importação por IA desligada (só CSV). */
+  AI_INGEST_MODELS: z.preprocess((v) => (v === '' ? undefined : v), csvList.optional()),
   /** Só para teste (e2e com OpenRouter falso). Em produção fica vazio. */
-  // só para teste (OpenRouter falso do e2e): nunca aponta para fora da máquina
-  OPENROUTER_BASE_URL: z.preprocess(
-    (v) => (v === '' ? undefined : v),
-    z.url({ protocol: /^https?$/, hostname: /^(127\.0\.0\.1|localhost)$/ }).optional(),
-  ),
+  OPENROUTER_BASE_URL: urlSoLocal,
+  /** Só para teste (e2e com o servidor falso no caminho OpenAI). Em produção fica vazio (padrão https://api.openai.com/v1). */
+  OPENAI_BASE_URL: urlSoLocal,
   /**
    * SÓ DESENVOLVIMENTO LOCAL, com dados inventados: "1" deixa de exigir ZDR/data_collection=deny
    * para usar modelos grátis. Nunca em produção (o worker recusa) — remover antes do go-live.
    */
   OPENROUTER_DEV_SEM_ZDR: z.enum(['0', '1']).default('0').transform((v) => v === '1'),
+  NODE_ENV: z.string().optional(),
 })
+
+export type IaEnv = z.infer<typeof iaEnvBase>
+
+/** Regras entre variáveis da IA (valem para `iaEnvSchema` e `workerEnvSchema`; refinamento não passa por `.extend`). */
+function refinarIa(e: IaEnv, ctx: z.RefinementCtx) {
+  if (e.AI_PROVIDER === 'openrouter' && !e.OPENROUTER_API_KEY) {
+    ctx.addIssue({ code: 'custom', path: ['OPENROUTER_API_KEY'], message: 'obrigatória com AI_PROVIDER=openrouter' })
+  }
+  if (e.AI_PROVIDER === 'openai' && !e.OPENAI_API_KEY) {
+    ctx.addIssue({ code: 'custom', path: ['OPENAI_API_KEY'], message: 'obrigatória com AI_PROVIDER=openai' })
+  }
+  // PRD I8: produção só pela OpenAI (store: false); o OpenRouter fica no desenvolvimento local
+  if (e.NODE_ENV === 'production' && e.AI_PROVIDER !== 'openai') {
+    ctx.addIssue({ code: 'custom', path: ['AI_PROVIDER'], message: 'produção exige openai' })
+  }
+  // LGPD (PRD §10): a chave de desenvolvimento sem ZDR nunca vale em produção
+  if (e.OPENROUTER_DEV_SEM_ZDR && e.NODE_ENV === 'production') {
+    ctx.addIssue({ code: 'custom', path: ['OPENROUTER_DEV_SEM_ZDR'], message: 'proibido em produção' })
+  }
+}
+
+/** Só a IA, com as regras: smoke test do runbook (roda antes das variáveis de Storage existirem). */
+export const iaEnvSchema = iaEnvBase.superRefine(refinarIa)
 
 /** Worker: lê o Storage (bucket privado) por REST com a chave de serviço. Nunca vai para o web/navegador. */
 export const storageWorkerEnvSchema = z.object({
   SUPABASE_URL: z.url({ protocol: /^https?$/ }),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
-  /** Modelos (csv) que leem PDF/imagem na importação do cardápio; vazio = importação por IA desligada (só CSV). */
-  AI_INGEST_MODELS: z.preprocess((v) => (v === '' ? undefined : v), csvList.optional()),
 })
 
 const common = z.object({
@@ -79,15 +115,9 @@ export const workerEnvSchema = common
   .extend(dbEnvSchema.shape)
   .extend(secretsEnvSchema.shape)
   .extend(whatsappEnvSchema.shape)
-  .extend(openrouterEnvSchema.shape)
+  .extend(iaEnvBase.shape)
   .extend(storageWorkerEnvSchema.shape)
-  .extend({ NODE_ENV: z.string().optional() })
-  .superRefine((e, ctx) => {
-    // LGPD (PRD §10): em produção toda chamada exige data_collection=deny + zdr
-    if (e.OPENROUTER_DEV_SEM_ZDR && e.NODE_ENV === 'production') {
-      ctx.addIssue({ code: 'custom', path: ['OPENROUTER_DEV_SEM_ZDR'], message: 'proibido em produção' })
-    }
-  })
+  .superRefine(refinarIa)
 
 export function loadEnv<T extends z.ZodType>(
   schema: T,

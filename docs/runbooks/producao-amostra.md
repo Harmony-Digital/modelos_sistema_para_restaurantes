@@ -354,34 +354,50 @@ curl -s -o /dev/null -w '%{http_code}\n' https://<domínio>/login   # esperado: 
    `.env.worker-producao` como `OPENAI_API_KEY=sk-proj-…`.
 5. Ciente da privacidade (seção Modelos): retenção padrão de 30 dias da OpenAI, sem treino, aceita pelo time.
 
-Complete o worker e rode o **smoke test**. Ele usa **o mesmo cliente do worker** (`store: false`, `json_schema`
-estrito) e chama cada modelo sozinho e depois cada lista (triagem e cardápio), exigindo `{"ok":true}` em todas:
+Complete o worker e rode o **smoke test**. Ele usa **o mesmo cliente e a mesma validação do worker** (`store: false`,
+`json_schema` estrito, preço de cada modelo na tabela) e chama cada modelo sozinho e depois cada lista (triagem e
+cardápio), exigindo `{"ok":true}` em todas:
 
 ```bash
 printf 'AI_PROVIDER=openai\nAI_TRIAGE_MODELS=gpt-4.1-mini\nAI_INGEST_MODELS=gpt-4.1-mini,gpt-4.1\n' >> .env.worker-producao
 pnpm --filter @atd/worker smoke:ia:prod; echo "saida=$?"
 ```
 
-**Saída esperada:** uma linha `OK <modelo> → <modelo usado> (US$ …, … ms)` por modelo sozinho e por lista,
-`Resultado: OK` e `saida=0`. O custo total fica abaixo de US$ 0,01. **Se falhar** (`saida=1`; cada `FALHA` traz o
-erro da OpenAI, sem a chave):
-- `HTTP 401` → 🔑 chave errada, revogada ou de outro projeto;
-- `HTTP 403`/"does not have access to model" → 🔑 o modelo não está liberado no projeto (passo 3);
-- `HTTP 429` com "insufficient_quota" → 🔑 sem saldo ou limite mensal do projeto atingido;
-- modelo "sem preço cadastrado" → o nome não está na tabela `precos-openai.ts`: use um nome da seção Modelos;
-- `saida_invalida`/`saida_truncada` → troque o modelo pelo próximo da lista e registre;
-- `.env.worker-producao: not found` → rode da raiz.
+**Como o env é carregado (smoke e eval):** os dois scripts leem o `.env.worker-producao` da **raiz do repositório**
+(qualquer que seja a pasta de onde você rodou) e os valores do arquivo **vencem** os do shell — um `.env` local
+carregado antes (`set -a; source .env`) não troca provedor, chave nem modelos. Os dois ignoram `OPENAI_BASE_URL` e
+`OPENROUTER_BASE_URL` (só e2e local); o smoke também ignora `OPENROUTER_DEV_SEM_ZDR`.
+
+**Saída esperada:** a linha `Provedor: openai`, uma linha `OK <modelo> → <modelo usado> (US$ …, … ms)` por modelo
+sozinho e por lista (o modelo usado pode vir com data, ex.: `gpt-4.1-mini-2025-04-14`), `Resultado: OK` e `saida=0`.
+O custo total fica abaixo de US$ 0,01. **Se falhar** (`saida=1`; cada `FALHA` traz o erro da OpenAI, com qualquer
+pedaço de chave trocado por `sk-…`):
+- `FALHA .env.worker-producao: not found` → o arquivo não existe na raiz do repositório (passo 4);
+- `FALHA Variáveis de ambiente inválidas ou ausentes: OPENAI_API_KEY` (ou `AI_PROVIDER`, `AI_TRIAGE_MODELS`) → falta a
+  linha no `.env.worker-producao` ou o valor está errado; `AI_PROVIDER` aparece se o arquivo tiver
+  `NODE_ENV=production` sem `AI_PROVIDER=openai`;
+- `FALHA Modelo(s) sem preço cadastrado em packages/ai/src/precos-openai.ts: <modelos> (cadastrados: …)` → o nome não
+  está na tabela de preços: use um nome da seção Modelos (o worker também não sobe com ele; nenhuma chamada foi feita);
+- `… Incorrect API key provided: sk-… (HTTP 401)` → 🔑 chave errada, revogada ou de outro projeto;
+- `… does not have access to model … (HTTP 403)` (ou `HTTP 404` com "does not exist") → 🔑 o modelo não está liberado
+  no projeto (passo 3);
+- `… You exceeded your current quota … (HTTP 429)` → 🔑 sem saldo ou limite mensal do projeto atingido;
+  `… Rate limit reached … (HTTP 429)` → espere um minuto e rode de novo;
+- `saida_invalida`/`saida_truncada` → troque o modelo pelo próximo da lista e registre.
 
 Depois do smoke test, rode o **portão de qualidade** (triagem S1–S4 e frustração contra a OpenAI, com o env de
-produção; custa centavos) e **só apresente se passar**:
+produção carregado como acima e `AI_PROVIDER=openai` forçado; custa centavos) e **só apresente se passar**:
 
 ```bash
 pnpm --filter @atd/ai eval:prod; echo "saida=$?"
 ```
 
-**Saída esperada:** acerto por serviço dentro das metas impressas pelo próprio eval e `saida=0`. **Se falhar:**
-relate ao humano a lista de casos errados (sem segredos); não publique a amostra para apresentação até ele decidir
-(trocar de modelo ou ajustar prompt é trabalho de desenvolvimento, não deste runbook).
+**Saída esperada:** cada eval imprime seu relatório (acerto por modelo contra a meta; também gravado em
+`packages/ai/evals/<serviço>/resultados/`), e no fim `OK s1`, `OK s2`, `OK s3`, `OK s4`, `OK frustracao`,
+`Resultado: OK` e `saida=0`. Todos rodam mesmo se um reprovar. **Se falhar:** relate ao humano as linhas `FALHA` e a
+seção "Erros por modelo" de cada relatório reprovado (sem segredos); não publique a amostra para apresentação até ele
+decidir (trocar de modelo ou ajustar prompt é trabalho de desenvolvimento, não deste runbook). Erro de configuração
+(`Defina OPENAI_API_KEY`, "sem preço cadastrado") tem a mesma correção do smoke test.
 
 ## Passo 7 — Conferência antes do worker
 
@@ -451,12 +467,13 @@ ssh <usuario>@<host> "cd /opt/atendimento && printf 'WORKER_IMAGE=atd-worker\nIM
 ```bash
 sleep 20
 ssh <usuario>@<host> 'cd /opt/atendimento && docker compose --env-file .deploy.env -f docker-compose.prod.yml ps \
-  && docker compose --env-file .deploy.env -f docker-compose.prod.yml logs --since 2m worker | grep -c "worker iniciado"'
+  && docker compose --env-file .deploy.env -f docker-compose.prod.yml logs --since 2m worker | grep "worker iniciado" | grep -c "\"provedorIa\":\"openai\""'
 ```
 
-**Saída esperada:** serviço `worker` `running` e contagem ≥ 1. **Se falhar:** `Variáveis de ambiente inválidas ou
+**Saída esperada:** serviço `worker` `running` e contagem ≥ 1 (a linha `worker iniciado` traz `"provedorIa":"openai"` e os
+modelos, nunca a chave). **Se falhar:** `Variáveis de ambiente inválidas ou
 ausentes: X` → corrija `X` no `.env` do VPS (e no `.env.worker-producao`), `up -d` de novo; `OPENROUTER_DEV_SEM_ZDR`
-na mensagem → apague a linha; `AI_PROVIDER` na mensagem → deve ser `openai` em produção; modelo sem preço → use os nomes da seção Modelos; erro de conexão ao banco → confira a porta 5432 (pooler session) e se o VPS sai para a internet.
+na mensagem → apague a linha; `AI_PROVIDER` na mensagem → deve ser `openai` em produção; `Modelo(s) sem preço cadastrado` → use os nomes da seção Modelos; erro de conexão ao banco → confira a porta 5432 (pooler session) e se o VPS sai para a internet.
 O worker **não** abre porta.
 
 ## Passo 9 — Checklist final (com evidência)

@@ -217,8 +217,9 @@ test('importar PDF: "Lendo o cardápio…", revisão com o rascunho da IA, edita
 
   const confirmar = page.getByRole('button', { name: 'Confirmar importação' })
   await expect(confirmar).toBeVisible({ timeout: 30_000 })
-  // PDF enviado ao modelo pelo motor nativo, com a política de dados conferida pelo servidor falso
+  // PDF enviado ao modelo como parte `file` (caminho OpenAI de produção), com store:false conferido pelo servidor falso
   expect(falso!.leituras).toEqual([{ pdfNativo: true }])
+  expect(falso!.provedores.at(-1)).toBe('openai')
   const moqueca = page.getByRole('group', { name: ITEM_PDF })
   await expect(moqueca).toContainText('Novo')
   await expect(moqueca.getByLabel(/^Preço/)).toHaveValue('R$ 119,90')

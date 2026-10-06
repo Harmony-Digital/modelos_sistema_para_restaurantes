@@ -130,6 +130,8 @@ test('pergunta sem resposta: o dono responde e o simulador passa a responder', a
   await perguntar(page, 'tem estacionamento?')
   await expect(simulador(page).getByText(RESPOSTA)).toBeVisible({ timeout: 20_000 })
   expect(falso!.chamadas).toContain('tem estacionamento?')
+  // o worker do e2e roda o caminho de produção (AI_PROVIDER=openai, store:false conferido pelo servidor falso)
+  expect(new Set(falso!.provedores)).toEqual(new Set(['openai']))
 })
 
 test('simulador com relógio no domingo 12h responde pelo horário de domingo', async ({ page }) => {
