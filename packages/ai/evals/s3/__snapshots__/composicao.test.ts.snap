@@ -1431,6 +1431,40 @@ Espaços para eventos:
 }
 `;
 
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p22: repete o pedido que já fez (sábado na asa sul) 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Já temos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p23: quero o salão principal (pedido de sábado já em contato) 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Já temos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
+  "validos": 1,
+}
+`;
+
 exports[`evals S3 — camada 2 (resolução + composição, determinística) > s01: quais espaços a asa sul tem? 1`] = `
 {
   "acoesS2": [],

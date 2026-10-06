@@ -34,6 +34,7 @@ export const ROTULOS_MODELO: Record<ChaveModelo, { titulo: string; quando: strin
   aviso_qual_cancelar: { titulo: 'Qual aviso cancelar', quando: 'O cliente tem vários avisos e não disse qual cancelar. {exemplo} é uma frase de cancelamento com o primeiro aviso da lista.' },
   // eventos (Etapa 04)
   evento_registrado: { titulo: 'Pedido de evento recebido', quando: 'O cliente pede um evento e o pedido é registrado para a equipe.' },
+  evento_ja_registrado: { titulo: 'Pedido de evento já recebido', quando: 'O cliente pede de novo um evento que já tem pedido em andamento na mesma unidade e data: não duplica.' },
   evento_pergunta_unidade: { titulo: 'Pedir a unidade do evento', quando: 'Texto da lista enviada quando o cliente pede um evento e não diz a unidade.' },
   evento_pergunta_data: { titulo: 'Perguntar a data do evento', quando: 'Falta a data do evento.' },
   evento_pergunta_convidados: { titulo: 'Perguntar quantos convidados', quando: 'Falta o número de convidados.' },
@@ -61,7 +62,7 @@ const LINHAS: Partial<Record<ChaveModelo, (nome: string, endereco: string) => st
 
 // {quando} no início da frase ("Domingo (11/10), a unidade…") ou no meio ("Anotado: …, domingo (11/10)")
 const QUANDO_INICIO: readonly ChaveModelo[] = ['horario_dia', 'horario_dia_fechado', 'horario_varias', 'aviso_unidade_fechada', 'aviso_horario_fora']
-const QUANDO_MEIO: readonly ChaveModelo[] = ['aviso_registrado', 'aviso_atualizado', 'aviso_cancelado', 'evento_registrado', 'evento_cancelado']
+const QUANDO_MEIO: readonly ChaveModelo[] = ['aviso_registrado', 'aviso_atualizado', 'aviso_cancelado', 'evento_registrado', 'evento_ja_registrado', 'evento_cancelado']
 
 export function exemploDeVariaveis(chave: ChaveModelo, u: UnidadeExemplo | null): Record<string, string> {
   const nome = u?.nome ?? 'Asa Sul'

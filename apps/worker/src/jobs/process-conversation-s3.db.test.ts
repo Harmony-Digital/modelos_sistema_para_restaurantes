@@ -296,6 +296,29 @@ describe('S3 no worker', () => {
     expect(await pedidos()).toMatchObject([{ tipo: 'outro', tipoTexto: 'formatura', spaceId: espaco['Salão'] }])
   })
 
+  it('pedido já registrado: "quero o salão" e o pedido repetido não duplicam (1 linha só)', async () => {
+    const { restaurantId } = await setup()
+    const conv = await receive(restaurantId, 'quero fazer um aniversário pra 40 pessoas na asa sul dia 20/10')
+    const { llm } = fakeLlm([
+      triagem(ev(COMPLETO)),
+      triagem(ev({ unidade: 'asa sul', data: '20/10', espaco: 'salão' })),
+      triagem(ev(COMPLETO)),
+    ])
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    expect(ultimoTexto(wa)).toMatch(/^Recebemos seu pedido/)
+    const ja = /^Já temos seu pedido de aniversário para 40 convidados na unidade Asa Sul, .*\. Nossa equipe vai entrar em contato para confirmar\.$/
+    await receive(restaurantId, 'quero o salão')
+    await processConversation(deps(llm, wa), conv)
+    expect(ultimoTexto(wa)).toMatch(ja)
+    await receive(restaurantId, 'quero fazer um aniversário pra 40 pessoas na asa sul dia 20/10')
+    await processConversation(deps(llm, wa), conv)
+    expect(ultimoTexto(wa)).toMatch(ja)
+    expect(ultimoTexto(wa)).not.toMatch(/confirmad|reservad/i)
+    expect(await pedidos()).toHaveLength(1)
+    expect((await conversa(conv)).pendente).toBeNull()
+  })
+
   it('espaço citado que comporta ⇒ grava o space_id', async () => {
     const { restaurantId, espaco } = await setup()
     const conv = await receive(restaurantId, 'aniversário pra 40 no salão da asa sul dia 20/10')

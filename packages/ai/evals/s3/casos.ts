@@ -111,6 +111,10 @@ export const CASOS: Caso[] = [
     { contem: ['na unidade Asa Sul, sábado (10/10)', 'na unidade Asa Norte, sábado (17/10)'], acoes: [registrar(), registrar({ unitId: AN, data: '2026-10-17', convidados: 30 })] }),
   c('p20', 'daqui a mais de um ano', [completo({ data: '10/10/2027' })],
     { contem: ['Consigo registrar pedidos de evento de amanhã até'], pergunta: 'data' }),
+  c('p22', 'repete o pedido que já fez (sábado na asa sul)', [completo()],
+    { texto: `Já temos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). ${FIM}` }, { pedidos: [SAB_PED] }),
+  c('p23', 'quero o salão principal (pedido de sábado já em contato)', [ped({ unidade: 'asa sul', data: 'sábado', espaco: 'salão principal' })],
+    { texto: `Já temos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). ${FIM}` }, { pedidos: [pedidoAtivo('p-sab', AS, '2026-10-10', 'em_contato')] }),
 
   // ---- coleta guiada: um campo por vez (unidade → data → convidados → tipo)
   c('c01', 'quero fazer uma festa', [ped()],

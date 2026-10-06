@@ -112,6 +112,19 @@ export function resolverItensS3(
       return
     }
     const data = d.data
+    // o cliente já tem pedido em andamento nesse dia e unidade ("quero o salão", pedido repetido): não duplica
+    const existente = ativos.find((p) => p.unitId === u.id && p.data === data && (p.status === 'novo' || p.status === 'em_contato'))
+    if (existente) {
+      validos++
+      respondidos++
+      trechos.push(m('evento_ja_registrado', {
+        tipo: rotuloTipoEvento(existente.tipo, null),
+        convidados: textoConvidados(existente.convidados),
+        unidade: u.nome,
+        quando: minuscula(rotulo(data)),
+      }))
+      return
+    }
     const comData: ItemExtraido = { ...base, data }
     const n = item.convidados
     if (n === null) {

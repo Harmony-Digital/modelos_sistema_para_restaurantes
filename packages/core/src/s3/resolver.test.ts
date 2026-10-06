@@ -123,6 +123,34 @@ describe('resolverS3 — pedido completo', () => {
   })
 })
 
+describe('resolverS3 — pedido já registrado', () => {
+  const JA = 'Já temos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.'
+
+  it.each(['novo', 'em_contato'] as const)('pedido %s na mesma unidade e data: não registra de novo', (status) => {
+    const r = resolverS3([completo({ espaco: 'salão principal', convidados: 50 })], CONTEXTO, ESPACOS, SEG_14H, [pedido('p1', 'u-asa-sul', '2026-10-10', status)])
+    expect(r.acoes).toEqual([])
+    expect(r.texto).toBe(JA)
+    expect(r.perguntar).toBeNull()
+    expect([r.validos, r.respondidos]).toEqual([1, 1])
+  })
+
+  it('basta unidade e data: não volta a perguntar convidados nem tipo', () => {
+    const r = resolverS3([ped({ unidade: 'asa sul', data: 'sábado', espaco: 'salão' })], CONTEXTO, ESPACOS, SEG_14H, [pedido('p1', 'u-asa-sul', '2026-10-10')])
+    expect(r.acoes).toEqual([])
+    expect(r.texto).toBe(JA)
+  })
+
+  it('outra unidade ou outra data: registra normalmente', () => {
+    expect(resolverS3([completo({ espaco: '*' })], CONTEXTO, ESPACOS, SEG_14H, [pedido('p1', 'u-asa-norte', '2026-10-10')]).acoes).toEqual([registrar()])
+    expect(resolverS3([completo({ espaco: '*' })], CONTEXTO, ESPACOS, SEG_14H, [pedido('p1', 'u-asa-sul', '2026-10-11')]).acoes).toEqual([registrar()])
+  })
+
+  it('o texto nunca diz "confirmado"/"reservado"', () => {
+    const r = resolverS3([completo()], CONTEXTO, ESPACOS, SEG_14H, [pedido('p1', 'u-asa-sul', '2026-10-10')])
+    expect(r.texto?.toLowerCase()).not.toMatch(/reservad|confirmad/)
+  })
+})
+
 describe('resolverS3 — coleta guiada (um campo por vez: unidade → data → convidados → tipo)', () => {
   it('sem nada: pergunta a unidade pela lista', () => {
     const item = ped()

@@ -57,6 +57,10 @@ export const MODELOS_S1 = {
     texto: 'Recebemos seu pedido de {tipo} para {convidados} na unidade {unidade}, {quando}{espaco}. Nossa equipe vai entrar em contato para confirmar.',
     variaveis: ['tipo', 'convidados', 'unidade', 'quando', 'espaco'],
   },
+  evento_ja_registrado: {
+    texto: 'Já temos seu pedido de {tipo} para {convidados} na unidade {unidade}, {quando}. Nossa equipe vai entrar em contato para confirmar.',
+    variaveis: ['tipo', 'convidados', 'unidade', 'quando'],
+  },
   evento_pergunta_unidade: { texto: 'Para qual unidade é o evento? Toque em "Ver unidades" e escolha.', variaveis: [] },
   evento_pergunta_data: { texto: 'Para qual data é o evento?', variaveis: [] },
   evento_pergunta_convidados: { texto: 'Para quantos convidados?', variaveis: [] },
