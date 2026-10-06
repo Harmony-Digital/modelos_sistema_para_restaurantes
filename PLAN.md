@@ -129,6 +129,7 @@ Spec aprovada: [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-
 - [ ] Teste de estresse do teto · Homologação
 
 ## Etapa 09 — Go-live
+- [ ] Remover a chave de desenvolvimento `OPENROUTER_DEV_SEM_ZDR` (modelos grátis sem ZDR, criada em 06/10/2026 a pedido do dono) e confirmar que toda chamada envia `data_collection: deny` + `zdr: true`
 - [ ] Revisão de segurança completa e teste de carga (inclui CSP com nonce via `proxy.ts`)
 - [ ] Política, LIA e RIPD revisados pelo jurídico; runbook de incidente
 - [ ] Número oficial em produção; Guardrail OpenRouter em produção
