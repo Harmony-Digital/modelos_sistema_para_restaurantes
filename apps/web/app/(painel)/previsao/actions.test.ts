@@ -77,6 +77,12 @@ describe('previsão: actions', () => {
     expect(await criarAvisoAction(form({ horario: '22:00' }))).toEqual({ ok: true, data: { id: 'a1' } })
   })
 
+  it('painel é estrito: 20:00 às 20h05 de hoje já passou', async () => {
+    vi.setSystemTime(new Date('2026-10-06T23:05:00Z')) // terça 06/10 20:05 em Brasília
+    expect(await criarAvisoAction(form({ horario: '20:00' }))).toEqual({ ok: false, fieldErrors: { horario: 'Esse horário de hoje já passou.' } })
+    expect(criarAvisoPainel).not.toHaveBeenCalled()
+  })
+
   it('erro do banco vira mensagem do painel', async () => {
     criarAvisoPainel.mockResolvedValue({ ok: false, erro: 'sem_permissao' })
     expect(await criarAvisoAction(form())).toEqual({ ok: false, formError: 'Você não tem permissão para fazer essa alteração.' })

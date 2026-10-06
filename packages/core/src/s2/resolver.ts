@@ -14,13 +14,16 @@ import type { AcaoS2, AvisoAtivoS2, PerguntaPessoas, ResultadoS2 } from './tipos
 
 /** Avisos só de hoje até hoje + 30 dias (fuso do restaurante). */
 export const DIAS_AVISO = 30
+/** No WhatsApp, "umas 20h" mandado às 20h05 (ou respondido depois na lista/pessoas) ainda vale. */
+export const TOLERANCIA_PASSADO_IA_MIN = 60
 
 export type ValidacaoAgenda = { ok: true } | { ok: false; motivo: 'fechada' | 'horario_fora' | 'horario_passado'; turnos?: Turno[] }
 
 /**
  * A unidade abre na data e `hhmm` (se houver) cai num turno do dia — turno que cruza a meia-noite
  * vale até o fechamento na madrugada. Com `agora` (data e minuto no fuso do restaurante), recusa
- * também o horário de hoje que já passou. Compartilhada com o formulário do painel.
+ * também o horário de hoje que passou há mais de `toleranciaMin` minutos (IA: 60; painel: 0).
+ * Compartilhada com o formulário do painel.
  */
 export function validarAvisoNaAgenda(
   unidade: AgendaUnidade,
@@ -29,12 +32,13 @@ export function validarAvisoNaAgenda(
   politica: PoliticaFeriado,
   feriados: ReadonlyMap<DataIso, string>,
   agora?: { data: DataIso; minuto: number },
+  toleranciaMin = 0,
 ): ValidacaoAgenda {
   const dia = horarioDoDia(unidade, data, politica, feriados)
   const min = hhmm === null ? null : minutosDe(hhmm)
   // a madrugada de um turno que cruza a meia-noite ainda está por vir
   const passou = (turnos: readonly Turno[]) =>
-    !!agora && min !== null && data === agora.data && min < agora.minuto
+    !!agora && min !== null && data === agora.data && min < agora.minuto - toleranciaMin
     && !turnos.some((t) => cruzaMeiaNoite(t) && min < minutosDe(t.fecha))
   const PASSOU = { ok: false, motivo: 'horario_passado' } as const
   // sem horário cadastrado não dá para afirmar que está fechada: não bloqueia
@@ -91,6 +95,8 @@ export function resolverItensS2(
     // "na verdade seremos 6": sem unidade nem dia e com um único aviso ativo, é atualização desse aviso
     const unico = !escolhida && !entrada.unidade && !entrada.data && ativos.length === 1 ? ativos[0]! : null
     const doUnico = unico ? (unidades.find((x) => x.id === unico.unitId) ?? null) : null
+    // horário herdado do aviso já foi aceito antes: não é recusado agora por "já passou"
+    const herdado = !!doUnico && !entrada.horario && !!unico?.horarioAprox
     const item = doUnico && unico
       ? { ...entrada, unidade: doUnico.nome, data: unico.data, horario: entrada.horario ?? unico.horarioAprox }
       : entrada
@@ -130,7 +136,7 @@ export function resolverItensS2(
     }
     const h = normalizarHorario(item.horario)
     // agenda antes de perguntar pessoas: não pergunta para depois dizer que está fechada
-    const v = validarAvisoNaAgenda(u, data, h.hhmm, ctx.politicaFeriado, feriados, local)
+    const v = validarAvisoNaAgenda(u, data, h.hhmm, ctx.politicaFeriado, feriados, herdado ? undefined : local, TOLERANCIA_PASSADO_IA_MIN)
     if (!v.ok) {
       validos++
       trechos.push(

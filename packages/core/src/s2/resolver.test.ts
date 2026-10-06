@@ -157,6 +157,37 @@ describe('resolverS2 — registrar', () => {
     expect(resolverS2([reg({ unidade: 'asa sul', pessoas: 2, horario: '1h30' })], CONTEXTO, SAB_2350, []).acoes).toHaveLength(1)
   })
 
+  it('WhatsApp tolera 60 min: "umas 20h" às 20h05 registra; às 21h05 recusa', () => {
+    const as2005 = new Date('2026-10-05T20:05:00-03:00')
+    const as2105 = new Date('2026-10-05T21:05:00-03:00')
+    const item = reg({ unidade: 'asa norte', pessoas: 2, horario: 'umas 20h' })
+    expect(resolverS2([item], CONTEXTO, as2005, []).acoes).toEqual([
+      { tipo: 'registrar', unitId: 'u-asa-norte', data: '2026-10-05', pessoas: 2, horarioAprox: '20:00', atualiza: false },
+    ])
+    expect(resolverS2([item], CONTEXTO, as2105, []).texto).toBe('Esse horário de hoje já passou. Se quiser, mande o aviso de novo com outro horário ou dia.')
+    // pendente de pessoas respondido 5 min depois do horário: registra
+    const r = resolverS2([reg({ unidade: 'asa norte', data: 'hoje', horario: '20h' })], CONTEXTO, new Date('2026-10-05T19:58:00-03:00'), [])
+    expect(r.perguntarPessoas).not.toBeNull()
+    const depois = resolverS2([{ ...r.perguntarPessoas!.item, pessoas: 3 }], CONTEXTO, as2005, [], r.perguntarPessoas!.unitId)
+    expect(depois.acoes).toHaveLength(1)
+    // pendente de lista escolhido 5 min depois do horário: registra
+    const lista = resolverS2([reg({ data: 'hoje', pessoas: 2, horario: '20h' })], CONTEXTO, new Date('2026-10-05T19:58:00-03:00'), [])
+    expect(lista.pendenteUnidade).toHaveLength(1)
+    expect(resolverS2(lista.pendenteUnidade, CONTEXTO, as2005, [], 'u-asa-norte').acoes).toHaveLength(1)
+  })
+
+  it('aviso único com horário herdado: não recusa por "já passou" quando o cliente não citou horário', () => {
+    const avisos: AvisoAtivoS2[] = [{ id: 'a1', unitId: 'u-asa-norte', data: '2026-10-05', pessoas: 4, horarioAprox: '20:00' }]
+    const as2130 = new Date('2026-10-05T21:30:00-03:00')
+    const r = resolverS2([reg({ pessoas: 6 })], CONTEXTO, as2130, avisos)
+    expect(r.texto).toBe('Atualizei seu aviso: Asa Norte, hoje, 6 pessoas, por volta das 20h.')
+    expect(r.acoes).toEqual([{ tipo: 'registrar', unitId: 'u-asa-norte', data: '2026-10-05', pessoas: 6, horarioAprox: '20:00', atualiza: true }])
+    expect(resolverS2([reg({ pessoas: 6 })], CONTEXTO, new Date('2026-10-05T20:30:00-03:00'), avisos).texto)
+      .toBe('Atualizei seu aviso: Asa Norte, hoje, 6 pessoas, por volta das 20h.')
+    // horário dito pelo cliente continua checado
+    expect(resolverS2([reg({ pessoas: 6, horario: '19h' })], CONTEXTO, as2130, avisos).acoes).toEqual([])
+  })
+
   it('atualiza quando já há aviso ativo do mesmo cliente/unidade/dia', () => {
     const avisos: AvisoAtivoS2[] = [{ id: 'a1', unitId: 'u-asa-sul', data: '2026-10-10', pessoas: 2, horarioAprox: null }]
     const r = resolverS2([reg({ unidade: 'asa sul', data: 'sábado', pessoas: 4, horario: '20h' })], CONTEXTO, SEG_14H, avisos)
@@ -298,6 +329,9 @@ describe('validarAvisoNaAgenda', () => {
     expect(validarAvisoNaAgenda(ASA_SUL, '2026-10-06', '20:00', 'normal', feriados, agora)).toEqual({ ok: true })
     expect(validarAvisoNaAgenda(ASA_SUL, '2026-10-07', '19:00', 'normal', feriados, agora)).toEqual({ ok: true })
     expect(validarAvisoNaAgenda(ASA_SUL, '2026-10-06', null, 'normal', feriados, agora)).toEqual({ ok: true })
+    // tolerância explícita (a IA usa 60 min; o painel, 0)
+    expect(validarAvisoNaAgenda(ASA_SUL, '2026-10-06', '19:00', 'normal', feriados, agora, 60)).toEqual({ ok: true })
+    expect(validarAvisoNaAgenda(ASA_SUL, '2026-10-06', '18:59', 'normal', feriados, agora, 60)).toEqual({ ok: false, motivo: 'horario_passado' })
     // fora do turno continua sendo "fora do turno"
     expect(validarAvisoNaAgenda(ASA_SUL, '2026-10-06', '16:00', 'normal', feriados, agora)).toMatchObject({ motivo: 'horario_fora' })
   })
