@@ -55,6 +55,15 @@ describe('Conversa', () => {
     expect(toast.success).toHaveBeenCalledWith('Conversa assumida. Agora é com você.')
   })
 
+  it('humano sem atendente (usuário removido): livre para assumir sem "mesmo assim"', async () => {
+    montar({ estado: 'humano', atendente: null, atendenteId: null })
+    expect(screen.queryByText(/está atendendo esta conversa/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Assumir mesmo assim' })).toBeNull()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Assumir' }))
+    expect(acoes.assumir).toHaveBeenCalledWith(ID, { forcar: false })
+    expect(screen.getByRole('button', { name: 'Devolver à IA' })).toBeInTheDocument()
+  })
+
   it('assumir perdido na corrida: mostra quem está atendendo', async () => {
     acoes.assumir.mockResolvedValue({ ok: false, formError: 'Bia já está atendendo esta conversa.' })
     montar()

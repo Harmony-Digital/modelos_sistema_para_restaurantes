@@ -88,8 +88,10 @@ export function Conversa(props: {
   const c = props.conversa
   const gestao = props.papel !== 'atendente'
   const comigo = c.estado === 'humano' && c.atendenteId === props.meuId
-  const comOutro = c.estado === 'humano' && !comigo
-  const podeAssumir = c.estado === 'ia' || c.estado === 'aguardando_humano'
+  // `humano` sem atendente (usuário removido): livre, como na DAL
+  const semAtendente = c.estado === 'humano' && c.atendenteId === null
+  const comOutro = c.estado === 'humano' && !comigo && !semAtendente
+  const podeAssumir = c.estado === 'ia' || c.estado === 'aguardando_humano' || semAtendente
   const podeMudar = !comOutro || gestao
   const [andando, setAndando] = useState(false)
   const [confirmarForcar, setConfirmarForcar] = useState(false)

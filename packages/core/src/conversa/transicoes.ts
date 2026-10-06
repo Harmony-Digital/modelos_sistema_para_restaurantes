@@ -8,7 +8,8 @@ export type HandoffMotivo = (typeof HANDOFF_MOTIVOS)[number]
 
 /**
  * Estados que cada estado pode virar.
- * - assumir (`→ humano`): de `ia` ou `aguardando_humano`; de `humano` (outra pessoa) só dono/gerente com `forcar` — a DAL confere.
+ * - assumir (`→ humano`): de `ia` ou `aguardando_humano` (ou `humano` sem atendente: usuário removido); de `humano` (outra
+ *   pessoa) só dono/gerente com `forcar` — a DAL confere.
  * - handoff (`→ aguardando_humano`): só da IA.
  * - devolver à IA (`→ ia`): de `aguardando_humano` ou `humano`.
  * - encerrar: de qualquer estado não encerrado. `encerrada` é final: a próxima mensagem do cliente abre conversa nova.

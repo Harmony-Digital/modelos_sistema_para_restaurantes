@@ -248,13 +248,18 @@ export function assumirConversa(
     if (!ctx) return erro('nao_encontrada')
     const forcar = !!p.forcar && gestao(ctx)
     await comoApp(tx)
-    const [r] = await tx.execute<{ restaurant_id: string; aguardando_desde: string | null; simulada: boolean; estado_antes: string }>(sql`
+    // `humano` sem atendente (usuário removido: FK `on delete set null`) é livre para qualquer um com acesso
+    const [r] = await tx.execute<{
+      restaurant_id: string; aguardando_desde: string | null; simulada: boolean; estado_antes: string; tinha_atendente: boolean
+    }>(sql`
       update public.conversations c set estado = 'humano', atendente_id = ${ctx.eu}::uuid
         from (select id, aguardando_desde, simulada, estado, atendente_id from public.conversations where id = ${id}::uuid) o
        where c.id = o.id and ${visivel(ctx)}
          and (c.estado in ('ia', 'aguardando_humano')
+              or (c.estado = 'humano' and c.atendente_id is null)
               or (${forcar}::boolean and c.estado = 'humano' and c.atendente_id is distinct from ${ctx.eu}::uuid))
-      returning c.restaurant_id, to_jsonb(o.aguardando_desde) #>> '{}' as aguardando_desde, o.simulada, o.estado::text as estado_antes`)
+      returning c.restaurant_id, to_jsonb(o.aguardando_desde) #>> '{}' as aguardando_desde, o.simulada, o.estado::text as estado_antes,
+                o.atendente_id is not null as tinha_atendente`)
     if (r) {
       await tx.execute(sql`
         update public.messages set status_envio = 'cancelado'
@@ -262,7 +267,7 @@ export function assumirConversa(
       await comoUsuario(tx)
       await registrarAuditoria(tx, claims, {
         restaurantId: r.restaurant_id, acao: 'conversa.assumida', entidade: 'conversation', entidadeId: id,
-        diff: { aguardandoDesde: r.aguardando_desde, simulada: r.simulada, estadoAnterior: r.estado_antes, ...(r.estado_antes === 'humano' && { forcado: true }) },
+        diff: { aguardandoDesde: r.aguardando_desde, simulada: r.simulada, estadoAnterior: r.estado_antes, ...(r.estado_antes === 'humano' && r.tinha_atendente && { forcado: true }) },
       })
       return { ok: true as const }
     }
@@ -393,7 +398,8 @@ function transicionar(
     const [r] = await tx.execute<{ restaurant_id: string; simulada: boolean }>(sql`
       update public.conversations c set ${t.set}
        where c.id = ${id}::uuid and ${visivel(ctx)}
-         and (${t.origem} or (c.estado = 'humano' and (c.atendente_id = ${ctx.eu}::uuid or ${gestao(ctx)}::boolean)))
+         and (${t.origem}
+              or (c.estado = 'humano' and (c.atendente_id is null or c.atendente_id = ${ctx.eu}::uuid or ${gestao(ctx)}::boolean)))
       returning c.restaurant_id, c.simulada`)
     if (r && t.depois) await tx.execute(t.depois)
     await comoUsuario(tx)

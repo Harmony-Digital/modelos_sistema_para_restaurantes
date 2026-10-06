@@ -218,6 +218,24 @@ describe('assumirConversa', () => {
     expect(a!.diff).toMatchObject({ forcado: true })
   })
 
+  it('humano sem atendente (usuário removido) é livre: qualquer um com acesso assume sem forçar, devolve ou encerra', async () => {
+    const c = await cenario()
+    const id = await conversa({ restaurantId: c.restaurantId, unitId: c.unitId, estado: 'humano', atendenteId: null })
+    expect(await assumirConversa(db, as(c.atendente, 'aal1'), id, {})).toEqual({ ok: true })
+    const [conv] = await db.select().from(conversations).where(eq(conversations.id, id))
+    expect(conv).toMatchObject({ estado: 'humano', atendenteId: c.atendente })
+    const [a] = await db.select().from(auditLog)
+    expect(a!.diff).toMatchObject({ estadoAnterior: 'humano' })
+    expect(a!.diff).not.toHaveProperty('forcado')
+    const outra = await conversa({ restaurantId: c.restaurantId, unitId: c.unitId, estado: 'humano', atendenteId: null })
+    expect(await devolverConversa(db, as(c.atendente2, 'aal1'), outra)).toEqual({ ok: true })
+    const terceira = await conversa({ restaurantId: c.restaurantId, unitId: c.unitId, estado: 'humano', atendenteId: null })
+    expect(await encerrarConversa(db, as(c.atendente2, 'aal1'), terceira)).toEqual({ ok: true })
+    // sem acesso à unidade continua sem acesso
+    const doNorte = await conversa({ restaurantId: c.restaurantId, unitId: c.u2, estado: 'humano', atendenteId: null })
+    expect(await assumirConversa(db, as(c.atendente, 'aal1'), doNorte, {})).toEqual({ ok: false, erro: 'nao_encontrada' })
+  })
+
   it('encerrada não pode ser assumida', async () => {
     const c = await cenario()
     const id = await conversa({ restaurantId: c.restaurantId, unitId: c.unitId, estado: 'encerrada' })
