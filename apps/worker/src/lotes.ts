@@ -1,4 +1,4 @@
-import { PDFDocument } from 'pdf-lib'
+import { EncryptedPDFError, PDFDocument } from 'pdf-lib'
 import type { ConteudoUsuario } from '@atd/ai'
 
 /** Páginas de PDF por lote (spec Etapa 07 §3): uma chamada ao modelo por lote. */
@@ -59,6 +59,10 @@ export function dividirLote(lote: Lote): [Lote, Lote] | null {
   const meio = Math.ceil(lote.partes.length / 2)
   return [{ partes: lote.partes.slice(0, meio) }, { partes: lote.partes.slice(meio) }]
 }
+
+/** O erro de `contarPaginas`/`montarLote` é de PDF protegido por senha (cifrado). */
+export const pdfProtegido = (err: unknown) =>
+  err instanceof EncryptedPDFError || (err instanceof Error && /is encrypted/.test(err.message))
 
 /** Total de páginas do PDF (pdf-lib). PDF inválido ou cifrado lança. */
 export async function contarPaginas(bytes: Uint8Array): Promise<number> {

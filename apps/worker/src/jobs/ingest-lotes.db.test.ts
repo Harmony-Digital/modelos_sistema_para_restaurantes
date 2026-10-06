@@ -201,8 +201,9 @@ describe('job document.ingest — importação em lotes (Etapa 07)', () => {
     expect(doc).toMatchObject({ status: 'processando', loteAtual: 4, lotesTotal: 7 })
     expect((doc.draftParcial as { rascunho: { categorias: { itens: { nome: string }[] }[] } }).rascunho.categorias[0]!.itens.map((i) => i.nome))
       .toEqual(['Picanha', 'Arroz'])
-    // reserva do morto devolvida; só o lote 4 foi cobrado
-    expect((await contadores(restaurantId)).map((c) => [c.reservado, c.gasto])).toEqual([['0.000000', '0.004000'], ['0.000000', '0.004000']])
+    // a chamada do morto pode ter sido cobrada: a reserva dele é liquidada pela estimativa (0,10); o lote 4 relido é
+    // cobrado pelo custo real; os lotes 1–3 não são relidos nem cobrados de novo
+    expect((await contadores(restaurantId)).map((c) => [c.reservado, c.gasto])).toEqual([['0.000000', '0.104000'], ['0.000000', '0.104000']])
     expect(await runs()).toHaveLength(1)
   })
 
@@ -329,7 +330,7 @@ describe('job document.ingest — importação em lotes (Etapa 07)', () => {
     expect(chamadas).toHaveLength(0)
     expect(passos).toEqual([])
     expect((await contadores(restaurantId)).map((c) => c.reservado)).toEqual(['0.500000', '0.500000'])
-    // concessão vencida (o leitor morreu): retoma, devolve a reserva dele e lê
+    // concessão vencida (o leitor morreu): retoma, liquida a reserva dele pela estimativa e lê
     await db.update(schema.knowledgeDocuments).set({ loteLendoDesde: dsql`now() - interval '8 minutes'` })
       .where(eq(schema.knowledgeDocuments.id, id))
     const lido = fakeLlm([{ fatos: [{ tema: 'Wi-Fi', texto: 'Senha na mesa', exemplos: [], unidade: null }] }])
@@ -352,6 +353,50 @@ describe('job document.ingest — importação em lotes (Etapa 07)', () => {
     expect(await importacao(id)).toMatchObject({ status: 'rascunho', draft: { fatos: [] } })
     expect(await db.select().from(schema.auditLog).where(eq(schema.auditLog.entidadeId, id))).toEqual([])
     expect(await runs()).toHaveLength(1) // a chamada paga fica registrada
+  })
+
+  it('m4: "só preços" de lote único com saída cortada não sugere o CSV', async () => {
+    const { id, objetos } = await setup({ arquivos: [{ bytes: png(1), mime: 'image/png' }], modo: 'so_precos' })
+    const { llm } = fakeLlm(['truncada'])
+    expect(await ingestDocument(deps(llm, objetos).d, id)).toBe('erro')
+    const { erro } = await importacao(id)
+    expect(erro).toMatch(/grande demais/i)
+    expect(erro).not.toMatch(/CSV/)
+  })
+
+  it('m5: todos os lotes salvos sem concluir: conclui com o parcial, acerta o progresso e audita (só no lote corrente)', async () => {
+    const { id, objetos } = await setup({ arquivos: [{ bytes: png(1), mime: 'image/png' }] })
+    const parcial = { rascunho: parseLeituraCardapio(cardapio([['Picanha', 8990]])), metade: null }
+    await db.update(schema.knowledgeDocuments).set({ status: 'processando', loteAtual: 1, lotesTotal: 1, draftParcial: parcial })
+      .where(eq(schema.knowledgeDocuments.id, id))
+    const { llm, chamadas } = fakeLlm([])
+    expect(await ingestDocument(deps(llm, objetos).d, id)).toBe('rascunho')
+    expect(chamadas).toHaveLength(0)
+    expect(await importacao(id)).toMatchObject({ status: 'rascunho', loteAtual: 1, lotesTotal: 1, loteLendoDesde: null })
+    const audit = await db.select().from(schema.auditLog).where(eq(schema.auditLog.entidadeId, id))
+    expect(audit.map((a) => a.acao)).toEqual(['importacao.lida'])
+  })
+
+  it('Minor 7: PDF protegido por senha e PDF com páginas demais recebem mensagens próprias', async () => {
+    const cifrado = new TextEncoder().encode([
+      '%PDF-1.4',
+      '1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj',
+      '2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj',
+      '3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >> endobj',
+      '4 0 obj << /Filter /Standard /V 1 /R 2 /O (x) /U (y) /P -4 >> endobj',
+      'trailer << /Root 1 0 R /Encrypt 4 0 R /Size 5 >>',
+      '%%EOF',
+    ].join('\n'))
+    const a = await setup({ arquivos: [{ bytes: cifrado, mime: 'application/pdf' }] })
+    expect(await ingestDocument(deps(fakeLlm([]).llm, a.objetos).d, a.id)).toBe('erro')
+    expect((await importacao(a.id)).erro).toMatch(/senha/i)
+
+    // mais de 5000 páginas: recusa no passo da contagem pelo teto de páginas (não "não consegui abrir"), sem IA
+    const enorme = await PDFDocument.create()
+    for (let i = 0; i < 5001; i++) enorme.addPage([100, 100])
+    const b = await setup({ arquivos: [{ bytes: await enorme.save(), mime: 'application/pdf' }] })
+    expect(await ingestDocument(deps(fakeLlm([]).llm, b.objetos).d, b.id)).toBe('erro')
+    expect((await importacao(b.id)).erro).toMatch(/até 200 páginas/i)
   })
 
   describe('com o role de produção (worker_app)', () => {

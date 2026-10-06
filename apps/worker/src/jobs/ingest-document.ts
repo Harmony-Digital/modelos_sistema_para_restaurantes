@@ -13,7 +13,7 @@ import {
   type RascunhoHorarios, type RascunhoInformacoes, type RascunhoSoPrecos,
 } from '@atd/core/importacao'
 import type { Logger } from '../logger.ts'
-import { contarPaginas, dividirLote, montarLote, planejarLotes, type Lote } from '../lotes.ts'
+import { contarPaginas, dividirLote, montarLote, pdfProtegido, planejarLotes, type Lote } from '../lotes.ts'
 import { mimeDosBytes, type Storage } from '../storage.ts'
 
 const { aiRuns, auditLog, knowledgeDocumentFiles, knowledgeDocuments, restaurants } = schema
@@ -40,6 +40,8 @@ export type IngestOutcome = 'ignorado' | 'rascunho' | 'erro' | 'lote'
 export const INGESTAO_RESERVA_USD = '0.50'
 /** Teto de lotes por importação (200 páginas de PDF): cada lote é um job de até 300 s e uma reserva própria. */
 export const MAX_LOTES_IMPORTACAO = 40
+/** Acima disso o PDF nem é planejado (o teto de lotes recusaria de qualquer jeito). */
+const MAX_PAGINAS_PDF = 5000
 
 // mensagens do painel: amigáveis, sem detalhe técnico nem conteúdo do documento
 export const ERRO_SEM_MODELO = 'Importação por IA não configurada. Envie um CSV.'
@@ -51,6 +53,7 @@ export const ERRO_TIPO = 'O arquivo enviado não é um PDF nem uma imagem válid
 export const ERRO_CONTEUDO = 'O arquivo no armazenamento não confere com o enviado. Envie de novo.'
 export const ERRO_GRANDE_DEMAIS = 'Cardápio grande demais para ler de uma vez: envie em partes (PDF menor ou fotos) ou use o CSV.'
 export const ERRO_PDF = 'Não consegui abrir um dos PDFs enviados. Envie de novo ou use fotos.'
+export const ERRO_PDF_SENHA = 'Um dos PDFs está protegido por senha: salve uma cópia sem senha ou envie fotos.'
 export const ERRO_LOTE_GRANDE_DEMAIS = 'Uma parte dos arquivos é grande demais para ler de uma vez: envie fotos ou PDFs com menos conteúdo por página.'
 export const ERRO_LOTES_DEMAIS = `Arquivos grandes demais: envie até ${MAX_LOTES_IMPORTACAO * 5} páginas por importação.`
 
@@ -302,9 +305,10 @@ async function lerLote(deps: IngestDeps, importacaoId: string, estado: EstadoLot
         .from(restaurants)
         .where(eq(restaurants.id, restaurantId))
       if (estado.retomada) {
-        // o processo anterior morreu no meio do lote: devolve a reserva aberta; os lotes salvos não são relidos
-        const n = await liberarReservasPendentes(db, { restaurantId, ref, timeZone: r!.timezone })
-        deps.log.warn({ importacaoId, lote: estado.loteAtual, reservasLiberadas: n }, 'importação parada em processando; retomando do lote atual')
+        // o processo anterior morreu no meio do lote, talvez depois de a IA cobrar a chamada (o custo real se perdeu):
+        // a reserva aberta é liquidada pela estimativa; o lote é relido e os já salvos, não
+        const n = await liberarReservasPendentes(db, { restaurantId, ref, timeZone: r!.timezone, liquidarUsd: INGESTAO_BUDGET_ESTIMATE_USD })
+        deps.log.warn({ importacaoId, lote: estado.loteAtual, reservasLiquidadas: n }, 'importação parada em processando; retomando do lote atual')
       }
       const modelos = deps.ingestModels ?? []
       if (modelos.length === 0) return erro(ERRO_SEM_MODELO)
@@ -320,10 +324,12 @@ async function lerLote(deps: IngestDeps, importacaoId: string, estado: EstadoLot
           try {
             paginas = await contarPaginas(bytes)
           } catch (err) {
-            deps.log.error({ err, importacaoId, ordem: a.ordem }, 'PDF da importação não abriu')
-            return erro(ERRO_PDF)
+            const senha = pdfProtegido(err)
+            deps.log.error({ err, importacaoId, ordem: a.ordem, senha }, 'PDF da importação não abriu')
+            return erro(senha ? ERRO_PDF_SENHA : ERRO_PDF)
           }
-          if (paginas < 1 || paginas > 5000) return erro(ERRO_PDF)
+          if (paginas < 1) return erro(ERRO_PDF)
+          if (paginas > MAX_PAGINAS_PDF) return erro(ERRO_LOTES_DEMAIS)
           await db.update(knowledgeDocumentFiles).set({ paginas })
             .where(and(eq(knowledgeDocumentFiles.importacaoId, importacaoId), eq(knowledgeDocumentFiles.ordem, a.ordem)))
           arquivos[arquivos.indexOf(a)] = { ...a, paginas }
@@ -344,10 +350,21 @@ async function lerLote(deps: IngestDeps, importacaoId: string, estado: EstadoLot
       const n = estado.loteAtual
       const lote = lotes[n]
       if (!lote) {
-        // todos os lotes salvos sem concluir (não deveria acontecer): conclui com o que foi lido
-        let status: IngestOutcome = 'erro'
+        // todos os lotes salvos sem concluir (não deveria acontecer): conclui com o que foi lido, só quem ainda tem o
+        // lote corrente (como no fim normal) e com auditoria
+        let status: IngestOutcome = 'ignorado'
         await db.transaction(async (tx) => {
-          status = await concluirIngestao(tx, importacaoId, parcial.rascunho === null ? { ok: false, erro: ERRO_RASCUNHO_INVALIDO } : { ok: true, draft: parcial.rascunho })
+          const corrente = await tx.update(knowledgeDocuments).set({ lotesTotal: lotes.length, loteLendoDesde: null })
+            .where(and(eq(knowledgeDocuments.id, importacaoId), eq(knowledgeDocuments.status, 'processando'), eq(knowledgeDocuments.loteAtual, n)))
+            .returning({ id: knowledgeDocuments.id })
+          if (corrente.length === 0) return
+          status = await concluirIngestao(tx, importacaoId, parcial.rascunho === null
+            ? { ok: false, erro: mensagemDoAlvo(ERRO_RASCUNHO_INVALIDO, estado) }
+            : { ok: true, draft: parcial.rascunho })
+          await tx.insert(auditLog).values({
+            restaurantId, atorTipo: 'ia', acao: status === 'rascunho' ? 'importacao.lida' : 'importacao.erro',
+            entidade: 'knowledge_document', entidadeId: importacaoId,
+          })
         })
         return status
       }
@@ -405,7 +422,8 @@ async function lerLote(deps: IngestDeps, importacaoId: string, estado: EstadoLot
       } else if (resultado.error === 'saida_truncada') {
         desfecho = parcial.metade === null && dividirLote(lote)
           ? { tipo: 'parcial', parcial: { rascunho: parcial.rascunho, metade: 0 }, passo: `${n}a` }
-          : { tipo: 'erro', mensagem: lotes.length === 1 && estado.alvo === 'cardapio' ? ERRO_GRANDE_DEMAIS : ERRO_LOTE_GRANDE_DEMAIS }
+          // a mensagem de lote único sugere o CSV: só o cardápio completo tem CSV
+          : { tipo: 'erro', mensagem: lotes.length === 1 && estado.alvo === 'cardapio' && estado.modo === 'completo' ? ERRO_GRANDE_DEMAIS : ERRO_LOTE_GRANDE_DEMAIS }
       } else {
         desfecho = { tipo: 'erro', mensagem: ERRO_RASCUNHO_INVALIDO }
       }
