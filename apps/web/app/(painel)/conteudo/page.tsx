@@ -165,7 +165,10 @@ async function SecaoImportar(props: {
         origem={imp.origem}
         rascunho={imp.draft}
         categoriasExistentes={cardapio.categorias.map((c) => ({ nome: c.nome, ativo: c.ativo }))}
-        itensExistentes={cardapio.itens.map((i) => ({ categoria: nomeCategoria.get(i.categoryId) ?? '', nome: i.nome }))}
+        itensExistentes={cardapio.itens.map((i) => ({
+          categoria: nomeCategoria.get(i.categoryId) ?? '', nome: i.nome, precoCentavos: i.precoCentavos, descricao: i.descricao,
+          tags: i.tags, outrosNomes: i.outrosNomes,
+        }))}
         unidades={props.unidades}
         podeAplicar={props.geral}
       />

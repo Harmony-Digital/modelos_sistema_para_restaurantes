@@ -32,7 +32,7 @@ const base = {
   origem: 'csv' as const,
   rascunho,
   categoriasExistentes: [{ nome: 'Carnes', ativo: true }, { nome: 'Bebidas', ativo: false }],
-  itensExistentes: [{ categoria: 'Carnes', nome: 'picanha' }],
+  itensExistentes: [{ categoria: 'Carnes', nome: 'picanha', precoCentavos: 5990, descricao: 'Antiga', tags: ['sem_gluten'], outrosNomes: ['pica'] }],
   unidades: [{ id: U1, nome: 'Asa Sul' }],
   podeAplicar: true,
 }
@@ -53,6 +53,45 @@ describe('RevisaoRascunho', () => {
     await user.clear(nome)
     await user.type(nome, 'PICANHA')
     expect(within(grupo('PICANHA')).getByText('Atualiza')).toBeInTheDocument()
+  })
+
+  it('item que atualiza mostra o que muda; em branco mantém o valor atual (I2)', async () => {
+    const user = userEvent.setup()
+    render(<RevisaoRascunho {...base} />)
+    const g = within(grupo('Picanha'))
+    expect(g.getByText('Muda: preço R$ 59,90 → R$ 89,90')).toBeInTheDocument()
+    expect(g.getByText('Em branco mantém o preço atual.')).toBeInTheDocument()
+    await user.clear(g.getByLabelText(/^Preço/))
+    expect(g.getByText('Nada muda: campos em branco mantêm o valor atual.')).toBeInTheDocument()
+    await user.type(g.getByLabelText(/^Descrição/), 'Nova')
+    expect(g.getByText('Muda: descrição')).toBeInTheDocument()
+    expect(within(grupo('Costela')).getByText('Em branco = preço sob consulta.')).toBeInTheDocument()
+  })
+
+  it('nome da categoria editável: juntar com a existente recalcula Novo/Atualiza e vai no rascunho (M1)', async () => {
+    const user = userEvent.setup()
+    acoes.aplicarRascunhoAction.mockResolvedValue({ ok: true, data: { criados: 0, atualizados: 1, ignorados: [] } })
+    const r = { categorias: [{ nome: 'Carnes na brasa', itens: [item()] }] }
+    render(<RevisaoRascunho {...base} rascunho={r} />)
+    expect(within(grupo('Picanha')).getByText('Novo')).toBeInTheDocument()
+    expect(screen.getByText('Categoria nova')).toBeInTheDocument()
+    const cat = screen.getByRole('combobox', { name: /^Categoria/ })
+    await user.clear(cat)
+    await user.type(cat, 'carnes')
+    expect(within(grupo('Picanha')).getByText('Atualiza')).toBeInTheDocument()
+    expect(screen.getByText('Categoria existente')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Confirmar importação' }))
+    await waitFor(() => expect(acoes.aplicarRascunhoAction).toHaveBeenCalledTimes(1))
+    expect(acoes.aplicarRascunhoAction.mock.calls[0]![1].categorias[0].nome).toBe('carnes')
+  })
+
+  it('categoria sem nome não é enviada', async () => {
+    const user = userEvent.setup()
+    render(<RevisaoRascunho {...base} />)
+    await user.clear(screen.getAllByRole('combobox', { name: /^Categoria/ })[0]!)
+    await user.click(screen.getByRole('button', { name: 'Confirmar importação' }))
+    expect(await screen.findByText('Informe a categoria')).toBeInTheDocument()
+    expect(acoes.aplicarRascunhoAction).not.toHaveBeenCalled()
   })
 
   it('confirmar uma vez com duplo clique, enviando as edições; mostra contagens e ignorados', async () => {

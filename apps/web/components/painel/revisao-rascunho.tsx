@@ -28,6 +28,15 @@ type ItemEdit = {
   incluir: boolean
 }
 type CategoriaEdit = { nome: string; itens: ItemEdit[] }
+/** Item já cadastrado (para mostrar o que a importação muda nele). */
+type ItemExistente = {
+  categoria: string
+  nome: string
+  precoCentavos: number | null
+  descricao: string | null
+  tags: string[]
+  outrosNomes: string[]
+}
 type Ignorado = { categoria: string; nome: string }
 type Resultado = { criados: number; atualizados: number; ignorados: Ignorado[] }
 
@@ -47,7 +56,7 @@ function paraEdicao(r: RascunhoCardapio): CategoriaEdit[] {
 function paraRascunho(cats: CategoriaEdit[]): RascunhoCardapio {
   return {
     categorias: cats.map((c) => ({
-      nome: c.nome,
+      nome: c.nome.trim(),
       itens: c.itens.map((i) => ({
         nome: i.nome.trim(), descricao: i.descricao.trim() || null, precoCentavos: reaisParaCentavos(i.preco),
         tags: i.tags, outrosNomes: i.outrosNomes, unidade: i.unidade, incluir: i.incluir,
@@ -67,16 +76,43 @@ function errosDoItem(i: ItemEdit): { nome?: string; descricao?: string; preco?: 
   return e
 }
 
+function erroDaCategoria(nome: string): string | undefined {
+  const n = nome.trim()
+  if (!n) return 'Informe a categoria'
+  if (n.length > LIMITES_RASCUNHO.nome) return `Use no máximo ${LIMITES_RASCUNHO.nome} caracteres`
+  return undefined
+}
+
+const mesmoConjunto = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x))
+
+/**
+ * O que confirmar muda num item existente — mesma regra da aplicação no banco: só o que o rascunho traz (descrição,
+ * etiquetas e outros nomes vazios e preço em branco mantêm o valor atual; preço de unidade não mexe no padrão).
+ */
+function mudancas(i: ItemEdit, atual: ItemExistente): string[] {
+  const m: string[] = []
+  const preco = reaisParaCentavos(i.preco)
+  if (i.unidade === null && preco !== null && preco !== atual.precoCentavos) {
+    m.push(`preço ${atual.precoCentavos === null ? 'sob consulta' : formatarCentavos(atual.precoCentavos)} → ${formatarCentavos(preco)}`)
+  }
+  const descricao = i.descricao.trim()
+  if (descricao && descricao !== (atual.descricao ?? '')) m.push('descrição')
+  if (i.tags.length && !mesmoConjunto(i.tags, atual.tags)) m.push('etiquetas')
+  if (i.outrosNomes.length && !mesmoConjunto(i.outrosNomes, atual.outrosNomes)) m.push('outros nomes')
+  return m
+}
+
 /**
  * Revisão do rascunho da importação (PRD I10: nada entra no cardápio sem esta confirmação). Cada item mostra se é
- * novo ou se atualiza um item existente (mesmo nome normalizado na mesma categoria, como faz a aplicação no banco).
+ * novo ou se atualiza um item existente (mesmo nome normalizado na mesma categoria, como faz a aplicação no banco) e,
+ * nesse caso, o que muda. O nome da categoria é editável (juntar com uma categoria já cadastrada).
  */
 export function RevisaoRascunho(props: {
   id: string
   origem: 'csv' | 'arquivo'
   rascunho: RascunhoCardapio
   categoriasExistentes: { nome: string; ativo: boolean }[]
-  itensExistentes: { categoria: string; nome: string }[]
+  itensExistentes: ItemExistente[]
   /** unidades ativas (para o arquivo de envio) */
   unidades: { id: string; nome: string }[]
   /** dono, ou gerente com acesso a todas as unidades */
@@ -94,14 +130,16 @@ export function RevisaoRascunho(props: {
   // guarda síncrona: o duplo clique chega antes do re-render com o botão ocupado
   const emAndamento = useRef(false)
 
-  const existentes = useMemo(() => new Set(props.itensExistentes.map((i) => chave(i.categoria, i.nome))), [props.itensExistentes])
+  const existentes = useMemo(() => new Map(props.itensExistentes.map((i) => [chave(i.categoria, i.nome), i])), [props.itensExistentes])
+  const categoriasCadastradas = useMemo(() => new Set(props.categoriasExistentes.map((c) => normalizeText(c.nome))), [props.categoriasExistentes])
   const inativas = useMemo(
     () => new Set(props.categoriasExistentes.filter((c) => !c.ativo).map((c) => normalizeText(c.nome))),
     [props.categoriasExistentes],
   )
   const incluidos = cats.reduce((n, c) => n + c.itens.filter((i) => i.incluir).length, 0)
-  const temErro = cats.some((c) => c.itens.some((i) => Object.keys(errosDoItem(i)).length > 0))
+  const temErro = cats.some((c) => erroDaCategoria(c.nome) !== undefined || c.itens.some((i) => Object.keys(errosDoItem(i)).length > 0))
 
+  const mudarCategoria = (ci: number, nome: string) => setCats((atual) => atual.map((c, x) => (x !== ci ? c : { ...c, nome })))
   const mudar = (ci: number, ii: number, m: Partial<ItemEdit>) =>
     setCats((atual) => atual.map((c, x) => (x !== ci ? c : { ...c, itens: c.itens.map((i, y) => (y !== ii ? i : { ...i, ...m })) })))
 
@@ -162,7 +200,22 @@ export function RevisaoRascunho(props: {
       </div>
       {cats.map((c, ci) => (
         <section key={ci} aria-label={`Categoria ${c.nome}`} className="flex flex-col gap-3">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{c.nome}</h3>
+          <div className="flex flex-col gap-2 rounded-lg border border-border bg-secondary/40 p-4">
+            <Field
+              id={`rev-cat-${ci}`}
+              label="Categoria"
+              hint="Para juntar com uma categoria já cadastrada, escreva o nome dela (aparece nas sugestões)."
+              error={mostrarErros ? erroDaCategoria(c.nome) : undefined}
+              required
+            >
+              {(a) => <TextInput {...a} list="rev-categorias" value={c.nome} onChange={(ev) => mudarCategoria(ci, ev.target.value)} />}
+            </Field>
+            {c.nome.trim() && (
+              <Badge variant="outline" className="self-start">
+                {categoriasCadastradas.has(normalizeText(c.nome)) ? 'Categoria existente' : 'Categoria nova'}
+              </Badge>
+            )}
+          </div>
           {inativas.has(normalizeText(c.nome)) && (
             <p className="flex items-start gap-2 rounded-md border border-border bg-secondary p-3 text-sm text-foreground">
               <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
@@ -173,7 +226,9 @@ export function RevisaoRascunho(props: {
             {c.itens.map((i, ii) => {
               const e = mostrarErros ? errosDoItem(i) : {}
               const base = `rev-${ci}-${ii}`
-              const atualiza = existentes.has(chave(c.nome, i.nome))
+              const atual = existentes.get(chave(c.nome, i.nome))
+              const atualiza = atual !== undefined
+              const muda = atual ? mudancas(i, atual) : []
               const tags = [...TAGS_CARDAPIO, ...i.tags.filter((t) => !(TAGS_CARDAPIO as readonly string[]).includes(t))]
               return (
                 <li
@@ -195,10 +250,20 @@ export function RevisaoRascunho(props: {
                     {i.incluir && <Badge variant={atualiza ? 'secondary' : 'default'}>{atualiza ? 'Atualiza' : 'Novo'}</Badge>}
                   </div>
                   {i.unidade && <p className="text-sm text-muted-foreground">Preço só da unidade {i.unidade}</p>}
+                  {i.incluir && atualiza && (
+                    <p className="text-sm text-muted-foreground">
+                      {muda.length ? `Muda: ${muda.join(', ')}` : 'Nada muda: campos em branco mantêm o valor atual.'}
+                    </p>
+                  )}
                   <Field id={`${base}-nome`} label="Nome" error={e.nome} required>
                     {(a) => <TextInput {...a} value={i.nome} onChange={(ev) => mudar(ci, ii, { nome: ev.target.value })} />}
                   </Field>
-                  <Field id={`${base}-preco`} label="Preço" hint="Em branco = preço sob consulta." error={e.preco}>
+                  <Field
+                    id={`${base}-preco`}
+                    label="Preço"
+                    hint={atualiza ? 'Em branco mantém o preço atual.' : 'Em branco = preço sob consulta.'}
+                    error={e.preco}
+                  >
                     {(a) => (
                       <MaskedInput {...a} mask={maskReais} placeholder="R$ 0,00" value={i.preco} onChange={(ev) => mudar(ci, ii, { preco: ev.target.value })} />
                     )}
@@ -234,6 +299,10 @@ export function RevisaoRascunho(props: {
           </ul>
         </section>
       ))}
+
+      <datalist id="rev-categorias">
+        {props.categoriasExistentes.map((c) => <option key={c.nome} value={c.nome} />)}
+      </datalist>
 
       {props.origem === 'arquivo' && props.podeAplicar && (
         <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
