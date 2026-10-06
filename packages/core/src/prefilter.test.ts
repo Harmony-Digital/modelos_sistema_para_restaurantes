@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { prefilter, type InboundItem } from './prefilter.ts'
+import { prefilter, temAgradecimentoOuDespedida, type InboundItem } from './prefilter.ts'
 
 const t = (texto: string): InboundItem => ({ tipo: 'texto', texto })
 
@@ -107,4 +107,11 @@ describe('prefilter: refinamentos (rodada 2)', () => {
   it('cancelar meus dados continua exclusão', () => {
     expect(prefilter([t('quero cancelar meus dados')])).toEqual({ kind: 'lgpd', tipo: 'exclusao' })
   })
+})
+
+describe('temAgradecimentoOuDespedida', () => {
+  it.each(['ok, até sábado então', 'Obrigadão pela ajuda!', 'valeu', 'vlw demais', 'até logo', 'abraço!', 'tchau tchau', 'beleza então', 'blz', 'show, até mais'])(
+    'agradecimento/despedida: %s', (t) => expect(temAgradecimentoOuDespedida(t)).toBe(true))
+  it.each(['boa noite, gostaria de uma informação', 'tenho uma dúvida', 'não sei ainda', 'até que horas abre?', 'showroom'])(
+    'pedido vago (cortesia): %s', (t) => expect(temAgradecimentoOuDespedida(t)).toBe(false))
 })

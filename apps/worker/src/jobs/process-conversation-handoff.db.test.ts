@@ -216,6 +216,20 @@ describe('handoff por falhas seguidas', () => {
     expect(await acoes()).toEqual([])
   })
 
+  it('pedido vago sem item ("boa noite, gostaria de uma informação") ⇒ cortesia, sem contar falha', async () => {
+    const { restaurantId } = await setup()
+    const conv = await receive(restaurantId, 'qual a capital da França?')
+    const vago: TriageV6 = { itens: [], fora_escopo: false, frustracao: false }
+    const { llm } = fakeLlm([triagem([]), vago])
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    await receive(restaurantId, 'boa noite, gostaria de uma informação')
+    await processConversation(deps(llm, wa), conv)
+    expect(await conversa(conv)).toMatchObject({ estado: 'ia', falhasConsecutivas: 1, handoffMotivo: null })
+    expect(wa.textos.at(-1)).toBe('Posso ajudar com horários e unidades, aviso de presença, eventos e cardápio. É só me dizer do que precisa. 😊')
+    expect((await saidas()).at(-1)).toMatchObject({ replyKey: 'cortesia' })
+  })
+
   it('resposta pronta (agradecimento) zera a contagem', async () => {
     const { restaurantId } = await setup()
     const conv = await receive(restaurantId, 'qual a capital da França?')

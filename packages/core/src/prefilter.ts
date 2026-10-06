@@ -43,6 +43,16 @@ function onlyWordsFrom(norm: string, set: Set<string>): boolean {
   return words.length > 0 && words.every((w) => set.has(w))
 }
 
+const AGRADECIMENTO_OU_DESPEDIDA = new RegExp(
+  '\\b(obrigad\\w*|brigad\\w*|agradec\\w*|valeu|vlw|ok|okay|beleza|blz|show|abraco\\w*|abs|tchau\\w*|' +
+    'ate (mais|logo|breve|amanha|depois|ja|la|semana|sabado|domingo|segunda|terca|quarta|quinta|sexta))\\b',
+)
+
+/** Cortesia sem item (a triagem não achou serviço): agradecimento/despedida responde "Por nada!"; o resto não. */
+export function temAgradecimentoOuDespedida(texto: string): boolean {
+  return AGRADECIMENTO_OU_DESPEDIDA.test(normalizeText(texto))
+}
+
 export function prefilter(items: InboundItem[]): PrefilterResult {
   const texts = items.map((i) => i.texto?.trim()).filter((s): s is string => !!s)
   const hasMedia = items.some((i) => i.tipo !== 'texto')

@@ -58,6 +58,7 @@ export const ROTULOS_MODELO: Record<ChaveModelo, { titulo: string; quando: strin
   cardapio_parecido: { titulo: 'Só item parecido', quando: 'O item pedido não está no cardápio, mas há nomes parecidos: eles são sugeridos (sem preço) e a pergunta vai para "Sem resposta".' },
   cardapio_enviando: { titulo: 'Envio do cardápio', quando: 'Texto que acompanha o arquivo do cardápio.' },
   cardapio_sem_arquivo: { titulo: 'Cardápio sem arquivo', quando: 'O cliente pede o cardápio e não há arquivo cadastrado: vão as categorias com alguns itens.' },
+  cortesia: { titulo: 'Mensagem sem pedido', quando: 'O cliente escreve sem pedir nada que a IA atenda ("tenho uma dúvida", "gostaria de uma informação"): a IA diz com o que pode ajudar.' },
   handoff_dentro: { titulo: 'Passar para a equipe', quando: 'A IA passa a conversa para a equipe dentro do horário de atendimento humano.' },
   handoff_fora: { titulo: 'Passar para a equipe fora do horário', quando: 'A IA passa a conversa para a equipe fora do horário de atendimento humano: diz quando a equipe volta.' },
   handoff_frustracao: { titulo: 'Cliente insatisfeito', quando: 'O cliente parece irritado com o atendimento e a equipe está no horário: a IA pede desculpas e chama alguém.' },

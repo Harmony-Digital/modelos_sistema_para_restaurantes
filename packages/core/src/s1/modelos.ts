@@ -98,6 +98,8 @@ export const MODELOS_S1 = {
     texto: 'Vou passar você para alguém da nossa equipe. Nossa equipe atende {proximo_horario} e te responde assim que voltar.',
     variaveis: ['proximo_horario'],
   },
+  // cortesia sem item (pedido vago, "tenho uma dúvida"): não conta falha
+  cortesia: { texto: 'Posso ajudar com horários e unidades, aviso de presença, eventos e cardápio. É só me dizer do que precisa. 😊', variaveis: [] },
   handoff_frustracao: { texto: 'Desculpe pelo transtorno. Vou chamar alguém da nossa equipe para continuar com você.', variaveis: [] },
 } as const satisfies Record<string, { texto: string; variaveis: readonly string[] }>
 

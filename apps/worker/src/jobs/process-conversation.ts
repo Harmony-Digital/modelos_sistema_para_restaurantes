@@ -1,8 +1,8 @@
-import { and, asc, count, eq, gt, gte, inArray, sql } from 'drizzle-orm'
+import { and, asc, count, eq, gt, gte, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import {
   agoraLocal, encontrarUnidade, escolhaDeUnidade, ESPACO_QUALQUER, itemDoPedidoNaUnidade, normalizarHorario, normalizeText, lerPessoas,
-  MAX_PESSOAS, normalizarTipoEvento, prefilter, redactPii, renderModelo, renderReply, resolverAtendimento, resolverS4, retomarPerguntaEvento,
+  MAX_PESSOAS, normalizarTipoEvento, prefilter, redactPii, temAgradecimentoOuDespedida, renderModelo, renderReply, resolverAtendimento, resolverS4, retomarPerguntaEvento,
   rotuloTipoEvento, SERVICOS, TAGS_CARDAPIO, TIPOS_S1, TIPOS_S2, TIPOS_S3, TIPOS_S4, unidadesOrdenadas, validarModelo,
   type AcaoS2, type AcaoS3, type AcaoS4, type ChaveModelo, type ContextoAtendimentoS4, type ContextoS1, type InboundItem, type ItemExtraido,
   type UnidadeS1, type Lacuna, type ListaUnidades, type Localizacao, type ReplyKey, type ResultadoAtendimento,
@@ -295,8 +295,6 @@ async function completarHandoff(db: Db, ctx: Ctx, d: Decision, now: Date): Promi
   if (aviso) d.saidas = [...(d.saidas ?? []), aviso]
 }
 
-const CHAVES_HANDOFF = ['handoff_dentro', 'handoff_fora', 'handoff_frustracao'] as const satisfies readonly ChaveModelo[]
-
 /**
  * Mensagem de handoff: fora do horário da equipe (com próxima abertura) ⇒ `handoff_fora` com o próximo horário; senão
  * `handoff_frustracao` (frustração) ou `handoff_dentro`. Horário vazio ou inválido no banco ⇒ sem promessa de horário.
@@ -309,13 +307,18 @@ async function mensagemHandoff(db: Db | Tx, ctx: Ctx, h: Handoff, now: Date): Pr
   const proximo = estado && !estado.aberto ? estado.proximo : null
   if (!proximo && h.avisar === 'so_fora') return null
   const chave: ChaveModelo = proximo ? 'handoff_fora' : h.motivo === 'frustracao' ? 'handoff_frustracao' : 'handoff_dentro'
-  const linhas = await db
-    .select({ chave: replyTemplates.chave, texto: replyTemplates.texto })
-    .from(replyTemplates)
-    .where(and(eq(replyTemplates.restaurantId, ctx.restaurant.id), inArray(replyTemplates.chave, [...CHAVES_HANDOFF])))
-  const personalizado = linhas.find((l) => l.chave === chave && validarModelo(chave, l.texto) === null)
   const vars = proximo ? { proximo_horario: textoProximoHorario(proximo, now, tz) } : {}
-  return { tipo: 'texto', texto: renderModelo(chave, vars, personalizado ? { [chave]: personalizado.texto } : {}), replyKey: chave }
+  return saidaDoModelo(db, ctx, chave, vars)
+}
+
+/** Texto de um modelo editável: o personalizado do restaurante, se for válido; senão o padrão. */
+async function saidaDoModelo(db: Db | Tx, ctx: Ctx, chave: ChaveModelo, vars: Record<string, string>): Promise<Saida> {
+  const [linha] = await db
+    .select({ texto: replyTemplates.texto })
+    .from(replyTemplates)
+    .where(and(eq(replyTemplates.restaurantId, ctx.restaurant.id), eq(replyTemplates.chave, chave)))
+  const personalizado = linha && validarModelo(chave, linha.texto) === null ? { [chave]: linha.texto } : {}
+  return { tipo: 'texto', texto: renderModelo(chave, vars, personalizado), replyKey: chave }
 }
 
 const perguntaMascarada = (texto: string) => redactPii(texto).slice(0, MAX_PERGUNTA)
@@ -738,8 +741,10 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, now: Da
     audit: 'conversa.handoff_frustracao',
   })
   if (itens.length === 0 && !foraEscopo && !frustracao) {
-    // cortesia/encerramento que o pré-filtro não pegou ("ok, até sábado então", "abraço!"): não é falha
-    return { replies: ['agradecimento'], autor: 'ia', runs, budget, pendente: null }
+    // sem item e sem fora de escopo não é falha: agradecimento/despedida que o pré-filtro não pegou ("ok, até sábado
+    // então", "abraço!") ⇒ "Por nada!"; pedido vago ("tenho uma dúvida") ⇒ `cortesia` (com o que a IA ajuda)
+    if (temAgradecimentoOuDespedida(text)) return { replies: ['agradecimento'], autor: 'ia', runs, budget, pendente: null }
+    return { replies: [], saidas: [await saidaDoModelo(db, ctx, 'cortesia', {})], autor: 'ia', runs, budget, pendente: null }
   }
   if (itens.length === 0) {
     const d: Decision = { replies: ['foraEscopo'], autor: 'ia', falhas: 'incrementar', runs, budget, pendente: null }
