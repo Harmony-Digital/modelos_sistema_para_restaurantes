@@ -50,6 +50,7 @@ TypeScript strict · pnpm + Turborepo · Next.js 16 (Vercel gru1) · Node 24 wor
 
 ## Onde paramos
 
+- **05/10/2026** — Revisão final da Etapa 03 e onda final de correções aplicadas (`c71ca44..HEAD`; migration 0022; `pnpm check` com 1052 testes; e2e 23/23). Pendentes externos: crédito no OpenRouter e escolha do modelo de triagem. Próximo: homologação do dono (`docs/homologacao/etapa-03.md`) e fechamento da Etapa 03.
 - **05/10/2026** — Etapa 03 (S2, avisos de presença) implementada na branch `etapa-03-s2-avisos` (34d0650..HEAD; `pnpm check` com 1040 testes; e2e 23/23). Homologação em `docs/homologacao/etapa-03.md`. Pendentes externos: crédito no OpenRouter e escolha do modelo de triagem. Próximo: revisão final da branch, homologação do dono e fechamento da Etapa 03.
 - **05/10/2026** — Plano 02-C (painel de S1 e simulador ligado ao pipeline real) implementado; revisão final e leva de correções aplicadas (`f008e26..5e809ed`; `pnpm check` com 782 testes; e2e 19/19). Pendentes externos: crédito no OpenRouter e escolha do modelo de triagem. Próximo: homologação do dono (`docs/homologacao/etapa-02c.md`) e fechamento da Etapa 02.
 - **05/10/2026** — Plano 02-C implementado (painel de S1, simulador ligado ao pipeline real, e2e). Homologação em docs/homologacao/etapa-02c.md. Pendentes externos: crédito no OpenRouter e escolha do modelo de triagem; Postgres 17 no Supabase hospedado. Próximo: homologação do dono e fechamento da Etapa 02.
