@@ -11,7 +11,8 @@ const lerImportacao = vi.fn()
 const enfileirar = vi.fn()
 const enqueueIngest = vi.fn(() => enfileirar)
 const upload = vi.fn()
-const from = vi.fn(() => ({ upload }))
+const remove = vi.fn()
+const from = vi.fn(() => ({ upload, remove }))
 const revalidatePath = vi.fn()
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/dal', () => ({ requireStaff }))
@@ -61,7 +62,7 @@ describe('novaImportacaoAction', () => {
 describe('anexarArquivoAction (um arquivo por requisição)', () => {
   it('valida os bytes, sobe para o bucket importacoes e anexa na lista', async () => {
     upload.mockResolvedValue({ error: null })
-    anexarArquivo.mockResolvedValue({ ok: true, valor: { ordem: 2 } })
+    anexarArquivo.mockResolvedValue({ ok: true, valor: { ordem: 2, descartarCaminho: null } })
     expect(await A.anexarArquivoAction(ID, fdCom(bin(PNG)))).toEqual({ ok: true, data: { ordem: 2 } })
     const sha = createHash('sha256').update(Uint8Array.from(PNG)).digest('hex')
     expect(from).toHaveBeenCalledWith('importacoes')
@@ -79,6 +80,21 @@ describe('anexarArquivoAction (um arquivo por requisição)', () => {
     expect(await A.anexarArquivoAction(ID, fdCom(grande))).toMatchObject({ ok: false, fieldErrors: { arquivo: expect.stringMatching(/passa de/) } })
     expect(upload).not.toHaveBeenCalled()
     expect(anexarArquivo).not.toHaveBeenCalled()
+  })
+  it('arquivo repetido com outro caminho: apaga do Storage o objeto que sobrou (sessão do usuário)', async () => {
+    upload.mockResolvedValue({ error: null })
+    remove.mockResolvedValue({ data: [], error: null })
+    anexarArquivo.mockResolvedValue({ ok: true, valor: { ordem: 1, descartarCaminho: `importacoes/${REST}/sobra.png` } })
+    expect(await A.anexarArquivoAction(ID, fdCom(bin(PNG)))).toEqual({ ok: true, data: { ordem: 1 } })
+    expect(remove).toHaveBeenCalledWith([`${REST}/sobra.png`])
+    // sem sobra, nada é apagado; falha ao apagar não derruba o anexo
+    remove.mockClear()
+    anexarArquivo.mockResolvedValue({ ok: true, valor: { ordem: 2, descartarCaminho: null } })
+    expect(await A.anexarArquivoAction(ID, fdCom(bin(PNG)))).toEqual({ ok: true, data: { ordem: 2 } })
+    expect(remove).not.toHaveBeenCalled()
+    remove.mockRejectedValue(new Error('rede'))
+    anexarArquivo.mockResolvedValue({ ok: true, valor: { ordem: 1, descartarCaminho: `importacoes/${REST}/sobra.png` } })
+    expect(await A.anexarArquivoAction(ID, fdCom(bin(PNG)))).toEqual({ ok: true, data: { ordem: 1 } })
   })
   it('id inválido não sobe nada', async () => {
     expect(await A.anexarArquivoAction('x', fdCom(bin(PNG)))).toMatchObject({ ok: false })
@@ -196,6 +212,7 @@ describe('aplicarImportacaoAction (Zod pelo alvo)', () => {
       ['ja_aplicado', 'Essa importação já foi aplicada.'],
       ['rascunho_invalido', 'Algum dado está inválido. Confira e tente de novo.'],
       ['sem_permissao', 'Só o dono, ou gerente com acesso a todas as unidades, aplica a importação.'],
+      ['nao_pronta', 'Esta importação não está pronta para confirmar: a leitura ainda não terminou, deu erro ou ela foi descartada. Atualize a página.'],
     ] as const
     for (const [erro, msg] of casos) {
       aplicarImportacao.mockResolvedValueOnce({ ok: false, erro })

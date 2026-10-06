@@ -194,4 +194,23 @@ describe('RevisaoRascunho', () => {
     expect(entrada.rascunho.categorias[0].itens[0]).toEqual(item())
     expect(await screen.findByRole('status')).toHaveTextContent('Cardápio atualizado: 2 novos, 1 atualizados, 1 ignorado')
   })
+
+  it('mesmo item em duas categorias (fotos diferentes): avisa e deixa desmarcar um deles', async () => {
+    const user = userEvent.setup()
+    acoesAlvo.aplicarImportacaoAction.mockResolvedValue({ ok: true, data: { criados: 1, atualizados: 0, ignorados: 1 } })
+    const r = { categorias: [{ nome: 'Carnes', itens: [item()] }, { nome: 'Promoções', itens: [item({ nome: 'picanha ', precoCentavos: 7990 }), item({ nome: 'Pudim' })] }] }
+    render(<RevisaoRascunho {...base} origem="arquivo" porAlvo rascunho={r} />)
+    const carnes = within(screen.getByRole('region', { name: 'Categoria Carnes' }))
+    const promo = within(screen.getByRole('region', { name: 'Categoria Promoções' }))
+    expect(carnes.getByText('Também aparece em Promoções. Se for o mesmo item, desmarque “Incluir” em um deles.')).toBeInTheDocument()
+    expect(promo.getByText('Também aparece em Carnes. Se for o mesmo item, desmarque “Incluir” em um deles.')).toBeInTheDocument()
+    expect(within(promo.getByRole('group', { name: 'Pudim' })).queryByText(/Também aparece/)).not.toBeInTheDocument()
+    await user.click(within(promo.getByRole('group', { name: 'picanha' })).getByRole('checkbox', { name: 'Incluir' }))
+    expect(screen.queryByText(/Também aparece/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Confirmar importação' }))
+    await waitFor(() => expect(acoesAlvo.aplicarImportacaoAction).toHaveBeenCalledTimes(1))
+    const entrada = acoesAlvo.aplicarImportacaoAction.mock.calls[0]![1]
+    expect(entrada.rascunho.categorias[1].itens[0]).toMatchObject({ nome: 'picanha', incluir: false })
+    expect(entrada.rascunho.categorias[0].itens[0]).toMatchObject({ nome: 'Picanha', incluir: true })
+  })
 })

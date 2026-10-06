@@ -107,6 +107,6 @@ export async function descartarImportacaoAction(id: string): Promise<ActionResul
     revalidar()
     return { ok: true, data: null }
   }
-  if (r.erro === 'nao_encontrada') return { ok: false, formError: 'Essa importação já foi aplicada ou descartada.' }
+  if (r.erro === 'nao_encontrada') return { ok: false, formError: 'Essa importação já foi aplicada, descartada ou está sendo lida.' }
   return { ok: false, formError: r.erro === 'sem_permissao' ? SEM_PERMISSAO : MENSAGEM_ERRO_PAINEL[r.erro] }
 }

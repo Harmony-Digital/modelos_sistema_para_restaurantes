@@ -48,8 +48,10 @@ export default async function ConteudoPage(props: { searchParams: Promise<{ aba?
   const s = await requireStaff()
   const { aba: pedida, sub: subPedida, imp, alvo: alvoPedido } = await props.searchParams
   const db = getDb()
-  // Importar é do dono e do gerente com acesso a todas as unidades (o banco confere de novo em cada ação)
-  const importa = s.role !== 'atendente' && (await withUserContext(db, s.claims, (tx) => podeEditarCardapioGeral(tx)))
+  // Importar: dono e gerente. PDF/fotos e os outros alvos só com acesso a todas as unidades; o gerente restrito a
+  // unidades segue com a planilha CSV do cardápio, como na Etapa 05 (o banco confere de novo em cada ação)
+  const importa = s.role !== 'atendente'
+  const geral = importa && (await withUserContext(db, s.claims, (tx) => podeEditarCardapioGeral(tx)))
   // endereço antigo (Cardápio → Importar, Etapa 05): leva à aba Importar
   if (importa && pedida === 'cardapio' && subPedida === 'importar') {
     redirect(imp !== undefined && z.uuid().safeParse(imp).success ? urlImportacao(imp) : urlImportarAlvo('cardapio'))
@@ -103,7 +105,13 @@ export default async function ConteudoPage(props: { searchParams: Promise<{ aba?
           </>
         )}
         {aba === 'importar' && (
-          <SecaoImportar imp={imp} alvo={ALVOS_IMPORTACAO_TELA.find((a) => a.chave === alvoPedido)?.chave ?? 'cardapio'} s={s} unidades={ativas} />
+          <SecaoImportar
+            imp={imp}
+            alvo={geral ? (ALVOS_IMPORTACAO_TELA.find((a) => a.chave === alvoPedido)?.chave ?? 'cardapio') : 'cardapio'}
+            geral={geral}
+            s={s}
+            unidades={ativas}
+          />
         )}
       </main>
     </>
@@ -167,15 +175,22 @@ const DESTINO: Record<AlvoImportacaoTela, { href: string; rotulo: string }> = {
  * Aba Importar: seletor de alvo, nova importação (vários arquivos), planilha CSV do cardápio e histórico do alvo; com
  * `imp`, a importação no estado em que está (recebendo arquivos, lendo, revisão por alvo ou já resolvida).
  */
-async function SecaoImportar(props: { imp: string | undefined; alvo: AlvoImportacaoTela; s: Staff; unidades: { id: string; nome: string }[] }) {
+async function SecaoImportar(props: {
+  imp: string | undefined
+  alvo: AlvoImportacaoTela
+  /** dono ou gerente com acesso a todas as unidades; senão (gerente restrito) só a planilha CSV do cardápio */
+  geral: boolean
+  s: Staff
+  unidades: { id: string; nome: string }[]
+}) {
   const { s } = props
   const db = getDb()
   const id = props.imp !== undefined && z.uuid().safeParse(props.imp).success ? props.imp : null
   const imp = id === null ? null : await lerImportacao(db, s.claims, id)
   const alvo = imp?.alvo ?? props.alvo
-  const seletor = (
+  const seletor = props.geral ? (
     <Abas rotulo="O que importar" itens={ALVOS_IMPORTACAO_TELA.map((a) => ({ href: urlImportarAlvo(a.chave), rotulo: a.rotulo, ativo: a.chave === alvo }))} />
-  )
+  ) : null
   if (!imp) {
     const lista = await listarImportacoes(db, s.claims, { alvo })
     return (
@@ -184,12 +199,23 @@ async function SecaoImportar(props: { imp: string | undefined; alvo: AlvoImporta
         {props.imp !== undefined && <p role="alert" className="text-sm text-destructive">Não encontramos essa importação.</p>}
         <ImportarAlvo
           alvo={alvo}
+          soPlanilha={!props.geral}
           importacoes={lista.map((i) => ({
             id: i.id, origem: i.origem, modo: i.modo, mime: i.mime, arquivos: i.arquivos, status: i.status, recebendo: i.recebendo,
             criadoEm: i.criadoEm.toISOString(),
           }))}
         />
       </>
+    )
+  }
+  // Etapa 05: CSV ou um arquivo só (com caminho na linha) seguem a revisão e a aplicação do cardápio de antes
+  const legado = imp.alvo === 'cardapio' && imp.modo === 'completo' && (imp.origem === 'csv' || imp.storagePath !== null)
+  if (!props.geral && !legado) {
+    return (
+      <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
+        <p className="text-foreground">Esta importação é do dono ou de gerente com acesso a todas as unidades.</p>
+        <Link href={urlImportarAlvo('cardapio')} className={linkClasse}>Voltar às importações</Link>
+      </div>
     )
   }
   if (imp.recebendo) {
@@ -200,8 +226,6 @@ async function SecaoImportar(props: { imp: string | undefined; alvo: AlvoImporta
       </>
     )
   }
-  // Etapa 05: CSV ou um arquivo só (com caminho na linha) seguem a revisão e a aplicação do cardápio de antes
-  const legado = imp.alvo === 'cardapio' && imp.modo === 'completo' && (imp.origem === 'csv' || imp.storagePath !== null)
   if (imp.status === 'enviado' || imp.status === 'processando' || imp.status === 'erro') {
     return (
       <>
@@ -293,7 +317,15 @@ async function revisaoDaImportacao(
       />
     )
   }
-  if (r.alvo === 'horarios') return <RevisaoHorarios key={r.id} id={r.id} podeAplicar={geral} rascunho={r.draft} rotulos={r.unidades} unidades={unidades} />
-  if (r.alvo === 'espacos') return <RevisaoEspacos key={r.id} id={r.id} podeAplicar={geral} rascunho={r.draft} rotulos={r.espacos} unidades={unidades} />
+  if (r.alvo === 'horarios') {
+    return (
+      <RevisaoHorarios key={r.id} id={r.id} podeAplicar={geral} rascunho={r.draft} rotulos={r.unidades} unidades={unidades} unidadesComHorario={r.unidadesComHorario} />
+    )
+  }
+  if (r.alvo === 'espacos') {
+    return (
+      <RevisaoEspacos key={r.id} id={r.id} podeAplicar={geral} rascunho={r.draft} rotulos={r.espacos} unidades={unidades} espacosExistentes={r.espacosExistentes} />
+    )
+  }
   return null
 }

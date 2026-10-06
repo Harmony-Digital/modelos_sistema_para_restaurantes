@@ -283,7 +283,18 @@ export function RevisaoInformacoes(props: {
 // ───────────────────────────── espaços ─────────────────────────────
 
 type RotuloEspaco = { acao: 'novo' | 'atualizar' | 'ignorar' | 'escolher_unidade'; unitId: string | null; spaceId: string | null }
-type EspacoEdit = { nome: string; min: string; max: string; descricao: string; condicoes: string; incluir: boolean; escolha: string }
+type EspacoEdit = {
+  nome: string
+  min: string
+  max: string
+  descricao: string
+  condicoes: string
+  incluir: boolean
+  /** id da unidade escolhida (unidade não reconhecida), FORA ou '' */
+  escolha: string
+  /** só uma capacidade foi lida (a outra foi deduzida): a revisão pede conferência; editar a capacidade tira a marca */
+  capacidadeIncompleta: boolean
+}
 const FORA = '__fora'
 const numero = (v: string) => (/^\d+$/.test(v.trim()) ? Number(v.trim()) : NaN)
 
@@ -292,6 +303,8 @@ export function RevisaoEspacos(props: {
   rascunho: RascunhoEspacos
   rotulos: RotuloEspaco[]
   unidades: UnidadeOpcao[]
+  /** espaços cadastrados (Novo/Atualiza com a unidade escolhida à mão ou o nome editado) */
+  espacosExistentes: { unitId: string; nome: string }[]
   podeAplicar: boolean
 }) {
   const c = useConfirmarImportacao({ id: props.id, alvo: 'espacos', modo: 'completo' })
@@ -299,7 +312,7 @@ export function RevisaoEspacos(props: {
   const [espacos, setEspacos] = useState<EspacoEdit[]>(() =>
     props.rascunho.espacos.map((e, i) => ({
       nome: e.nome, min: String(e.capacidadeMin), max: String(e.capacidadeMax), descricao: e.descricao ?? '', condicoes: e.condicoes ?? '',
-      incluir: e.incluir, escolha: precisaEscolher(i) && !e.incluir ? FORA : '',
+      incluir: e.incluir, escolha: precisaEscolher(i) && !e.incluir ? FORA : '', capacidadeIncompleta: e.capacidadeIncompleta ?? false,
     })),
   )
   const [mostrarErros, setMostrarErros] = useState(false)
@@ -328,7 +341,17 @@ export function RevisaoEspacos(props: {
       : `Espaços de ${props.unidades.find((u) => u.id === props.rotulos[i]?.unitId)?.nome ?? e.unidade ?? ''}`
     grupos.set(titulo, [...(grupos.get(titulo) ?? []), i])
   })
-  const contar = (a: RotuloEspaco['acao']) => espacos.filter((e, i) => incluido(i, e) && props.rotulos[i]?.acao === a).length
+  const unitIdDe = (i: number, e: EspacoEdit) => (precisaEscolher(i) ? (e.escolha === '' || e.escolha === FORA ? null : e.escolha) : (props.rotulos[i]?.unitId ?? null))
+  /** pelo cadastro: unidade (lida ou escolhida) + nome normalizado; null = sem rótulo */
+  const acaoDe = (i: number, e: EspacoEdit): RotuloEspaco['acao'] | null => {
+    if (!incluido(i, e)) return null
+    const unitId = unitIdDe(i, e)
+    if (unitId === null) return 'escolher_unidade'
+    const nome = normalizeText(e.nome)
+    return props.espacosExistentes.some((x) => x.unitId === unitId && normalizeText(x.nome) === nome) ? 'atualizar' : 'novo'
+  }
+  const contar = (a: RotuloEspaco['acao']) => espacos.filter((e, i) => acaoDe(i, e) === a).length
+  const incompletos = espacos.filter((e, i) => incluido(i, e) && e.capacidadeIncompleta).length
 
   const montar = (): RascunhoEspacos | null => {
     if (espacos.some((e, i) => incluido(i, e) && Object.keys(erros(i, e)).length > 0)) {
@@ -349,6 +372,7 @@ export function RevisaoEspacos(props: {
           descricao: e.descricao.trim() || null,
           condicoes: e.condicoes.trim() || null,
           incluir: inc,
+          ...(orig.capacidadeIncompleta === undefined ? {} : { capacidadeIncompleta: e.capacidadeIncompleta }),
         }
       }),
     }
@@ -361,7 +385,13 @@ export function RevisaoEspacos(props: {
       <div className="flex flex-col gap-1">
         <h2 className="text-base font-semibold text-foreground">Revise os espaços antes de confirmar</h2>
         <p className="text-sm text-muted-foreground">Confira nomes e capacidades de cada unidade. Desmarque “Incluir” para deixar um espaço de fora.</p>
-        <Resumo partes={[[contar('novo'), 'novo', 'novos'], [contar('atualizar'), 'para atualizar', 'para atualizar'], [contar('escolher_unidade'), 'com unidade a escolher', 'com unidade a escolher']]} />
+        <Resumo
+          partes={[
+            [contar('novo'), 'novo', 'novos'], [contar('atualizar'), 'para atualizar', 'para atualizar'],
+            [contar('escolher_unidade'), 'com unidade a escolher', 'com unidade a escolher'],
+            [incompletos, 'com capacidade a conferir', 'com capacidade a conferir'],
+          ]}
+        />
       </div>
       {[...grupos.entries()].map(([titulo, indices]) => (
         <section key={titulo} aria-label={titulo} className="flex flex-col gap-3">
@@ -371,8 +401,7 @@ export function RevisaoEspacos(props: {
               const e = espacos[i]!
               const inc = incluido(i, e)
               const err = mostrarErros && (inc || e.escolha === '') ? erros(i, e) : {}
-              const rot = props.rotulos[i]
-              const nomeIgual = normalizeText(e.nome) === normalizeText(props.rascunho.espacos[i]!.nome)
+              const acao = acaoDe(i, e)
               const base = `esp-${i}`
               return (
                 <li key={i} role="group" aria-label={e.nome.trim() || 'Espaço sem nome'} className={classeItem(inc)}>
@@ -381,17 +410,16 @@ export function RevisaoEspacos(props: {
                       {(a) => (
                         <Select {...a} value={e.escolha} onChange={(ev) => mudar(i, { escolha: ev.target.value })}>
                           <option value="">Escolha a unidade…</option>
-                          {props.unidades.map((u) => <option key={u.id} value={u.nome}>{u.nome}</option>)}
+                          {props.unidades.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
                           <option value={FORA}>Deixar de fora</option>
                         </Select>
                       )}
                     </Field>
                   ) : (
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <CaixaIncluir checked={e.incluir} onChange={(v) => mudar(i, { incluir: v })} />
-                      {inc && nomeIgual && rot?.acao === 'novo' && <Badge>Novo</Badge>}
-                      {inc && nomeIgual && rot?.acao === 'atualizar' && <Badge variant="secondary">Atualiza</Badge>}
-                    </div>
+                    <CaixaIncluir checked={e.incluir} onChange={(v) => mudar(i, { incluir: v })} />
+                  )}
+                  {(acao === 'novo' || acao === 'atualizar') && (
+                    <Badge variant={acao === 'novo' ? 'default' : 'secondary'} className="self-start">{acao === 'novo' ? 'Novo' : 'Atualiza'}</Badge>
                   )}
                   {precisaEscolher(i) && props.rascunho.espacos[i]!.unidade && (
                     <p className="text-sm text-muted-foreground">Lido como “{props.rascunho.espacos[i]!.unidade}”, que não corresponde a nenhuma unidade.</p>
@@ -399,12 +427,13 @@ export function RevisaoEspacos(props: {
                   <Field id={`${base}-nome`} label="Nome" error={err.nome} required>
                     {(a) => <TextInput {...a} value={e.nome} onChange={(ev) => mudar(i, { nome: ev.target.value })} />}
                   </Field>
+                  {inc && e.capacidadeIncompleta && <Aviso>Só uma capacidade foi lida: confira a capacidade mínima e a máxima.</Aviso>}
                   <div className="grid grid-cols-2 gap-3">
                     <Field id={`${base}-min`} label="Capacidade mínima" error={err.min} required>
-                      {(a) => <TextInput {...a} inputMode="numeric" value={e.min} onChange={(ev) => mudar(i, { min: ev.target.value })} />}
+                      {(a) => <TextInput {...a} inputMode="numeric" value={e.min} onChange={(ev) => mudar(i, { min: ev.target.value, capacidadeIncompleta: false })} />}
                     </Field>
                     <Field id={`${base}-max`} label="Capacidade máxima" error={err.max} required>
-                      {(a) => <TextInput {...a} inputMode="numeric" value={e.max} onChange={(ev) => mudar(i, { max: ev.target.value })} />}
+                      {(a) => <TextInput {...a} inputMode="numeric" value={e.max} onChange={(ev) => mudar(i, { max: ev.target.value, capacidadeIncompleta: false })} />}
                     </Field>
                   </div>
                   <Field id={`${base}-descricao`} label="Descrição" hint="Em branco mantém a descrição atual." error={err.descricao}>

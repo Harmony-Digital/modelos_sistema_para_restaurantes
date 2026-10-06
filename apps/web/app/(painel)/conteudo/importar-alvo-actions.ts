@@ -12,6 +12,7 @@ import { requireStaff } from '@/lib/dal'
 import { getBoss } from '@/lib/server/boss'
 import { getDb } from '@/lib/server/db'
 import { arquivoDoForm, ERRO_STORAGE, lerArquivoCardapio, subirArquivo } from '@/lib/server/upload-arquivo'
+import { createClient } from '@/lib/supabase/server'
 
 /**
  * Importação por alvo com vários arquivos (Etapa 07): criar → anexar um arquivo por requisição (até 10) → "Ler
@@ -56,10 +57,28 @@ export async function anexarArquivoAction(id: string, fd: FormData): Promise<Act
   const enviado = await subirArquivo('importacoes', s.restaurantId, a)
   if (!enviado.ok) return { ok: false, formError: ERRO_STORAGE }
   const r = await anexarArquivo(getDb(), s.claims, id, { storagePath: enviado.storagePath, mime: a.mime, tamanho: a.bytes.length, sha256: a.sha256 })
-  if (r.ok) return { ok: true, data: r.valor }
+  if (r.ok) {
+    if (r.valor.descartarCaminho !== null) await apagarSobra(r.valor.descartarCaminho)
+    return { ok: true, data: { ordem: r.valor.ordem } }
+  }
   if (r.erro === 'limite_arquivos') return { ok: false, formError: 'No máximo 10 arquivos por importação.' }
   if (r.erro === 'ja_iniciada') return { ok: false, formError: JA_INICIADA }
   return erroPainel(r.erro)
+}
+
+/**
+ * O conteúdo já estava na lista com outro caminho: apaga o objeto recém-enviado (sessão do usuário; as policies do
+ * Storage decidem). Melhor esforço: falhar aqui não desfaz o anexo.
+ */
+async function apagarSobra(caminho: string) {
+  const objeto = caminho.replace(/^importacoes\//, '')
+  if (objeto === caminho) return
+  try {
+    const supabase = await createClient()
+    await supabase.storage.from('importacoes').remove([objeto])
+  } catch {
+    // objeto órfão: sem dado do documento em log
+  }
 }
 
 export async function removerArquivoAction(id: string, ordem: number): Promise<ActionResult<null>> {
@@ -136,6 +155,8 @@ export async function aplicarImportacaoAction(
       return { ok: false, formError: RASCUNHO_INVALIDO }
     case 'sem_permissao':
       return { ok: false, formError: SEM_PERMISSAO_APLICAR }
+    case 'nao_pronta':
+      return { ok: false, formError: 'Esta importação não está pronta para confirmar: a leitura ainda não terminou, deu erro ou ela foi descartada. Atualize a página.' }
     default:
       return { ok: false, formError: MENSAGEM_ERRO_PAINEL[res.erro] }
   }

@@ -156,6 +156,7 @@ describe('RevisaoHorarios', () => {
       { unitId: null, reconhecida: false, acao: 'escolher_unidade' as const },
     ],
     unidades,
+    unidadesComHorario: [U1],
     podeAplicar: true,
   }
 
@@ -166,7 +167,11 @@ describe('RevisaoHorarios', () => {
     const segunda = within(asa.getByRole('group', { name: 'Segunda' }))
     expect(segunda.getAllByLabelText(/^Abre/)).toHaveLength(2)
     expect(within(asa.getByRole('group', { name: 'Domingo' })).getByText('Fechado')).toBeInTheDocument()
-    expect(within(asa.getByRole('group', { name: 'Sexta' })).getByText('Turnos sobrepostos ou demais na leitura: confira.')).toBeInTheDocument()
+    const sexta = asa.getByRole('group', { name: 'Sexta' })
+    expect(within(sexta).getByText('Leituras diferentes para este dia (fechado num arquivo e aberto em outro, ou turnos sobrepostos): confira.')).toBeInTheDocument()
+    expect(sexta).toHaveAttribute('data-conflito', 'true')
+    expect(asa.getByRole('group', { name: 'Segunda' })).not.toHaveAttribute('data-conflito')
+    expect(screen.getByText(/1 dia para conferir/)).toBeInTheDocument()
     expect(asa.getByText('25/12/2026')).toBeInTheDocument()
     expect(asa.getByText(/Fechado · Natal/)).toBeInTheDocument()
     const outra = within(screen.getByRole('region', { name: 'Horários de Filial Centro' }))
@@ -183,12 +188,17 @@ describe('RevisaoHorarios', () => {
     expect(acoesAlvo.aplicarImportacaoAction).not.toHaveBeenCalled()
   })
 
-  it('escolher a unidade troca o nome no rascunho; editar turno vai junto', async () => {
+  it('escolher a unidade grava o id dela no rascunho e mostra Novo/Atualiza; editar turno vai junto', async () => {
     const user = userEvent.setup()
     acoesAlvo.aplicarImportacaoAction.mockResolvedValue(ok)
     render(<RevisaoHorarios {...props} />)
     const outra = within(screen.getByRole('region', { name: 'Horários de Filial Centro' }))
+    expect(outra.queryByText('Novo')).not.toBeInTheDocument()
+    await user.selectOptions(outra.getByLabelText(/^Unidade/), 'Asa Sul')
+    expect(outra.getByText('Atualiza')).toBeInTheDocument()
     await user.selectOptions(outra.getByLabelText(/^Unidade/), 'Lago Norte')
+    expect(outra.getByText('Novo')).toBeInTheDocument()
+    expect(screen.getByText(/1 unidade nova, 1 para atualizar/)).toBeInTheDocument()
     const segunda = within(within(screen.getByRole('region', { name: 'Horários de Asa Sul' })).getByRole('group', { name: 'Segunda' }))
     const fecha = segunda.getAllByLabelText(/^Fecha/)[1]!
     await user.clear(fecha)
@@ -199,7 +209,7 @@ describe('RevisaoHorarios', () => {
     expect(r).toMatchObject({ alvo: 'horarios', modo: 'completo' })
     expect(r.rascunho.unidades[0].unidade).toBe('asa sul')
     expect(r.rascunho.unidades[0].semana[0]).toEqual({ dia: 1, turnos: [t('11:00', '15:00'), t('18:00', '23:30')], conflito: false })
-    expect(r.rascunho.unidades[1]).toMatchObject({ unidade: 'Lago Norte', semana: [], incluir: true })
+    expect(r.rascunho.unidades[1]).toMatchObject({ unidade: U2, semana: [], incluir: true })
   })
 
   it('ignorar a unidade não reconhecida: segue sem ela', async () => {
@@ -241,7 +251,7 @@ describe('RevisaoEspacos', () => {
   const rascunho = {
     espacos: [
       { nome: 'Salão', unidade: 'Asa Sul', capacidadeMin: 10, capacidadeMax: 40, descricao: null, condicoes: null, incluir: true },
-      { nome: 'Varanda', unidade: 'Asa Sul', capacidadeMin: 5, capacidadeMax: 20, descricao: 'Ao ar livre', condicoes: null, incluir: true },
+      { nome: 'Varanda', unidade: 'Asa Sul', capacidadeMin: 1, capacidadeMax: 20, descricao: 'Ao ar livre', condicoes: null, incluir: true, capacidadeIncompleta: true },
       { nome: 'Terraço', unidade: null, capacidadeMin: 20, capacidadeMax: 60, descricao: null, condicoes: null, incluir: true },
     ],
   }
@@ -254,6 +264,7 @@ describe('RevisaoEspacos', () => {
       { acao: 'escolher_unidade' as const, unitId: null, spaceId: null },
     ],
     unidades,
+    espacosExistentes: [{ unitId: U1, nome: 'Salão' }, { unitId: U2, nome: 'Terraço' }],
     podeAplicar: true,
   }
 
@@ -276,7 +287,43 @@ describe('RevisaoEspacos', () => {
     await waitFor(() => expect(acoesAlvo.aplicarImportacaoAction).toHaveBeenCalledTimes(1))
     expect(enviado()).toMatchObject({ alvo: 'espacos', modo: 'completo' })
     expect(enviado().rascunho.espacos[0]).toMatchObject({ nome: 'Salão', capacidadeMax: 50 })
-    expect(enviado().rascunho.espacos[2]).toMatchObject({ nome: 'Terraço', unidade: 'Lago Norte', incluir: true })
+    expect(enviado().rascunho.espacos[2]).toMatchObject({ nome: 'Terraço', unidade: U2, incluir: true })
+    // capacidade não conferida segue marcada
+    expect(enviado().rascunho.espacos[1]).toMatchObject({ nome: 'Varanda', capacidadeIncompleta: true })
+  })
+
+  it('unidade escolhida à mão e nome editado: Novo/Atualiza pelo cadastro', async () => {
+    const user = userEvent.setup()
+    render(<RevisaoEspacos {...props} />)
+    const terraco = within(grupo('Terraço'))
+    expect(terraco.queryByText('Novo')).not.toBeInTheDocument()
+    await user.selectOptions(terraco.getByLabelText(/^Unidade/), 'Asa Sul')
+    expect(terraco.getByText('Novo')).toBeInTheDocument()
+    await user.selectOptions(terraco.getByLabelText(/^Unidade/), 'Lago Norte')
+    expect(terraco.getByText('Atualiza')).toBeInTheDocument()
+    // renomear a Varanda para um espaço que já existe na unidade: passa a atualizar
+    const nome = within(grupo('Varanda')).getByLabelText(/^Nome/)
+    await user.clear(nome)
+    await user.type(nome, 'salao')
+    expect(within(grupo('salao')).getByText('Atualiza')).toBeInTheDocument()
+  })
+
+  it('capacidade incompleta: aviso para conferir; corrigir tira a marca', async () => {
+    const user = userEvent.setup()
+    acoesAlvo.aplicarImportacaoAction.mockResolvedValue(ok)
+    render(<RevisaoEspacos {...props} />)
+    const varanda = within(grupo('Varanda'))
+    expect(varanda.getByText('Só uma capacidade foi lida: confira a capacidade mínima e a máxima.')).toBeInTheDocument()
+    expect(within(grupo('Salão')).queryByText(/Só uma capacidade/)).not.toBeInTheDocument()
+    expect(screen.getByText(/1 com capacidade a conferir/)).toBeInTheDocument()
+    const min = varanda.getByLabelText(/^Capacidade mínima/)
+    await user.clear(min)
+    await user.type(min, '8')
+    expect(varanda.queryByText(/Só uma capacidade/)).not.toBeInTheDocument()
+    await user.selectOptions(within(grupo('Terraço')).getByLabelText(/^Unidade/), 'Deixar de fora')
+    await user.click(screen.getByRole('button', { name: 'Confirmar importação' }))
+    await waitFor(() => expect(acoesAlvo.aplicarImportacaoAction).toHaveBeenCalledTimes(1))
+    expect(enviado().rascunho.espacos[1]).toMatchObject({ nome: 'Varanda', capacidadeMin: 8, capacidadeMax: 20, capacidadeIncompleta: false })
   })
 
   it('mínimo maior que o máximo não é enviado', async () => {

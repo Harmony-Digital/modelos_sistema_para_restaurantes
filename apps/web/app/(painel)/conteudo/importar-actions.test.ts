@@ -153,7 +153,7 @@ describe('estado, aplicar e descartar', () => {
     expect(await A.descartarImportacaoAction(ID)).toEqual({ ok: true, data: null })
     expect(rejeitarImportacao).toHaveBeenCalledWith('db', { sub: 'u' }, ID)
     rejeitarImportacao.mockResolvedValue({ ok: false, erro: 'nao_encontrada' })
-    expect(await A.descartarImportacaoAction(ID)).toEqual({ ok: false, formError: 'Essa importação já foi aplicada ou descartada.' })
+    expect(await A.descartarImportacaoAction(ID)).toEqual({ ok: false, formError: 'Essa importação já foi aplicada, descartada ou está sendo lida.' })
     expect(await A.descartarImportacaoAction('x')).toMatchObject({ ok: false })
   })
 })

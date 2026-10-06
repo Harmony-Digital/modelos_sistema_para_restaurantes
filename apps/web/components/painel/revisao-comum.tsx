@@ -85,6 +85,38 @@ export function ResultadoImportacao(props: { alvo: AlvoImportacaoTela; modo: Mod
   )
 }
 
+/** Descartar com confirmação (rascunho, erro ou a importação ainda recebendo arquivos) e volta às importações do alvo. */
+export function DescartarImportacao(props: { alvo: AlvoImportacaoTela; id: string; disabled?: boolean }) {
+  const router = useRouter()
+  const [aberto, setAberto] = useState(false)
+
+  const executarDescarte = async () => {
+    const r = await chamarAcao(() => descartarImportacaoAction(props.id))
+    if (!r.ok) {
+      toast.error(r.formError ?? 'Não foi possível descartar agora.')
+      return
+    }
+    setAberto(false)
+    toast.success('Importação descartada')
+    router.push(urlImportarAlvo(props.alvo))
+  }
+
+  return (
+    <>
+      <Button variant="outline" disabled={props.disabled} onClick={() => setAberto(true)}>Descartar</Button>
+      <Confirmar
+        aberto={aberto}
+        onAbertoChange={setAberto}
+        titulo="Descartar importação?"
+        descricao="Nada do que foi enviado ou lido entra no cadastro. Você pode importar de novo depois."
+        rotuloConfirmar="Descartar importação"
+        rotuloAndamento="Descartando…"
+        onConfirmar={executarDescarte}
+      />
+    </>
+  )
+}
+
 /** Erro geral, aviso de permissão, Confirmar (só quem pode aplicar) e Descartar (com confirmação). */
 export function AcoesRevisao(props: {
   alvo: AlvoImportacaoTela
@@ -96,20 +128,6 @@ export function AcoesRevisao(props: {
   semIncluidos: boolean
   onConfirmar: () => void
 }) {
-  const router = useRouter()
-  const [descartar, setDescartar] = useState(false)
-
-  const executarDescarte = async () => {
-    const r = await chamarAcao(() => descartarImportacaoAction(props.id))
-    if (!r.ok) {
-      toast.error(r.formError ?? 'Não foi possível descartar agora.')
-      return
-    }
-    setDescartar(false)
-    toast.success('Importação descartada')
-    router.push(urlImportarAlvo(props.alvo))
-  }
-
   return (
     <>
       {props.erroGeral && <p role="alert" className="text-sm text-destructive">{props.erroGeral}</p>}
@@ -124,17 +142,8 @@ export function AcoesRevisao(props: {
             {props.aplicando ? 'Aplicando…' : 'Confirmar importação'}
           </Button>
         )}
-        <Button variant="outline" disabled={props.aplicando} onClick={() => setDescartar(true)}>Descartar</Button>
+        <DescartarImportacao alvo={props.alvo} id={props.id} disabled={props.aplicando} />
       </div>
-      <Confirmar
-        aberto={descartar}
-        onAbertoChange={setDescartar}
-        titulo="Descartar importação?"
-        descricao="Nada do que foi lido entra no cadastro. Você pode importar de novo depois."
-        rotuloConfirmar="Descartar importação"
-        rotuloAndamento="Descartando…"
-        onConfirmar={executarDescarte}
-      />
     </>
   )
 }

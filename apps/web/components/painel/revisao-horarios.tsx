@@ -25,14 +25,17 @@ const turnoValido = (t: Turno) => HORA.test(t.abre) && HORA.test(t.fecha) && t.a
 
 /**
  * Revisão de horários (PRD I10), por unidade: grade da semana com turnos editáveis e as datas especiais. Unidade não
- * reconhecida exige escolher a unidade ou ignorar (Review Focus 1); escolher troca o nome no rascunho (a DAL resolve).
- * `semana: []` = a grade não muda, só as exceções.
+ * reconhecida exige escolher a unidade ou ignorar (Review Focus 1); escolher grava o id da unidade no rascunho (a DAL
+ * resolve id → slug → nome → apelido) e o Novo/Atualiza vem de `unidadesComHorario`. `semana: []` = a grade não muda,
+ * só as exceções. Dia com `conflito` (fechado × aberto entre arquivos, turnos sobrepostos ou demais) fica destacado.
  */
 export function RevisaoHorarios(props: {
   id: string
   rascunho: RascunhoHorarios
   rotulos: RotuloHorario[]
   unidades: UnidadeOpcao[]
+  /** unidades que já têm grade cadastrada */
+  unidadesComHorario: string[]
   podeAplicar: boolean
 }) {
   const c = useConfirmarImportacao({ id: props.id, alvo: 'horarios', modo: 'completo' })
@@ -70,7 +73,15 @@ export function RevisaoHorarios(props: {
     const u = props.rascunho.unidades[i]!
     return props.unidades.find((x) => x.id === props.rotulos[i]?.unitId)?.nome ?? u.unidade ?? 'unidade sem nome'
   }
-  const contar = (a: RotuloHorario['acao']) => unidades.filter((u, i) => incluida(i, u) && props.rotulos[i]?.acao === a).length
+  /** Novo/Atualiza também para a unidade escolhida à mão; null = sem rótulo (ignorada ou ainda sem escolha) */
+  const acaoDe = (i: number, u: UnidadeEdit): RotuloHorario['acao'] | null => {
+    if (!incluida(i, u)) return null
+    if (!precisaEscolher(i)) return props.rotulos[i]?.acao ?? null
+    if (u.escolha === '') return 'escolher_unidade'
+    return props.unidadesComHorario.includes(u.escolha) ? 'atualizar' : 'novo'
+  }
+  const contar = (a: RotuloHorario['acao']) => unidades.filter((u, i) => acaoDe(i, u) === a).length
+  const diasConflito = unidades.reduce((n, u, i) => n + (incluida(i, u) && semanaMuda(i) ? u.semana.filter((d) => d.conflito).length : 0), 0)
 
   const montar = (): RascunhoHorarios | null => {
     if (unidades.some((u, i) => incluida(i, u) && temErro(i, u))) {
@@ -104,20 +115,25 @@ export function RevisaoHorarios(props: {
         <p className="text-sm text-muted-foreground">
           A IA informa estes horários aos clientes. Confira cada unidade: a semana inteira é substituída pela que estiver aqui.
         </p>
-        <Resumo partes={[[contar('novo'), 'unidade nova', 'unidades novas'], [contar('atualizar'), 'para atualizar', 'para atualizar'], [contar('escolher_unidade'), 'com unidade a escolher', 'com unidade a escolher']]} />
+        <Resumo
+          partes={[
+            [contar('novo'), 'unidade nova', 'unidades novas'], [contar('atualizar'), 'para atualizar', 'para atualizar'],
+            [contar('escolher_unidade'), 'com unidade a escolher', 'com unidade a escolher'], [diasConflito, 'dia para conferir', 'dias para conferir'],
+          ]}
+        />
       </div>
       {unidades.map((u, i) => {
         const nome = nomeDe(i)
         const inc = incluida(i, u)
         const e = mostrarErros && inc ? erros(i, u) : { unidade: undefined, dias: new Set<number>() }
-        const rot = props.rotulos[i]
+        const acao = acaoDe(i, u)
         const lida = props.rascunho.unidades[i]?.unidade ?? null
         return (
           <section key={i} aria-label={`Horários de ${nome}`} className={cn('flex flex-col gap-3 rounded-lg border border-border bg-card p-4', !inc && 'opacity-60')}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="min-w-0 break-words text-base font-semibold text-foreground">{nome}</h3>
-              {inc && rot?.acao === 'novo' && <Badge>Novo</Badge>}
-              {inc && rot?.acao === 'atualizar' && <Badge variant="secondary">Atualiza</Badge>}
+              {acao === 'novo' && <Badge>Novo</Badge>}
+              {acao === 'atualizar' && <Badge variant="secondary">Atualiza</Badge>}
             </div>
             {precisaEscolher(i) ? (
               <>
@@ -128,7 +144,7 @@ export function RevisaoHorarios(props: {
                   {(a) => (
                     <Select {...a} value={u.escolha} onChange={(ev) => mudar(i, (x) => ({ ...x, escolha: ev.target.value }))}>
                       <option value="">Escolha a unidade…</option>
-                      {props.unidades.map((x) => <option key={x.id} value={x.nome}>{x.nome}</option>)}
+                      {props.unidades.map((x) => <option key={x.id} value={x.id}>{x.nome}</option>)}
                       <option value={IGNORAR}>Ignorar estes horários</option>
                     </Select>
                   )}
@@ -147,7 +163,13 @@ export function RevisaoHorarios(props: {
             ) : (
               <ul className="flex flex-col gap-2">
                 {u.semana.map((d) => (
-                  <li key={d.dia} role="group" aria-label={nomeDia(d.dia)} className="flex flex-col gap-2 rounded-md border border-border p-3">
+                  <li
+                    key={d.dia}
+                    role="group"
+                    aria-label={nomeDia(d.dia)}
+                    data-conflito={d.conflito || undefined}
+                    className={cn('flex flex-col gap-2 rounded-md border border-border p-3', d.conflito && 'border-2 border-foreground bg-secondary')}
+                  >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-sm font-medium text-foreground">{nomeDia(d.dia)}</span>
                       {d.turnos.length === 0 && <span className="text-sm text-muted-foreground">Fechado</span>}
@@ -155,7 +177,7 @@ export function RevisaoHorarios(props: {
                     {d.conflito && (
                       <p className="flex items-start gap-2 text-sm text-foreground">
                         <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-                        <span>Turnos sobrepostos ou demais na leitura: confira.</span>
+                        <span>Leituras diferentes para este dia (fechado num arquivo e aberto em outro, ou turnos sobrepostos): confira.</span>
                       </p>
                     )}
                     {d.turnos.map((t, ti) => (

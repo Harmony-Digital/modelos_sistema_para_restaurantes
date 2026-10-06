@@ -8,6 +8,7 @@ import {
 } from '@/app/(painel)/conteudo/importar-alvo-actions'
 import { Field } from '@/components/form'
 import { classeArquivo, HistoricoImportacoes, ImportarCsv, tipoMime, type ImportacaoTela } from '@/components/painel/importar'
+import { DescartarImportacao } from '@/components/painel/revisao-comum'
 import { Button } from '@/components/ui/button'
 import { chamarAcao } from '@/lib/action-result'
 import { LIMITE_ARQUIVO_BYTES, LIMITE_ARQUIVO_MB, MENSAGEM_LIMITE } from '@/lib/arquivo-cardapio'
@@ -65,14 +66,25 @@ async function enviarArquivos(
   return { enviados, falhas }
 }
 
-/** Conteúdo → Importar de um alvo: nova importação (vários arquivos), planilha CSV (cardápio) e o histórico. */
-export function ImportarAlvo(props: { alvo: AlvoImportacaoTela; importacoes: ImportacaoTela[] }) {
+/**
+ * Conteúdo → Importar de um alvo: nova importação (vários arquivos), planilha CSV (cardápio) e o histórico.
+ * `soPlanilha`: gerente restrito a unidades — só a planilha do cardápio, como na Etapa 05 (ele envia e revisa; quem
+ * confirma é o dono ou o gerente com acesso a todas as unidades).
+ */
+export function ImportarAlvo(props: { alvo: AlvoImportacaoTela; importacoes: ImportacaoTela[]; soPlanilha?: boolean }) {
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">
         Nada muda no cadastro sem a sua revisão: depois de ler os arquivos, você confere o que foi lido e confirma.
       </p>
-      <NovaImportacao key={props.alvo} alvo={props.alvo} />
+      {props.soPlanilha ? (
+        <p className="text-sm text-muted-foreground">
+          PDF, fotos e os outros tipos de importação são do dono ou de gerente com acesso a todas as unidades. Você pode enviar a
+          planilha do cardápio para revisão.
+        </p>
+      ) : (
+        <NovaImportacao key={props.alvo} alvo={props.alvo} />
+      )}
       {props.alvo === 'cardapio' && <ImportarCsv />}
       <HistoricoImportacoes importacoes={props.importacoes} vazio={`Nenhuma importação de ${NOME_ALVO[props.alvo]} ainda.`} />
     </div>
@@ -281,9 +293,12 @@ export function ArquivosImportacao(props: {
         )}
       </Field>
       {ocupado && <p role="status" className="text-sm text-muted-foreground">{ocupado}</p>}
-      <Button aria-busy={ocupado !== null || undefined} disabled={lista.length === 0 || ocupado !== null} onClick={() => void ler()} className="self-start">
-        Ler arquivos
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button aria-busy={ocupado !== null || undefined} disabled={lista.length === 0 || ocupado !== null} onClick={() => void ler()}>
+          Ler arquivos
+        </Button>
+        <DescartarImportacao alvo={props.alvo} id={props.id} disabled={ocupado !== null} />
+      </div>
     </div>
   )
 }

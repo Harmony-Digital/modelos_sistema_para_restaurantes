@@ -59,6 +59,14 @@ describe('ImportarAlvo', () => {
     expect(screen.getByText('Nenhuma importação de horários ainda.')).toBeInTheDocument()
   })
 
+  it('gerente restrito a unidades: só a planilha CSV do cardápio, com aviso', () => {
+    render(<ImportarAlvo alvo="cardapio" importacoes={[]} soPlanilha />)
+    expect(screen.getByLabelText(/^Planilha CSV/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Enviar arquivos' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+    expect(screen.getByText(/PDF, fotos e os outros tipos de importação são do dono ou de gerente com acesso a todas as unidades/)).toBeInTheDocument()
+  })
+
   it('mais de 10 arquivos ou arquivo grande demais: recusa antes de criar a importação', async () => {
     const user = userEvent.setup()
     render(<ImportarAlvo alvo="espacos" importacoes={[]} />)
@@ -176,5 +184,17 @@ describe('ArquivosImportacao', () => {
     resolver({ ok: true, data: { id: ID, existente: false } })
     await waitFor(() => expect(refresh).toHaveBeenCalled())
     expect(acoesAlvo.lerArquivosAction).toHaveBeenCalledTimes(1)
+  })
+
+  it('descartar antes de ler: confirma e volta às importações do alvo', async () => {
+    const user = userEvent.setup()
+    acoes.descartarImportacaoAction.mockResolvedValue({ ok: true, data: null })
+    render(<ArquivosImportacao id={ID} alvo="horarios" modo="completo" arquivos={arquivos} />)
+    await user.click(screen.getByRole('button', { name: 'Descartar' }))
+    expect(acoes.descartarImportacaoAction).not.toHaveBeenCalled()
+    await user.click(await screen.findByRole('button', { name: 'Descartar importação' }))
+    await waitFor(() => expect(acoes.descartarImportacaoAction).toHaveBeenCalledWith(ID))
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/conteudo?aba=importar&alvo=horarios'))
+    expect(toast.success).toHaveBeenCalledWith('Importação descartada')
   })
 })

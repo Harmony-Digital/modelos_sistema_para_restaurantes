@@ -144,6 +144,19 @@ export function RevisaoRascunho(props: {
     [props.categoriasExistentes],
   )
   const incluidos = cats.reduce((n, c) => n + c.itens.filter((i) => i.incluir).length, 0)
+  // o mesmo prato lido em categorias diferentes (fotos/páginas diferentes) fica separado: a revisão avisa
+  const categoriasDoItem = new Map<string, Set<string>>()
+  for (const c of cats) {
+    for (const i of c.itens) {
+      if (!i.incluir || !i.nome.trim()) continue
+      const k = `${normalizeText(i.nome)}|${i.unidade ?? ''}`
+      categoriasDoItem.set(k, (categoriasDoItem.get(k) ?? new Set()).add(c.nome.trim()))
+    }
+  }
+  const outrasCategorias = (c: CategoriaEdit, i: ItemEdit) =>
+    i.incluir && i.nome.trim()
+      ? [...(categoriasDoItem.get(`${normalizeText(i.nome)}|${i.unidade ?? ''}`) ?? [])].filter((n) => normalizeText(n) !== normalizeText(c.nome))
+      : []
   const temErro = cats.some((c) => erroDaCategoria(c.nome) !== undefined || c.itens.some((i) => Object.keys(errosDoItem(i)).length > 0))
 
   const mudarCategoria = (ci: number, nome: string) => setCats((atual) => atual.map((c, x) => (x !== ci ? c : { ...c, nome })))
@@ -262,6 +275,14 @@ export function RevisaoRascunho(props: {
                   </div>
                   {i.unidade && <p className="text-sm text-muted-foreground">Preço só da unidade {i.unidade}</p>}
                   <AvisoConflitoPreco precos={i.precoConflito} />
+                  {outrasCategorias(c, i).length > 0 && (
+                    <p className="flex items-start gap-2 rounded-md border border-border bg-secondary p-3 text-sm text-foreground">
+                      <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+                      <span className="min-w-0 break-words">
+                        Também aparece em {outrasCategorias(c, i).join(' e ')}. Se for o mesmo item, desmarque “Incluir” em um deles.
+                      </span>
+                    </p>
+                  )}
                   {i.incluir && atualiza && (
                     <p className="text-sm text-muted-foreground">
                       {muda.length ? `Muda: ${muda.join(', ')}` : 'Nada muda: campos em branco mantêm o valor atual.'}
