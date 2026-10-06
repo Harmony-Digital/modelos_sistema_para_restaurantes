@@ -85,6 +85,17 @@ describe('loadEnv', () => {
     ).toThrowError(/WHATSAPP_ACCESS_TOKEN/)
   })
 
+  it('OPENROUTER_DEV_SEM_ZDR: desligado por padrão; "1" liga; outro valor é recusado', () => {
+    expect(loadEnv(workerEnvSchema, valida).OPENROUTER_DEV_SEM_ZDR).toBe(false)
+    expect(loadEnv(workerEnvSchema, { ...valida, OPENROUTER_DEV_SEM_ZDR: '0' }).OPENROUTER_DEV_SEM_ZDR).toBe(false)
+    expect(loadEnv(workerEnvSchema, { ...valida, OPENROUTER_DEV_SEM_ZDR: '1' }).OPENROUTER_DEV_SEM_ZDR).toBe(true)
+    expect(() => loadEnv(workerEnvSchema, { ...valida, OPENROUTER_DEV_SEM_ZDR: 'sim' })).toThrow('OPENROUTER_DEV_SEM_ZDR')
+  })
+
+  it('OPENROUTER_DEV_SEM_ZDR nunca vale em produção', () => {
+    expect(() => loadEnv(workerEnvSchema, { ...valida, NODE_ENV: 'production', OPENROUTER_DEV_SEM_ZDR: '1' })).toThrow('OPENROUTER_DEV_SEM_ZDR')
+  })
+
   it('OPENROUTER_BASE_URL é opcional, vazio é ausente e só aceita host local (é só para teste)', () => {
     expect(loadEnv(workerEnvSchema, valida).OPENROUTER_BASE_URL).toBeUndefined()
     expect(loadEnv(workerEnvSchema, { ...valida, OPENROUTER_BASE_URL: '' }).OPENROUTER_BASE_URL).toBeUndefined()

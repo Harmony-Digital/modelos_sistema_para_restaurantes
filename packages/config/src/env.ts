@@ -45,6 +45,11 @@ export const openrouterEnvSchema = z.object({
     (v) => (v === '' ? undefined : v),
     z.url({ protocol: /^https?$/, hostname: /^(127\.0\.0\.1|localhost)$/ }).optional(),
   ),
+  /**
+   * SÓ DESENVOLVIMENTO LOCAL, com dados inventados: "1" deixa de exigir ZDR/data_collection=deny
+   * para usar modelos grátis. Nunca em produção (o worker recusa) — remover antes do go-live.
+   */
+  OPENROUTER_DEV_SEM_ZDR: z.enum(['0', '1']).default('0').transform((v) => v === '1'),
 })
 
 const common = z.object({
@@ -67,6 +72,13 @@ export const workerEnvSchema = common
   .extend(secretsEnvSchema.shape)
   .extend(whatsappEnvSchema.shape)
   .extend(openrouterEnvSchema.shape)
+  .extend({ NODE_ENV: z.string().optional() })
+  .superRefine((e, ctx) => {
+    // LGPD (PRD §10): em produção toda chamada exige data_collection=deny + zdr
+    if (e.OPENROUTER_DEV_SEM_ZDR && e.NODE_ENV === 'production') {
+      ctx.addIssue({ code: 'custom', path: ['OPENROUTER_DEV_SEM_ZDR'], message: 'proibido em produção' })
+    }
+  })
 
 export function loadEnv<T extends z.ZodType>(
   schema: T,

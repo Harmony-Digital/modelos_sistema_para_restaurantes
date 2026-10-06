@@ -96,6 +96,8 @@ export function createOpenRouterClient(cfg: {
   timeoutMs?: number
   /** Só para teste (OpenRouter falso do e2e). */
   baseUrl?: string
+  /** SÓ DESENVOLVIMENTO LOCAL (dados inventados): não exige ZDR/data_collection=deny, para modelos grátis. */
+  semZdrDev?: boolean
 }): LlmClient {
   const doFetch = cfg.fetch ?? fetch
   const endpoint = `${(cfg.baseUrl ?? 'https://openrouter.ai/api/v1').replace(/\/+$/, '')}/chat/completions`
@@ -122,7 +124,8 @@ export function createOpenRouterClient(cfg: {
               type: 'json_schema',
               json_schema: { name: p.schemaName, strict: true, schema: p.jsonSchema },
             },
-            provider: { data_collection: 'deny', zdr: true },
+            // LGPD: em produção sempre deny + zdr; o modo dev só existe na máquina do desenvolvedor
+            ...(cfg.semZdrDev ? {} : { provider: { data_collection: 'deny', zdr: true } }),
             temperature: 0,
             max_tokens: p.maxTokens,
             stream: false,

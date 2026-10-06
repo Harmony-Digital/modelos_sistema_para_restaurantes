@@ -36,6 +36,7 @@ export async function iniciarWorkerE2e(openrouterUrl: string): Promise<ChildProc
       WHATSAPP_ACCESS_TOKEN: 'e2e', // simulação nunca chama a Meta; token inválido de propósito
       WHATSAPP_PHONE_NUMBER_ID: env.WHATSAPP_PHONE_NUMBER_ID ?? '1',
       OPENROUTER_API_KEY: 'e2e',
+      OPENROUTER_DEV_SEM_ZDR: '0', // o OpenRouter falso exige deny + zdr
       OPENROUTER_BASE_URL: openrouterUrl,
       AI_TRIAGE_MODELS: 'e2e/falso',
       LOG_LEVEL: 'info',

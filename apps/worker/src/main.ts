@@ -13,6 +13,7 @@ import { initSentry, Sentry } from './sentry.ts'
 const VERSION = process.env.APP_VERSION ?? 'dev'
 const env = loadEnv(workerEnvSchema)
 const log = createLogger(env.LOG_LEVEL)
+if (env.OPENROUTER_DEV_SEM_ZDR) log.warn('OPENROUTER_DEV_SEM_ZDR=1: chamadas à IA SEM ZDR (só desenvolvimento local, dados inventados)')
 initSentry(env.SENTRY_DSN, VERSION)
 
 // Session pooler (IPv4) ou conexão direta: processo de longa duração com prepared statements (o modo
@@ -35,6 +36,7 @@ try {
       apiKey: env.OPENROUTER_API_KEY,
       appTitle: 'ia-atendimento',
       ...(env.OPENROUTER_BASE_URL ? { baseUrl: env.OPENROUTER_BASE_URL } : {}),
+      ...(env.OPENROUTER_DEV_SEM_ZDR ? { semZdrDev: true } : {}),
     }),
     wa: createWhatsAppClient({
       accessToken: env.WHATSAPP_ACCESS_TOKEN,

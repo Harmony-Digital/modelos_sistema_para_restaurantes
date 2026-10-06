@@ -92,6 +92,19 @@ describe('OpenRouter completeJson', () => {
     expect(await call(async () => json(429, {}))).toMatchObject({ retryable: true, status: 429 })
     expect(await call(async () => json(401, {}))).toMatchObject({ retryable: false, status: 401 })
   })
+  it('modo dev sem ZDR (só desenvolvimento local): não envia a política de dados; padrão continua estrito', async () => {
+    const corpo = async (semZdrDev?: boolean) => {
+      const f = vi.fn(async () => json(200, okBody('{"a":1}')))
+      await createOpenRouterClient({ apiKey: 'KEY', appTitle: 'A', fetch: f, ...(semZdrDev === undefined ? {} : { semZdrDev }) }).completeJson({
+        models: ['m'], system: 's', user: 'u', schemaName: 'x', jsonSchema: { type: 'object' }, parse: (raw) => raw, maxTokens: 5,
+      })
+      return JSON.parse(String((f.mock.calls[0]! as unknown as [string, RequestInit])[1].body))
+    }
+    expect((await corpo()).provider).toEqual({ data_collection: 'deny', zdr: true })
+    expect((await corpo(false)).provider).toEqual({ data_collection: 'deny', zdr: true })
+    expect((await corpo(true)).provider).toBeUndefined()
+  })
+
   it('baseUrl troca o servidor (e2e com OpenRouter falso), sem barra duplicada', async () => {
     const f = vi.fn(async () => json(200, okBody('{"a":1}')))
     await createOpenRouterClient({ apiKey: 'KEY', appTitle: 'A', fetch: f, baseUrl: 'http://127.0.0.1:9999/' }).completeJson({

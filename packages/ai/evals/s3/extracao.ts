@@ -23,7 +23,7 @@ if (!(teto > 0)) throw new Error('--teto deve ser um valor em dólares maior que
 const maxChamadas = Number(values['max-chamadas'])
 if (!Number.isInteger(maxChamadas) || maxChamadas <= 0) throw new Error('--max-chamadas deve ser um inteiro maior que zero')
 
-const llm = createOpenRouterClient({ apiKey, appTitle: 'ia-atendimento-evals' })
+const llm = createOpenRouterClient({ apiKey, appTitle: 'ia-atendimento-evals', semZdrDev: process.env.OPENROUTER_DEV_SEM_ZDR === '1' && process.env.NODE_ENV !== 'production' })
 const percentil = (xs: number[], p: number) => [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor((xs.length * p) / 100))] ?? 0
 let gastoTotal = 0
 let chamadas = 0
