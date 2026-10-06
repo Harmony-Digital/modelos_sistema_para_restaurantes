@@ -163,7 +163,9 @@ export function resolverItensS2(
     const u = escolhida ?? encontrarUnidade(item.unidade, unidades)
     const d = item.data ? resolverData(item.data, local.data, listaFeriados) : null
     const data = d?.ok ? d.data : null
-    const candidatos = ativos.filter((a) => (!u || a.unitId === u.id) && (!data || a.data === data))
+    // o cliente disse a unidade ou o dia e não reconhecemos: filtrar sem esse dado cancelaria o aviso errado
+    const naoReconhecido = (!escolhida && !!item.unidade && !u) || (!!item.data && !d?.ok)
+    const candidatos = naoReconhecido ? [] : ativos.filter((a) => (!u || a.unitId === u.id) && (!data || a.data === data))
     if (candidatos.length === 1) {
       const a = candidatos[0]!
       if (cancelados.has(a.id)) return // repetido na mesma mensagem

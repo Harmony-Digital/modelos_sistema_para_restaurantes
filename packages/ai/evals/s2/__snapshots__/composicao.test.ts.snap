@@ -145,6 +145,22 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > c
 }
 `;
 
+exports[`evals S2 — camada 2 (resolução + composição, determinística) > c09: cancela o do shopping (unidade que não existe) 1`] = `
+{
+  "acoesS2": [],
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Você tem estes avisos:
+• Asa Sul — sábado (10/10), 4 pessoas
+Qual deseja cancelar? Diga a unidade e o dia.",
+  "validos": 1,
+}
+`;
+
 exports[`evals S2 — camada 2 (resolução + composição, determinística) > m01: abre sábado na asa sul? vou com 4 às 20h 1`] = `
 {
   "acoesS2": [

@@ -153,6 +153,8 @@ export const CASOS: Caso[] = [
   c('c06', 'cancela meu aviso (só há aviso de ontem)', SEG_14H, [can()], { texto: NAO_ACHOU }, { avisos: [PASSADO] }),
   c('c07', 'cancela o do lago sul', SEG_14H, [can({ unidade: 'lago sul' })],
     { texto: 'Você tem estes avisos:\n• Asa Sul — sábado (10/10), 4 pessoas\nQual deseja cancelar? Diga a unidade e o dia.' }, { avisos: [SAB_AS] }),
+  c('c09', 'cancela o do shopping (unidade que não existe)', SEG_14H, [can({ unidade: 'shopping' })],
+    { texto: 'Você tem estes avisos:\n• Asa Sul — sábado (10/10), 4 pessoas\nQual deseja cancelar? Diga a unidade e o dia.' }, { avisos: [SAB_AS] }),
   c('c08', 'cancela, cancela!', SEG_14H, [can(), can()],
     { texto: 'Pronto, cancelei seu aviso: Asa Sul, sábado (10/10).', acoes: [cancelada('a1', CANC_A1)] }, { avisos: [SAB_AS] }),
 

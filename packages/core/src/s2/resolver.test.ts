@@ -221,6 +221,16 @@ describe('resolverS2 — cancelar', () => {
     expect(r.texto).toBe('Você tem estes avisos:\n• Asa Sul — sábado (10/10), 4 pessoas\nQual deseja cancelar? Diga a unidade e o dia.')
   })
 
+  it('unidade ou data dita mas não reconhecida: nunca cancela, lista todos', () => {
+    const lista = 'Você tem estes avisos:\n• Asa Sul — sábado (10/10), 4 pessoas\nQual deseja cancelar? Diga a unidade e o dia.'
+    for (const item of [can({ unidade: 'shopping' }), can({ unidade: 'asa' }), can({ data: 'semana retrasada' }), can({ unidade: 'asa sul', data: 'dia 45' })]) {
+      const r = resolverS2([item], CONTEXTO, SEG_14H, [sab])
+      expect(r.acoes).toEqual([])
+      expect(r.texto).toBe(lista)
+      expect([r.validos, r.respondidos]).toEqual([1, 0])
+    }
+  })
+
   it('não cancela o mesmo aviso duas vezes', () => {
     const r = resolverS2([can(), can()], CONTEXTO, SEG_14H, [sab])
     expect(r.acoes).toEqual([cancelada('a1', CANC_A1)])
