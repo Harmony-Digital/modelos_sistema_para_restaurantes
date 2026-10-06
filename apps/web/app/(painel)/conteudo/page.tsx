@@ -154,7 +154,7 @@ async function SecaoImportar(props: {
     )
   }
   if (imp.status === 'enviado' || imp.status === 'processando' || imp.status === 'erro') {
-    return <AcompanharImportacao id={imp.id} status={imp.status} erro={imp.erro} />
+    return <AcompanharImportacao id={imp.id} status={imp.status} erro={imp.erro} desde={imp.criadoEm.toISOString()} />
   }
   if (imp.status === 'rascunho' && imp.draft) {
     const nomeCategoria = new Map(cardapio.categorias.map((c) => [c.id, c.nome]))

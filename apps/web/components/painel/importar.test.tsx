@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -92,7 +92,7 @@ describe('AcompanharImportacao', () => {
     vi.useFakeTimers()
     acoes.estadoImportacaoAction.mockResolvedValueOnce({ ok: true, data: { status: 'processando', erro: null } })
     acoes.estadoImportacaoAction.mockResolvedValueOnce({ ok: true, data: { status: 'rascunho', erro: null } })
-    render(<AcompanharImportacao id={ID} status="enviado" erro={null} />)
+    render(<AcompanharImportacao id={ID} status="enviado" erro={null} desde={new Date().toISOString()} />)
     expect(screen.getByRole('status')).toHaveTextContent('Lendo o cardápio…')
     await act(() => vi.advanceTimersByTimeAsync(3000))
     expect(acoes.estadoImportacaoAction).toHaveBeenCalledTimes(1)
@@ -102,9 +102,57 @@ describe('AcompanharImportacao', () => {
     expect(refresh).toHaveBeenCalledTimes(1)
   })
 
+  it('action com erro: para de consultar e mostra a mensagem', async () => {
+    vi.useFakeTimers()
+    acoes.estadoImportacaoAction.mockResolvedValue({ ok: false, formError: 'Não encontramos essa importação.' })
+    render(<AcompanharImportacao id={ID} status="processando" erro={null} desde={new Date().toISOString()} />)
+    await act(() => vi.advanceTimersByTimeAsync(3000))
+    expect(screen.getByRole('alert')).toHaveTextContent('Não encontramos essa importação.')
+    await act(() => vi.advanceTimersByTimeAsync(9000))
+    expect(acoes.estadoImportacaoAction).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('Lendo o cardápio…')).not.toBeInTheDocument()
+  })
+
+  it('mais de 5 minutos lendo: avisa e para de consultar', async () => {
+    vi.useFakeTimers()
+    acoes.estadoImportacaoAction.mockResolvedValue({ ok: true, data: { status: 'processando', erro: null } })
+    render(<AcompanharImportacao id={ID} status="enviado" erro={null} desde={new Date(Date.now() - 4 * 60_000).toISOString()} />)
+    await act(() => vi.advanceTimersByTimeAsync(60_000))
+    const chamadas = acoes.estadoImportacaoAction.mock.calls.length
+    expect(screen.getByRole('alert')).toHaveTextContent('A leitura está demorando. Tente enviar de novo.')
+    await act(() => vi.advanceTimersByTimeAsync(30_000))
+    expect(acoes.estadoImportacaoAction).toHaveBeenCalledTimes(chamadas)
+    expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it('já criada há mais de 5 minutos: avisa sem consultar', async () => {
+    vi.useFakeTimers()
+    render(<AcompanharImportacao id={ID} status="enviado" erro={null} desde={new Date(Date.now() - 6 * 60_000).toISOString()} />)
+    expect(screen.getByRole('alert')).toHaveTextContent('A leitura está demorando. Tente enviar de novo.')
+    await act(() => vi.advanceTimersByTimeAsync(9000))
+    expect(acoes.estadoImportacaoAction).not.toHaveBeenCalled()
+  })
+
+  it('importação com erro pode ser descartada (com confirmação)', async () => {
+    const user = userEvent.setup()
+    acoes.descartarImportacaoAction.mockResolvedValue({ ok: true, data: null })
+    render(<AcompanharImportacao id={ID} status="erro" erro="Não consegui ler." desde={new Date().toISOString()} />)
+    await user.click(screen.getByRole('button', { name: 'Descartar' }))
+    const dialogo = await screen.findByRole('dialog')
+    await user.click(within(dialogo).getByRole('button', { name: 'Descartar importação' }))
+    await waitFor(() => expect(acoes.descartarImportacaoAction).toHaveBeenCalledWith(ID))
+    expect(toast.success).toHaveBeenCalledWith('Importação descartada')
+    expect(push).toHaveBeenCalledWith('/conteudo?aba=cardapio&sub=importar')
+  })
+
+  it('lendo não oferece Descartar', () => {
+    render(<AcompanharImportacao id={ID} status="processando" erro={null} desde={new Date().toISOString()} />)
+    expect(screen.queryByRole('button', { name: 'Descartar' })).not.toBeInTheDocument()
+  })
+
   it('erro mostra a mensagem amigável e não consulta', async () => {
     vi.useFakeTimers()
-    render(<AcompanharImportacao id={ID} status="erro" erro="Não consegui ler esse arquivo. Tente uma foto mais nítida ou envie um CSV." />)
+    render(<AcompanharImportacao id={ID} status="erro" erro="Não consegui ler esse arquivo. Tente uma foto mais nítida ou envie um CSV." desde={new Date().toISOString()} />)
     expect(screen.getByRole('alert')).toHaveTextContent('Não consegui ler esse arquivo. Tente uma foto mais nítida ou envie um CSV.')
     await act(() => vi.advanceTimersByTimeAsync(9000))
     expect(acoes.estadoImportacaoAction).not.toHaveBeenCalled()

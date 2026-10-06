@@ -4,13 +4,14 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { estadoImportacaoAction, importarArquivoAction, importarCsvAction } from '@/app/(painel)/conteudo/importar-actions'
+import { descartarImportacaoAction, estadoImportacaoAction, importarArquivoAction, importarCsvAction } from '@/app/(painel)/conteudo/importar-actions'
 import { Field, SubmitButton } from '@/components/form'
+import { Confirmar } from '@/components/painel/confirmar'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { chamarAcao } from '@/lib/action-result'
 import { URL_IMPORTAR, urlImportacao } from '@/lib/importacao'
 import { LIMITE_ARQUIVO_BYTES } from '@/lib/arquivo-cardapio'
-import { cn } from '@/lib/utils'
 
 export type StatusImportacaoTela = 'enviado' | 'processando' | 'rascunho' | 'aprovado' | 'rejeitado' | 'erro'
 export type ImportacaoTela = { id: string; origem: 'csv' | 'arquivo'; mime: string; status: StatusImportacaoTela; criadoEm: string }
@@ -191,22 +192,39 @@ function ImportarArquivo() {
 }
 
 const INTERVALO_MS = 3000
+/** Mais que isso em fila/leitura: algo travou (worker parado, fila cheia); o usuário reenvia. */
+const LIMITE_LEITURA_MS = 5 * 60_000
+const DEMORANDO = 'A leitura está demorando. Tente enviar de novo.'
 
-/** Acompanha a leitura por IA: consulta o status a cada 3 s e recarrega a tela quando sai da fila/leitura. */
-export function AcompanharImportacao(props: { id: string; status: StatusImportacaoTela; erro: string | null }) {
+/**
+ * Acompanha a leitura por IA: consulta o status a cada 3 s e recarrega a tela quando sai da fila/leitura. Para de
+ * consultar se a consulta falhar ou se a leitura passar de 5 minutos (contados de `desde`, a criação da importação).
+ * Importação com erro pode ser descartada.
+ */
+export function AcompanharImportacao(props: { id: string; status: StatusImportacaoTela; erro: string | null; desde: string }) {
   const router = useRouter()
   const consultando = useRef(false)
-  const lendo = LENDO.includes(props.status)
+  const limite = new Date(props.desde).getTime() + LIMITE_LEITURA_MS
+  const [falha, setFalha] = useState<string | null>(() => (LENDO.includes(props.status) && Date.now() >= limite ? DEMORANDO : null))
+  const [descartar, setDescartar] = useState(false)
+  const lendo = LENDO.includes(props.status) && falha === null
 
   useEffect(() => {
     if (!lendo) return
     let ativo = true
+    const parar = (mensagem: string) => {
+      clearInterval(t)
+      if (ativo) setFalha(mensagem)
+    }
     const t = setInterval(async () => {
       if (consultando.current) return
+      if (Date.now() >= limite) return parar(DEMORANDO)
       consultando.current = true
       try {
         const r = await chamarAcao(() => estadoImportacaoAction(props.id))
-        if (ativo && r.ok && r.data && !LENDO.includes(r.data.status)) {
+        if (!ativo) return
+        if (!r.ok) return parar(r.formError ?? 'Não foi possível acompanhar a leitura agora.')
+        if (r.data && !LENDO.includes(r.data.status)) {
           clearInterval(t)
           router.refresh()
         }
@@ -218,7 +236,18 @@ export function AcompanharImportacao(props: { id: string; status: StatusImportac
       ativo = false
       clearInterval(t)
     }
-  }, [lendo, props.id, router])
+  }, [lendo, limite, props.id, router])
+
+  const executarDescarte = async () => {
+    const r = await chamarAcao(() => descartarImportacaoAction(props.id))
+    if (!r.ok) {
+      toast.error(r.formError ?? 'Não foi possível descartar agora.')
+      return
+    }
+    setDescartar(false)
+    toast.success('Importação descartada')
+    router.push(URL_IMPORTAR)
+  }
 
   return (
     <div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4">
@@ -231,11 +260,25 @@ export function AcompanharImportacao(props: { id: string; status: StatusImportac
           </div>
         </div>
       ) : (
-        <p role="alert" className={cn('text-sm text-destructive')}>{props.erro ?? 'Não foi possível ler esse arquivo.'}</p>
+        <p role="alert" className="text-sm text-destructive">
+          {falha ?? props.erro ?? 'Não foi possível ler esse arquivo.'}
+        </p>
       )}
-      <Link href={URL_IMPORTAR} className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 hover:underline">
-        {lendo ? 'Voltar às importações' : 'Enviar outro arquivo'}
-      </Link>
+      <div className="flex flex-wrap items-center gap-4">
+        <Link href={URL_IMPORTAR} className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 hover:underline">
+          {lendo ? 'Voltar às importações' : 'Enviar outro arquivo'}
+        </Link>
+        {props.status === 'erro' && <Button variant="outline" onClick={() => setDescartar(true)}>Descartar</Button>}
+      </div>
+      <Confirmar
+        aberto={descartar}
+        onAbertoChange={setDescartar}
+        titulo="Descartar importação?"
+        descricao="Ela sai da lista de importações para revisar. Você pode enviar o arquivo de novo depois."
+        rotuloConfirmar="Descartar importação"
+        rotuloAndamento="Descartando…"
+        onConfirmar={executarDescarte}
+      />
     </div>
   )
 }

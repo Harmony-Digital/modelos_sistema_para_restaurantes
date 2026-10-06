@@ -1,3 +1,4 @@
+import 'server-only'
 import { createHash } from 'node:crypto'
 import { LIMITE_ARQUIVO_BYTES, validarArquivoCardapio } from '@/lib/arquivo-cardapio'
 import { createClient } from '@/lib/supabase/server'
