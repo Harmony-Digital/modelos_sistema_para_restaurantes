@@ -183,6 +183,20 @@
       "when": 1791253856348,
       "tag": "0025_eventos_anonimizado_fk",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791273934002,
+      "tag": "0026_cardapio",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1791273935718,
+      "tag": "0027_cardapio_rls_storage",
+      "breakpoints": true
     }
   ]
 }
