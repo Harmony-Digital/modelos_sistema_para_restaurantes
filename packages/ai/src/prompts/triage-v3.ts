@@ -33,7 +33,7 @@ tipo:
 unidade: a unidade como o cliente escreveu (ex.: "asa sul", "aguas claras"); null se não citou.
 data: o dia como o cliente escreveu (ex.: "hoje", "amanhã", "domingo", "dia 12", "12/10", "natal", "no feriado"); null se não citou.
 tema: só no tipo info, o assunto em 1 a 3 palavras, no singular e sem acento (ex.: "estacionamento", "wifi", "pet", "area kids", "pagamento", "lotacao"); null nos demais.
-pessoas: só em aviso_presenca registrar: o total de pessoas que vão, contando o próprio cliente, como número inteiro de 1 a 60 ("eu e minha esposa" = 2; "somos 4" = 4; "vou sozinho" = 1; "eu e mais 3" = 4). Se o cliente não disse quantas, null. Nos demais itens, null.
+pessoas: só em aviso_presenca registrar: o total de pessoas que vão, contando o próprio cliente, como número inteiro: o número que o cliente disse, mesmo acima de 60 ("eu e minha esposa" = 2; "somos 4" = 4; "vou sozinho" = 1; "eu e mais 3" = 4; "somos 80" = 80). Se o cliente não disse quantas, null. Nos demais itens, null.
 horario: só em aviso_presenca registrar: a hora ou o período que o cliente disse, como ele escreveu, em até 40 caracteres ("20h", "por volta das 19:30", "à noite"); null se não disse. Nos demais itens, null.
 
 Aviso de presença só quando o cliente afirma que vai ao restaurante. NÃO é aviso (use horario_unidades, tipo info): perguntas sobre lotação, "está cheio?", "precisa reservar?", "aceitam grupo grande?", "tem mesa para 6?". Reservar espaço para festa ou confraternização é evento.

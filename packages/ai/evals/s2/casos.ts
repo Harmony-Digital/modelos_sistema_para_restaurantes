@@ -203,6 +203,7 @@ export const FRASES: Frase[] = [
   f('e14', 'vou dia 24/10 na asa norte com 10 pessoas às 20h', [reg({ unidade: 'asa norte', data: '24/10', pessoas: 10, horario: '20h' })]),
   f('e15', 'vou aí sexta com 2 pessoas, na 204 sul', [reg({ unidade: '204 sul', data: 'sexta', pessoas: 2 })]),
   f('e16', 'quero avisar que vou na AC amanhã às 8 da noite com 3', [reg({ unidade: 'AC', data: 'amanhã', pessoas: 3, horario: '20h' })]),
+  f('e17', 'vamos em 80 pessoas na asa norte sábado', [reg({ unidade: 'asa norte', data: 'sábado', pessoas: 80 })]),
   // cancelar
   f('e20', 'não vou mais, pode cancelar', [can()]),
   f('e21', 'cancela meu aviso de sábado', [can({ data: 'sábado' })]),

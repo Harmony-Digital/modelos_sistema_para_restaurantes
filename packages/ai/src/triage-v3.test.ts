@@ -24,6 +24,9 @@ describe('triageV3', () => {
     expect(call.schemaName).toBe('triagem_v3')
     expect(call.system).toContain('"Casa X"')
     expect(call.system).toContain('eu e minha esposa" = 2')
+    // acima de 60 o core responde o limite: a triagem não pode cortar nem trocar o número
+    expect(call.system).toContain('mesmo acima de 60')
+    expect(call.system).not.toContain('de 1 a 60')
     expect(call.jsonSchema).toMatchObject({ required: ['itens', 'fora_escopo'], additionalProperties: false })
     const item = (call.jsonSchema as { properties: { itens: { items: { required: string[]; additionalProperties: boolean; properties: { tipo: { enum: unknown[] } } } } } }).properties.itens.items
     expect(item.required).toEqual(['servico', 'tipo', 'unidade', 'data', 'tema', 'pessoas', 'horario'])
