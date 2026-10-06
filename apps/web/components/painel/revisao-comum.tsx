@@ -42,7 +42,8 @@ export function useConfirmarImportacao(p: { id: string; alvo: AlvoImportacaoTela
   const [erroGeral, setErroGeral] = useState<string | undefined>()
   const [resultado, setResultado] = useState<ContagemAplicada | null>(null)
 
-  const confirmar = async (rascunho: () => unknown | null) => {
+  /** `extra`: campos a mais da confirmação (o arquivo de envio do cardápio completo) */
+  const confirmar = async (rascunho: () => unknown | null, extra: { arquivoDeEnvio?: { ordem: number; unitId: string | null } | null } = {}) => {
     if (emAndamento.current) return
     setErroGeral(undefined)
     const r0 = rascunho()
@@ -51,7 +52,7 @@ export function useConfirmarImportacao(p: { id: string; alvo: AlvoImportacaoTela
     emAndamento.current = true
     setAplicando(true)
     try {
-      const r = await chamarAcao(() => aplicarImportacaoAction(p.id, { alvo: p.alvo, modo: p.modo, rascunho: r0 }))
+      const r = await chamarAcao(() => aplicarImportacaoAction(p.id, { alvo: p.alvo, modo: p.modo, rascunho: r0, ...extra }))
       if (!r.ok) return setErroGeral(r.formError ?? 'Não foi possível aplicar agora. Tente de novo.')
       if (!r.data) return
       toast.success(textoResultado(p.alvo, p.modo, r.data))

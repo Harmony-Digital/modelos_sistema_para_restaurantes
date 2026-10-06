@@ -180,19 +180,40 @@ describe('RevisaoRascunho', () => {
     expect(within(grupo('Costela')).queryByText(/Preços diferentes/)).not.toBeInTheDocument()
   })
 
-  it('vários arquivos (por alvo): confirma pela importação por alvo, sem a opção de arquivo de envio', async () => {
+  it('vários arquivos (por alvo): confirma pela importação por alvo; sem marcar, nenhum arquivo de envio', async () => {
     const user = userEvent.setup()
     acoesAlvo.aplicarImportacaoAction.mockResolvedValue({ ok: true, data: { criados: 2, atualizados: 1, ignorados: 1 } })
-    render(<RevisaoRascunho {...base} origem="arquivo" porAlvo />)
-    expect(screen.queryByLabelText('Usar este arquivo como cardápio para enviar aos clientes')).not.toBeInTheDocument()
+    render(<RevisaoRascunho {...base} origem="arquivo" porAlvo arquivosDeEnvio={[{ ordem: 1, mime: 'application/pdf' }]} />)
+    expect(screen.getByLabelText('Usar este arquivo como cardápio para enviar aos clientes')).not.toBeChecked()
     await user.dblClick(screen.getByRole('button', { name: 'Confirmar importação' }))
     await waitFor(() => expect(acoesAlvo.aplicarImportacaoAction).toHaveBeenCalledTimes(1))
     expect(acoes.aplicarRascunhoAction).not.toHaveBeenCalled()
     const [id, entrada] = acoesAlvo.aplicarImportacaoAction.mock.calls[0]!
     expect(id).toBe(ID)
-    expect(entrada).toMatchObject({ alvo: 'cardapio', modo: 'completo' })
+    expect(entrada).toMatchObject({ alvo: 'cardapio', modo: 'completo', arquivoDeEnvio: null })
     expect(entrada.rascunho.categorias[0].itens[0]).toEqual(item())
     expect(await screen.findByRole('status')).toHaveTextContent('Cardápio atualizado: 2 novos, 1 atualizados, 1 ignorado')
+  })
+
+  it('I3: vários arquivos: escolhe um deles como cardápio de envio, com unidade (igual à Etapa 05)', async () => {
+    const user = userEvent.setup()
+    acoesAlvo.aplicarImportacaoAction.mockResolvedValue({ ok: true, data: { criados: 2, atualizados: 1, ignorados: 0 } })
+    render(
+      <RevisaoRascunho {...base} origem="arquivo" porAlvo arquivosDeEnvio={[{ ordem: 1, mime: 'image/jpeg' }, { ordem: 2, mime: 'application/pdf' }]} />,
+    )
+    await user.click(screen.getByLabelText('Usar um dos arquivos como cardápio para enviar aos clientes'))
+    // o PDF vem escolhido; dá para trocar
+    expect(screen.getByLabelText('Arquivo')).toHaveValue('2')
+    await user.selectOptions(screen.getByLabelText('Arquivo'), 'Arquivo 1 (Foto)')
+    await user.selectOptions(screen.getByLabelText('Vale para'), U1)
+    await user.click(screen.getByRole('button', { name: 'Confirmar importação' }))
+    await waitFor(() => expect(acoesAlvo.aplicarImportacaoAction).toHaveBeenCalledTimes(1))
+    expect(acoesAlvo.aplicarImportacaoAction.mock.calls[0]![1]).toMatchObject({ arquivoDeEnvio: { ordem: 1, unitId: U1 } })
+  })
+
+  it('quem não confirma (gerente restrito) não vê a opção de arquivo de envio', () => {
+    render(<RevisaoRascunho {...base} origem="arquivo" porAlvo podeAplicar={false} arquivosDeEnvio={[{ ordem: 1, mime: 'application/pdf' }]} />)
+    expect(screen.queryByLabelText(/como cardápio para enviar aos clientes/)).not.toBeInTheDocument()
   })
 
   it('mesmo item em duas categorias (fotos diferentes): avisa e deixa desmarcar um deles', async () => {

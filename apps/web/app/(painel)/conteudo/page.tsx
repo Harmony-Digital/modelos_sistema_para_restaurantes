@@ -48,8 +48,8 @@ export default async function ConteudoPage(props: { searchParams: Promise<{ aba?
   const s = await requireStaff()
   const { aba: pedida, sub: subPedida, imp, alvo: alvoPedido } = await props.searchParams
   const db = getDb()
-  // Importar: dono e gerente. PDF/fotos e os outros alvos só com acesso a todas as unidades; o gerente restrito a
-  // unidades segue com a planilha CSV do cardápio, como na Etapa 05 (o banco confere de novo em cada ação)
+  // Importar: dono e gerente. Os outros alvos e a confirmação só com acesso a todas as unidades; o gerente restrito a
+  // unidades envia, lê e revisa o cardápio (PDF, fotos e planilha), como na Etapa 05 (o banco confere em cada ação)
   const importa = s.role !== 'atendente'
   const geral = importa && (await withUserContext(db, s.claims, (tx) => podeEditarCardapioGeral(tx)))
   // endereço antigo (Cardápio → Importar, Etapa 05): leva à aba Importar
@@ -178,7 +178,7 @@ const DESTINO: Record<AlvoImportacaoTela, { href: string; rotulo: string }> = {
 async function SecaoImportar(props: {
   imp: string | undefined
   alvo: AlvoImportacaoTela
-  /** dono ou gerente com acesso a todas as unidades; senão (gerente restrito) só a planilha CSV do cardápio */
+  /** dono ou gerente com acesso a todas as unidades; senão (gerente restrito) só o cardápio, sem confirmar */
   geral: boolean
   s: Staff
   unidades: { id: string; nome: string }[]
@@ -199,7 +199,7 @@ async function SecaoImportar(props: {
         {props.imp !== undefined && <p role="alert" className="text-sm text-destructive">Não encontramos essa importação.</p>}
         <ImportarAlvo
           alvo={alvo}
-          soPlanilha={!props.geral}
+          restrito={!props.geral}
           importacoes={lista.map((i) => ({
             id: i.id, origem: i.origem, modo: i.modo, mime: i.mime, arquivos: i.arquivos, status: i.status, recebendo: i.recebendo,
             criadoEm: i.criadoEm.toISOString(),
@@ -210,7 +210,7 @@ async function SecaoImportar(props: {
   }
   // Etapa 05: CSV ou um arquivo só (com caminho na linha) seguem a revisão e a aplicação do cardápio de antes
   const legado = imp.alvo === 'cardapio' && imp.modo === 'completo' && (imp.origem === 'csv' || imp.storagePath !== null)
-  if (!props.geral && !legado) {
+  if (!props.geral && imp.alvo !== 'cardapio') {
     return (
       <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
         <p className="text-foreground">Esta importação é do dono ou de gerente com acesso a todas as unidades.</p>
@@ -243,7 +243,7 @@ async function SecaoImportar(props: {
     )
   }
   if (imp.status === 'rascunho') {
-    const revisao = await revisaoDaImportacao(imp, legado, s, props.unidades)
+    const revisao = await revisaoDaImportacao(imp, legado, props.geral, s, props.unidades)
     if (revisao) return <>{seletor}{revisao}</>
   }
   const texto = imp.status === 'aprovado'
@@ -269,11 +269,12 @@ async function SecaoImportar(props: {
 async function revisaoDaImportacao(
   imp: NonNullable<Awaited<ReturnType<typeof lerImportacao>>>,
   legado: boolean,
+  /** pode confirmar (dono ou gerente com acesso a todas as unidades) */
+  geral: boolean,
   s: Staff,
   unidades: { id: string; nome: string }[],
 ): Promise<React.ReactNode | null> {
   const db = getDb()
-  const geral = await withUserContext(db, s.claims, (tx) => podeEditarCardapioGeral(tx))
   if (imp.alvo === 'cardapio' && imp.modo === 'completo') {
     if (!imp.draft) return null
     const cardapio = await listarCardapio(db, s.claims)
@@ -281,12 +282,15 @@ async function revisaoDaImportacao(
     // vários arquivos: o rascunho com os conflitos de preço vem da revisão por alvo
     const porAlvo = legado ? null : await revisaoImportacao(db, s.claims, imp.id)
     const rascunho = porAlvo?.alvo === 'cardapio' && porAlvo.modo === 'completo' && porAlvo.draft ? porAlvo.draft : imp.draft
+    // vários arquivos: um deles pode virar o cardápio de envio (só quem confirma escolhe)
+    const arquivosDeEnvio = legado || !geral ? [] : (await arquivosImportacao(db, s.claims, imp.id)).map(({ ordem, mime }) => ({ ordem, mime }))
     return (
       <RevisaoRascunho
         key={imp.id}
         id={imp.id}
         origem={imp.origem}
         porAlvo={!legado}
+        arquivosDeEnvio={arquivosDeEnvio}
         rascunho={rascunho}
         categoriasExistentes={cardapio.categorias.map((c) => ({ nome: c.nome, ativo: c.ativo }))}
         itensExistentes={cardapio.itens.map((i) => ({

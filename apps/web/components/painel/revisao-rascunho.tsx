@@ -115,8 +115,10 @@ export function RevisaoRascunho(props: {
   id: string
   origem: 'csv' | 'arquivo'
   rascunho: RascunhoCardapioImportacao
-  /** importação por alvo (vários arquivos, Etapa 07): aplica por `aplicarImportacaoAction`, sem arquivo de envio */
+  /** importação por alvo (vários arquivos, Etapa 07): aplica por `aplicarImportacaoAction` */
   porAlvo?: boolean
+  /** por alvo: os arquivos da importação, para escolher um como cardápio de envio (como na Etapa 05) */
+  arquivosDeEnvio?: { ordem: number; mime: string }[]
   categoriasExistentes: { nome: string; ativo: boolean }[]
   itensExistentes: ItemExistente[]
   /** unidades ativas (para o arquivo de envio) */
@@ -128,6 +130,10 @@ export function RevisaoRascunho(props: {
   const [cats, setCats] = useState(() => paraEdicao(props.rascunho))
   const [usarArquivo, setUsarArquivo] = useState(false)
   const [unitIdArquivo, setUnitIdArquivo] = useState('')
+  const arquivos = props.arquivosDeEnvio ?? []
+  // o PDF (cardápio inteiro) vem escolhido; senão o primeiro arquivo
+  const [ordemArquivo, setOrdemArquivo] = useState(() => String((arquivos.find((a) => a.mime === 'application/pdf') ?? arquivos[0])?.ordem ?? ''))
+  const ofereceArquivo = props.origem === 'arquivo' && props.podeAplicar && (!props.porAlvo || arquivos.length > 0)
   const [mostrarErros, setMostrarErros] = useState(false)
   const [erroGeral, setErroGeral] = useState<string | undefined>()
   const [aplicando, setAplicando] = useState(false)
@@ -171,7 +177,12 @@ export function RevisaoRascunho(props: {
       setErroGeral('Confira os itens marcados antes de confirmar.')
       return
     }
-    if (props.porAlvo) return porAlvo.confirmar(() => paraRascunho(cats))
+    if (props.porAlvo) {
+      const arquivoDeEnvio = usarArquivo && ordemArquivo !== ''
+        ? { ordem: Number(ordemArquivo), unitId: unitIdArquivo !== '' ? unitIdArquivo : null }
+        : null
+      return porAlvo.confirmar(() => paraRascunho(cats), { arquivoDeEnvio })
+    }
     emAndamento.current = true
     setAplicando(true)
     try {
@@ -337,12 +348,23 @@ export function RevisaoRascunho(props: {
         {props.categoriasExistentes.map((c) => <option key={c.nome} value={c.nome} />)}
       </datalist>
 
-      {props.origem === 'arquivo' && props.podeAplicar && !props.porAlvo && (
+      {ofereceArquivo && (
         <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
           <label className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-foreground">
             <input type="checkbox" className="size-5 accent-primary" checked={usarArquivo} onChange={(ev) => setUsarArquivo(ev.target.checked)} />
-            Usar este arquivo como cardápio para enviar aos clientes
+            {arquivos.length > 1 ? 'Usar um dos arquivos como cardápio para enviar aos clientes' : 'Usar este arquivo como cardápio para enviar aos clientes'}
           </label>
+          {usarArquivo && arquivos.length > 1 && (
+            <Field id="rev-arquivo-envio" label="Arquivo">
+              {(a) => (
+                <Select {...a} value={ordemArquivo} onChange={(ev) => setOrdemArquivo(ev.target.value)}>
+                  {arquivos.map((x) => (
+                    <option key={x.ordem} value={String(x.ordem)}>{`Arquivo ${x.ordem} (${x.mime === 'application/pdf' ? 'PDF' : 'Foto'})`}</option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          )}
           {usarArquivo && (
             <Field id="rev-unidade-arquivo" label="Vale para">
               {(a) => (

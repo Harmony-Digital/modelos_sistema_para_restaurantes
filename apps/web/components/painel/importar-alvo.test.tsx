@@ -30,7 +30,10 @@ const URL_IMP = `/conteudo?aba=importar&imp=${ID}`
 const pdf = (nome = 'cardapio.pdf') => new File(['%PDF'], nome, { type: 'application/pdf' })
 const foto = (nome = 'foto.jpg') => new File(['x'], nome, { type: 'image/jpeg' })
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.clearAllMocks()
+  sessionStorage.clear()
+})
 
 describe('ImportarAlvo', () => {
   it('cardápio: escolhe o modo, cria a importação, envia um arquivo por requisição e abre a lista', async () => {
@@ -59,12 +62,12 @@ describe('ImportarAlvo', () => {
     expect(screen.getByText('Nenhuma importação de horários ainda.')).toBeInTheDocument()
   })
 
-  it('gerente restrito a unidades: só a planilha CSV do cardápio, com aviso', () => {
-    render(<ImportarAlvo alvo="cardapio" importacoes={[]} soPlanilha />)
+  it('ruling: gerente restrito a unidades envia PDF/fotos e a planilha do cardápio, com aviso de que não confirma', () => {
+    render(<ImportarAlvo alvo="cardapio" importacoes={[]} restrito />)
     expect(screen.getByLabelText(/^Planilha CSV/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Enviar arquivos' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
-    expect(screen.getByText(/PDF, fotos e os outros tipos de importação são do dono ou de gerente com acesso a todas as unidades/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Enviar arquivos' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /Só preços/ })).toBeInTheDocument()
+    expect(screen.getByText(/Você envia e revisa; quem confirma é o dono ou gerente com acesso a todas as unidades/)).toBeInTheDocument()
   })
 
   it('mais de 10 arquivos ou arquivo grande demais: recusa antes de criar a importação', async () => {
@@ -82,7 +85,7 @@ describe('ImportarAlvo', () => {
     expect(acoesAlvo.novaImportacaoAction).not.toHaveBeenCalled()
   })
 
-  it('arquivo recusado pelo servidor: os outros seguem e o erro é avisado', async () => {
+  it('M1: arquivo recusado pelo servidor: os outros seguem e a lista da importação mostra o que falhou', async () => {
     const user = userEvent.setup()
     acoesAlvo.novaImportacaoAction.mockResolvedValue({ ok: true, data: { id: ID } })
     acoesAlvo.anexarArquivoAction
@@ -93,7 +96,26 @@ describe('ImportarAlvo', () => {
     await user.click(screen.getByRole('button', { name: 'Enviar arquivos' }))
     await waitFor(() => expect(push).toHaveBeenCalledWith(URL_IMP))
     expect(acoesAlvo.novaImportacaoAction).toHaveBeenCalledWith({ alvo: 'informacoes', modo: 'completo' })
-    expect(toast.error).toHaveBeenCalledWith('falso.pdf: Envie um PDF ou uma imagem (JPEG, PNG ou WebP).')
+    // a tela da importação (recebendo arquivos) mostra as falhas, uma vez
+    const { unmount } = render(<ArquivosImportacao id={ID} alvo="informacoes" modo="completo" arquivos={[{ ordem: 1, mime: 'image/jpeg', tamanho: 1 }]} />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('falso.pdf: Envie um PDF ou uma imagem (JPEG, PNG ou WebP).')
+    unmount()
+    render(<ArquivosImportacao id={ID} alvo="informacoes" modo="completo" arquivos={[{ ordem: 1, mime: 'image/jpeg', tamanho: 1 }]} />)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('M1: todos os arquivos recusados: descarta a importação vazia, fica no formulário e mostra o que falhou (M8: falhas iguais aparecem)', async () => {
+    const user = userEvent.setup()
+    acoesAlvo.novaImportacaoAction.mockResolvedValue({ ok: true, data: { id: ID } })
+    acoes.descartarImportacaoAction.mockResolvedValue({ ok: true, data: null })
+    acoesAlvo.anexarArquivoAction.mockResolvedValue({ ok: false, formError: 'Não foi possível enviar o arquivo agora. Tente de novo.' })
+    render(<ImportarAlvo alvo="espacos" importacoes={[]} />)
+    await user.upload(screen.getByLabelText(/^Arquivos/), [foto(), foto()])
+    await user.click(screen.getByRole('button', { name: 'Enviar arquivos' }))
+    const alerta = await screen.findByRole('alert')
+    expect(within(alerta).getAllByText('foto.jpg: Não foi possível enviar o arquivo agora. Tente de novo.')).toHaveLength(2)
+    expect(acoes.descartarImportacaoAction).toHaveBeenCalledWith(ID)
+    expect(push).not.toHaveBeenCalled()
   })
 
   it('histórico do alvo com status e quantidade de arquivos', () => {
@@ -147,12 +169,14 @@ describe('ArquivosImportacao', () => {
     expect(screen.getByRole('button', { name: 'Ler arquivos' })).toBeDisabled()
   })
 
-  it('mesmos arquivos já importados: avisa e abre a importação existente', async () => {
+  it('mesmos arquivos já importados: avisa, descarta esta (M2: não fica órfã) e abre a importação existente', async () => {
     const user = userEvent.setup()
     acoesAlvo.lerArquivosAction.mockResolvedValue({ ok: true, data: { id: OUTRA, existente: true } })
+    acoes.descartarImportacaoAction.mockResolvedValue({ ok: true, data: null })
     render(<ArquivosImportacao id={ID} alvo="espacos" modo="completo" arquivos={arquivos} />)
     await user.click(screen.getByRole('button', { name: 'Ler arquivos' }))
     await waitFor(() => expect(push).toHaveBeenCalledWith(`/conteudo?aba=importar&imp=${OUTRA}`))
+    expect(acoes.descartarImportacaoAction).toHaveBeenCalledWith(ID)
     expect(toast.info).toHaveBeenCalledWith('Esses arquivos já foram importados. Mostrando a importação deles.')
   })
 

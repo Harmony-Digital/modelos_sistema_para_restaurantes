@@ -69,6 +69,23 @@ describe('RevisaoSoPrecos', () => {
     expect(screen.getByRole('button', { name: 'Confirmar importação' })).toBeDisabled()
   })
 
+  it('M4: o resumo conta os desmarcados e o preço editado de volta ao atual como "fica de fora"', async () => {
+    const user = userEvent.setup()
+    render(<RevisaoSoPrecos {...props} />)
+    expect(screen.getByText('1 preço muda, 2 ficam de fora')).toBeInTheDocument()
+    const g = within(grupo('Picanha'))
+    const preco = g.getByLabelText(/^Novo preço/)
+    await user.clear(preco)
+    await user.type(preco, '8990')
+    expect(screen.getByText('3 ficam de fora')).toBeInTheDocument()
+    expect(g.getByText('R$ 89,90 → mantém o atual')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Confirmar importação' })).toBeDisabled()
+    await user.clear(preco)
+    await user.type(preco, '9990')
+    await user.click(g.getByRole('checkbox', { name: 'Incluir' }))
+    expect(screen.getByText('3 ficam de fora')).toBeInTheDocument()
+  })
+
   it('sem nenhuma mudança: estado vazio que explica', () => {
     render(<RevisaoSoPrecos {...props} mudancas={[]} />)
     expect(screen.getByText(/Nenhum preço muda/)).toBeInTheDocument()
@@ -194,11 +211,14 @@ describe('RevisaoHorarios', () => {
     render(<RevisaoHorarios {...props} />)
     const outra = within(screen.getByRole('region', { name: 'Horários de Filial Centro' }))
     expect(outra.queryByText('Novo')).not.toBeInTheDocument()
+    // M5: semana vazia = só as datas especiais mudam, com a unidade escolhida ou não
     await user.selectOptions(outra.getByLabelText(/^Unidade/), 'Asa Sul')
-    expect(outra.getByText('Atualiza')).toBeInTheDocument()
+    expect(outra.getByText('Só datas especiais')).toBeInTheDocument()
+    expect(outra.queryByText('Atualiza')).not.toBeInTheDocument()
     await user.selectOptions(outra.getByLabelText(/^Unidade/), 'Lago Norte')
-    expect(outra.getByText('Novo')).toBeInTheDocument()
-    expect(screen.getByText(/1 unidade nova, 1 para atualizar/)).toBeInTheDocument()
+    expect(outra.getByText('Só datas especiais')).toBeInTheDocument()
+    expect(outra.queryByText('Novo')).not.toBeInTheDocument()
+    expect(screen.getByText(/1 para atualizar, 1 só com datas especiais/)).toBeInTheDocument()
     const segunda = within(within(screen.getByRole('region', { name: 'Horários de Asa Sul' })).getByRole('group', { name: 'Segunda' }))
     const fecha = segunda.getAllByLabelText(/^Fecha/)[1]!
     await user.clear(fecha)
@@ -233,6 +253,25 @@ describe('RevisaoHorarios', () => {
     await user.click(screen.getByRole('button', { name: 'Confirmar importação' }))
     expect(await screen.findByText(/Confira os turnos/)).toBeInTheDocument()
     expect(acoesAlvo.aplicarImportacaoAction).not.toHaveBeenCalled()
+  })
+
+  it('M6: editar um dia com conflito tira o destaque e a contagem (como nos espaços)', async () => {
+    const user = userEvent.setup()
+    render(<RevisaoHorarios {...props} />)
+    const sexta = within(screen.getByRole('region', { name: 'Horários de Asa Sul' })).getByRole('group', { name: 'Sexta' })
+    const abre = within(sexta).getAllByLabelText(/^Abre/)[1]!
+    await user.clear(abre)
+    await user.type(abre, '1600')
+    expect(sexta).not.toHaveAttribute('data-conflito')
+    expect(within(sexta).queryByText(/Leituras diferentes para este dia/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/dia para conferir/)).not.toBeInTheDocument()
+  })
+
+  it('unidade reconhecida com semana vazia também mostra "Só datas especiais"', () => {
+    const soExcecoes = { unidades: [{ ...rascunho.unidades[1]!, unidade: 'Asa Sul' }] }
+    render(<RevisaoHorarios {...props} rascunho={soExcecoes} rotulos={[{ unitId: U1, reconhecida: true, acao: 'atualizar' }]} />)
+    expect(screen.getByText('Só datas especiais')).toBeInTheDocument()
+    expect(screen.queryByText('Atualiza')).not.toBeInTheDocument()
   })
 
   it('adicionar e remover turno; dia sem turno vira Fechado', async () => {

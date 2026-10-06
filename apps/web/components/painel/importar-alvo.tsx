@@ -1,8 +1,9 @@
 'use client'
 import { FileUp, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { descartarImportacaoAction } from '@/app/(painel)/conteudo/importar-actions'
 import {
   anexarArquivoAction, lerArquivosAction, novaImportacaoAction, removerArquivoAction,
 } from '@/app/(painel)/conteudo/importar-alvo-actions'
@@ -39,6 +40,40 @@ function conferirArquivos(arquivos: File[], jaNaLista: number): string | null {
 
 type Enviado = { nome: string; mime: string; tamanho: number; ordem: number; repetido: boolean }
 
+/**
+ * Falhas do envio inicial levadas para a tela da importação (recebendo arquivos), que as mostra uma vez. Só no
+ * navegador desta aba; sem armazenamento (aba privada, bloqueio), as falhas só não aparecem lá.
+ */
+const chaveFalhas = (id: string) => `importacao-falhas:${id}`
+function guardarFalhas(id: string, falhas: string[]) {
+  try {
+    sessionStorage.setItem(chaveFalhas(id), JSON.stringify(falhas))
+  } catch {
+    // sem armazenamento: segue sem a lista
+  }
+}
+function tirarFalhas(id: string): string[] {
+  try {
+    const v = sessionStorage.getItem(chaveFalhas(id))
+    sessionStorage.removeItem(chaveFalhas(id))
+    const lista: unknown = v === null ? [] : JSON.parse(v)
+    return Array.isArray(lista) ? lista.filter((x): x is string => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+/** Lista de arquivos que não foram enviados (a chave é a posição: dois arquivos podem falhar com o mesmo texto). */
+function ListaFalhas({ falhas }: { falhas: string[] }) {
+  if (falhas.length === 0) return null
+  return (
+    <div role="alert" className="flex flex-col gap-1 rounded-md border border-destructive/40 p-3 text-sm text-destructive">
+      <p className="font-medium">Alguns arquivos não foram enviados:</p>
+      <ul className="list-disc pl-5">{falhas.map((f, i) => <li key={i} className="break-words">{f}</li>)}</ul>
+    </div>
+  )
+}
+
 /** Um arquivo por requisição, em ordem (a ordem da lista é a ordem de leitura). Falha num não para os outros. */
 async function enviarArquivos(
   id: string,
@@ -68,23 +103,22 @@ async function enviarArquivos(
 
 /**
  * Conteúdo → Importar de um alvo: nova importação (vários arquivos), planilha CSV (cardápio) e o histórico.
- * `soPlanilha`: gerente restrito a unidades — só a planilha do cardápio, como na Etapa 05 (ele envia e revisa; quem
- * confirma é o dono ou o gerente com acesso a todas as unidades).
+ * `restrito`: gerente restrito a unidades — só o cardápio (PDF/fotos e planilha), como na Etapa 05: ele envia e
+ * revisa; quem confirma é o dono ou o gerente com acesso a todas as unidades.
  */
-export function ImportarAlvo(props: { alvo: AlvoImportacaoTela; importacoes: ImportacaoTela[]; soPlanilha?: boolean }) {
+export function ImportarAlvo(props: { alvo: AlvoImportacaoTela; importacoes: ImportacaoTela[]; restrito?: boolean }) {
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">
         Nada muda no cadastro sem a sua revisão: depois de ler os arquivos, você confere o que foi lido e confirma.
       </p>
-      {props.soPlanilha ? (
+      {props.restrito && (
         <p className="text-sm text-muted-foreground">
-          PDF, fotos e os outros tipos de importação são do dono ou de gerente com acesso a todas as unidades. Você pode enviar a
-          planilha do cardápio para revisão.
+          Você envia e revisa; quem confirma é o dono ou gerente com acesso a todas as unidades. Informações, horários e espaços
+          são importados por eles.
         </p>
-      ) : (
-        <NovaImportacao key={props.alvo} alvo={props.alvo} />
       )}
+      <NovaImportacao key={props.alvo} alvo={props.alvo} />
       {props.alvo === 'cardapio' && <ImportarCsv />}
       <HistoricoImportacoes importacoes={props.importacoes} vazio={`Nenhuma importação de ${NOME_ALVO[props.alvo]} ainda.`} />
     </div>
@@ -98,6 +132,7 @@ function NovaImportacao(props: { alvo: AlvoImportacaoTela }) {
   const [modo, setModo] = useState<ModoImportacaoTela>('completo')
   const [enviando, setEnviando] = useState<string | null>(null)
   const [erro, setErro] = useState<string | undefined>()
+  const [falhas, setFalhas] = useState<string[]>([])
   const descricao = ALVOS_IMPORTACAO_TELA.find((a) => a.chave === props.alvo)?.descricao
 
   const enviar = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -105,6 +140,7 @@ function NovaImportacao(props: { alvo: AlvoImportacaoTela }) {
     if (emAndamento.current) return
     const arquivos = Array.from(entrada.current?.files ?? [])
     const problema = conferirArquivos(arquivos, 0)
+    setFalhas([])
     if (problema) return setErro(problema)
     emAndamento.current = true
     setErro(undefined)
@@ -113,9 +149,16 @@ function NovaImportacao(props: { alvo: AlvoImportacaoTela }) {
       const r = await chamarAcao(() => novaImportacaoAction({ alvo: props.alvo, modo: props.alvo === 'cardapio' ? modo : 'completo' }))
       if (!r.ok) return setErro(r.formError ?? 'Não foi possível começar a importação agora.')
       if (!r.data) return
-      const { falhas } = await enviarArquivos(r.data.id, arquivos, [], (n) => setEnviando(`Enviando ${n} de ${arquivos.length}…`))
-      for (const f of falhas) toast.error(f)
-      router.push(urlImportacao(r.data.id))
+      const id = r.data.id
+      const enviados = await enviarArquivos(id, arquivos, [], (n) => setEnviando(`Enviando ${n} de ${arquivos.length}…`))
+      if (enviados.enviados.length === 0) {
+        // nada entrou: a importação vazia não fica no histórico; as falhas ficam aqui
+        await chamarAcao(() => descartarImportacaoAction(id))
+        setFalhas(enviados.falhas)
+        return
+      }
+      if (enviados.falhas.length > 0) guardarFalhas(id, enviados.falhas)
+      router.push(urlImportacao(id))
     } finally {
       emAndamento.current = false
       setEnviando(null)
@@ -161,6 +204,7 @@ function NovaImportacao(props: { alvo: AlvoImportacaoTela }) {
       >
         {(a) => <input {...a} ref={entrada} type="file" multiple accept={ACEITOS} className={classeArquivo} />}
       </Field>
+      <ListaFalhas falhas={falhas} />
       <Button type="submit" aria-busy={enviando !== null || undefined} disabled={enviando !== null} className="self-start">
         {enviando ?? 'Enviar arquivos'}
       </Button>
@@ -187,6 +231,11 @@ export function ArquivosImportacao(props: {
   const [ocupado, setOcupado] = useState<string | null>(null)
   const [erro, setErro] = useState<string | undefined>()
   const [falhas, setFalhas] = useState<string[]>([])
+  // falhas do envio inicial (antes de abrir esta tela)
+  useEffect(() => {
+    const anteriores = tirarFalhas(props.id)
+    if (anteriores.length > 0) setFalhas(anteriores)
+  }, [props.id])
   const cheia = lista.length >= MAX_ARQUIVOS
   const rotulo = (a: ArquivoLista) => a.nome ?? `Arquivo ${a.ordem}`
 
@@ -237,6 +286,8 @@ export function ArquivosImportacao(props: {
       if (!r.ok) return setErro(r.formError ?? 'Não foi possível começar a leitura agora.')
       if (!r.data) return
       if (r.data.existente) {
+        // esta (ainda recebendo arquivos) não fica órfã no histórico
+        await chamarAcao(() => descartarImportacaoAction(props.id))
         toast.info('Esses arquivos já foram importados. Mostrando a importação deles.')
         router.push(urlImportacao(r.data.id))
         return
@@ -276,12 +327,7 @@ export function ArquivosImportacao(props: {
           ))}
         </ol>
       )}
-      {falhas.length > 0 && (
-        <div role="alert" className="flex flex-col gap-1 rounded-md border border-destructive/40 p-3 text-sm text-destructive">
-          <p className="font-medium">Alguns arquivos não foram enviados:</p>
-          <ul className="list-disc pl-5">{falhas.map((f) => <li key={f} className="break-words">{f}</li>)}</ul>
-        </div>
-      )}
+      <ListaFalhas falhas={falhas} />
       <Field
         id="importar-mais-arquivos"
         label="Adicionar arquivos"

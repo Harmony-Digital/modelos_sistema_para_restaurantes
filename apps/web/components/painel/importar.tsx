@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { descartarImportacaoAction, estadoImportacaoAction, importarCsvAction } from '@/app/(painel)/conteudo/importar-actions'
+import { lerArquivosAction } from '@/app/(painel)/conteudo/importar-alvo-actions'
 import { Field, SubmitButton } from '@/components/form'
 import { Confirmar } from '@/components/painel/confirmar'
 import { Badge } from '@/components/ui/badge'
@@ -149,15 +150,22 @@ export function ImportarCsv() {
 }
 
 const INTERVALO_MS = 3000
-/** Mais que isso em fila/leitura: algo travou (worker parado, fila cheia); o usuário reenvia. */
+/** Arquivo único (Etapa 05): mais que isso em fila/leitura, algo travou (worker parado, fila cheia); o usuário reenvia. */
 const LIMITE_LEITURA_MS = 5 * 60_000
+/**
+ * Vários arquivos: sem nenhuma mudança na importação (lote ou metade de lote salvos) por mais que isso, a leitura
+ * parou. Fica acima da retomada de um leitor morto (concessão de 420 s + espera da fila de 30–60 s + supervisão).
+ */
+const LIMITE_LOTES_MS = 10 * 60_000
 const DEMORANDO = 'A leitura está demorando. Tente enviar de novo.'
+const PAROU = 'A leitura não avança há alguns minutos. Toque em “Tentar de novo”: ela continua de onde parou, sem ler de novo o que já foi lido.'
 
 /**
  * Acompanha a leitura por IA: consulta o status a cada 3 s e recarrega a tela quando sai da fila/leitura. Para de
- * consultar se a consulta falhar ou se a leitura passar de 5 minutos (contados de `desde`, a criação da importação).
- * Vários arquivos (`lotes`): mostra "Lendo n de m" e os 5 minutos contam da abertura da tela ou do último lote lido.
- * Importação com erro pode ser descartada.
+ * consultar se a consulta falhar ou se a leitura passar do prazo. Arquivo único: 5 minutos contados de `desde` (a
+ * criação). Vários arquivos (`lotes`): mostra "Lendo n de m"; o prazo é de 10 minutos sem nenhuma mudança salva
+ * (contados da abertura da tela ou da última mudança) e, passado, "Tentar de novo" reenfileira a leitura, que segue
+ * de onde parou. Importação com erro pode ser descartada.
  */
 export function AcompanharImportacao(props: {
   id: string
@@ -173,25 +181,30 @@ export function AcompanharImportacao(props: {
 }) {
   const router = useRouter()
   const consultando = useRef(false)
+  const tentando = useRef(false)
   const porLotes = props.lotes !== undefined
-  const [limiteInicial] = useState(() => (porLotes ? Date.now() : new Date(props.desde).getTime()) + LIMITE_LEITURA_MS)
+  const [limiteInicial] = useState(() => (porLotes ? Date.now() + LIMITE_LOTES_MS : new Date(props.desde).getTime() + LIMITE_LEITURA_MS))
   const limite = useRef(limiteInicial)
-  const ultimoLote = useRef(props.lotes?.atual ?? 0)
+  const ultimaMudanca = useRef<string | null>(null)
   const [lotes, setLotes] = useState(props.lotes ?? null)
   const [falha, setFalha] = useState<string | null>(() => (LENDO.includes(props.status) && Date.now() >= limiteInicial ? DEMORANDO : null))
+  const [parou, setParou] = useState(false)
   const [descartar, setDescartar] = useState(false)
-  const lendo = LENDO.includes(props.status) && falha === null
+  const lendo = LENDO.includes(props.status) && falha === null && !parou
 
   useEffect(() => {
     if (!lendo) return
     let ativo = true
-    const parar = (mensagem: string) => {
+    const parar = (mensagem: string | null) => {
       clearInterval(t)
-      if (ativo) setFalha(mensagem)
+      if (!ativo) return
+      if (mensagem === null) setParou(true)
+      else setFalha(mensagem)
     }
     const t = setInterval(async () => {
       if (consultando.current) return
-      if (Date.now() >= limite.current) return parar(DEMORANDO)
+      // vários arquivos: oferece continuar de onde parou; arquivo único: reenviar
+      if (Date.now() >= limite.current) return parar(porLotes ? null : DEMORANDO)
       consultando.current = true
       try {
         const r = await chamarAcao(() => estadoImportacaoAction(props.id))
@@ -203,13 +216,12 @@ export function AcompanharImportacao(props: {
           router.refresh()
           return
         }
-        const { loteAtual, lotesTotal } = r.data
+        const { loteAtual, lotesTotal, atualizadoEm } = r.data
         if (porLotes) {
-          // lote novo lido: a leitura anda, o prazo recomeça
-          if (loteAtual > ultimoLote.current) {
-            ultimoLote.current = loteAtual
-            limite.current = Date.now() + LIMITE_LEITURA_MS
-          }
+          // mudança salva (lote ou metade de lote): a leitura anda, o prazo recomeça
+          const mudanca = `${loteAtual}|${atualizadoEm}`
+          if (ultimaMudanca.current !== null && mudanca !== ultimaMudanca.current) limite.current = Date.now() + LIMITE_LOTES_MS
+          ultimaMudanca.current = mudanca
           setLotes({ atual: loteAtual, total: lotesTotal })
         }
       } finally {
@@ -221,6 +233,24 @@ export function AcompanharImportacao(props: {
       clearInterval(t)
     }
   }, [lendo, porLotes, props.id, router])
+
+  /** Reenfileira a leitura parada (a action só reenfileira se ninguém estiver lendo) e volta a acompanhar. */
+  const tentarDeNovo = async () => {
+    if (tentando.current) return
+    tentando.current = true
+    try {
+      const r = await chamarAcao(() => lerArquivosAction(props.id))
+      if (!r.ok) {
+        setFalha(r.formError ?? 'Não foi possível continuar a leitura agora.')
+        return
+      }
+      limite.current = Date.now() + LIMITE_LOTES_MS
+      setFalha(null)
+      setParou(false)
+    } finally {
+      tentando.current = false
+    }
+  }
 
   const executarDescarte = async () => {
     const r = await chamarAcao(() => descartarImportacaoAction(props.id))
@@ -250,12 +280,15 @@ export function AcompanharImportacao(props: {
         </div>
       ) : (
         <p role="alert" className="text-sm text-destructive">
-          {falha ?? props.erro ?? 'Não foi possível ler esse arquivo.'}
+          {falha ?? (parou ? PAROU : null) ?? props.erro ?? 'Não foi possível ler esse arquivo.'}
         </p>
       )}
       <div className="flex flex-wrap items-center gap-4">
+        {porLotes && !lendo && props.status !== 'erro' && (
+          <Button onClick={() => void tentarDeNovo()}>Tentar de novo</Button>
+        )}
         <Link href={props.voltar ?? URL_IMPORTAR} className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 hover:underline">
-          {lendo ? 'Voltar às importações' : 'Enviar outro arquivo'}
+          {lendo || porLotes ? 'Voltar às importações' : 'Enviar outro arquivo'}
         </Link>
         {props.status === 'erro' && <Button variant="outline" onClick={() => setDescartar(true)}>Descartar</Button>}
       </div>

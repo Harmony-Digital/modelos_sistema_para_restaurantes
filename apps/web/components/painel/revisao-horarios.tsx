@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 type RotuloHorario = { unitId: string | null; reconhecida: boolean; acao: 'novo' | 'atualizar' | 'ignorar' | 'escolher_unidade' }
+/** `excecoes`: semana vazia, só as datas especiais mudam (sem Novo/Atualiza pela grade) */
+type AcaoTela = RotuloHorario['acao'] | 'excecoes'
 type Turno = { abre: string; fecha: string }
 type DiaEdit = { dia: number; turnos: Turno[]; conflito: boolean; lido: boolean }
 type Excecao = RascunhoHorarios['unidades'][number]['excecoes'][number]
@@ -27,7 +29,8 @@ const turnoValido = (t: Turno) => HORA.test(t.abre) && HORA.test(t.fecha) && t.a
  * Revisão de horários (PRD I10), por unidade: grade da semana com turnos editáveis e as datas especiais. Unidade não
  * reconhecida exige escolher a unidade ou ignorar (Review Focus 1); escolher grava o id da unidade no rascunho (a DAL
  * resolve id → slug → nome → apelido) e o Novo/Atualiza vem de `unidadesComHorario`. `semana: []` = a grade não muda,
- * só as exceções. Dia com `conflito` (fechado × aberto entre arquivos, turnos sobrepostos ou demais) fica destacado.
+ * só as exceções ("Só datas especiais"). Dia com `conflito` (fechado × aberto entre arquivos, turnos sobrepostos ou
+ * demais) fica destacado até ser editado.
  */
 export function RevisaoHorarios(props: {
   id: string
@@ -53,8 +56,9 @@ export function RevisaoHorarios(props: {
   )
   const [mostrarErros, setMostrarErros] = useState(false)
   const mudar = (i: number, f: (u: UnidadeEdit) => UnidadeEdit) => setUnidades((atual) => atual.map((u, x) => (x === i ? f(u) : u)))
+  // editar o dia é conferi-lo: tira a marca de conflito (como a capacidade nos espaços)
   const mudarDia = (i: number, dia: number, f: (d: DiaEdit) => DiaEdit) =>
-    mudar(i, (u) => ({ ...u, semana: u.semana.map((d) => (d.dia === dia ? f(d) : d)) }))
+    mudar(i, (u) => ({ ...u, semana: u.semana.map((d) => (d.dia === dia ? { ...f(d), conflito: false } : d)) }))
   const incluida = (i: number, u: UnidadeEdit) => (precisaEscolher(i) ? u.escolha !== IGNORAR : u.incluir)
   const semanaMuda = (i: number) => (props.rascunho.unidades[i]?.semana.length ?? 0) > 0
 
@@ -74,13 +78,14 @@ export function RevisaoHorarios(props: {
     return props.unidades.find((x) => x.id === props.rotulos[i]?.unitId)?.nome ?? u.unidade ?? 'unidade sem nome'
   }
   /** Novo/Atualiza também para a unidade escolhida à mão; null = sem rótulo (ignorada ou ainda sem escolha) */
-  const acaoDe = (i: number, u: UnidadeEdit): RotuloHorario['acao'] | null => {
+  const acaoDe = (i: number, u: UnidadeEdit): AcaoTela | null => {
     if (!incluida(i, u)) return null
+    if (precisaEscolher(i) && u.escolha === '') return 'escolher_unidade'
+    if (!semanaMuda(i)) return 'excecoes'
     if (!precisaEscolher(i)) return props.rotulos[i]?.acao ?? null
-    if (u.escolha === '') return 'escolher_unidade'
     return props.unidadesComHorario.includes(u.escolha) ? 'atualizar' : 'novo'
   }
-  const contar = (a: RotuloHorario['acao']) => unidades.filter((u, i) => acaoDe(i, u) === a).length
+  const contar = (a: AcaoTela) => unidades.filter((u, i) => acaoDe(i, u) === a).length
   const diasConflito = unidades.reduce((n, u, i) => n + (incluida(i, u) && semanaMuda(i) ? u.semana.filter((d) => d.conflito).length : 0), 0)
 
   const montar = (): RascunhoHorarios | null => {
@@ -118,6 +123,7 @@ export function RevisaoHorarios(props: {
         <Resumo
           partes={[
             [contar('novo'), 'unidade nova', 'unidades novas'], [contar('atualizar'), 'para atualizar', 'para atualizar'],
+            [contar('excecoes'), 'só com datas especiais', 'só com datas especiais'],
             [contar('escolher_unidade'), 'com unidade a escolher', 'com unidade a escolher'], [diasConflito, 'dia para conferir', 'dias para conferir'],
           ]}
         />
@@ -134,6 +140,7 @@ export function RevisaoHorarios(props: {
               <h3 className="min-w-0 break-words text-base font-semibold text-foreground">{nome}</h3>
               {acao === 'novo' && <Badge>Novo</Badge>}
               {acao === 'atualizar' && <Badge variant="secondary">Atualiza</Badge>}
+              {acao === 'excecoes' && <Badge variant="outline">Só datas especiais</Badge>}
             </div>
             {precisaEscolher(i) ? (
               <>

@@ -69,7 +69,13 @@ export function RevisaoSoPrecos(props: {
   const mudar = (indice: number, m: Partial<{ preco: string; incluir: boolean }>) =>
     setEdits((atual) => new Map(atual).set(indice, { ...atual.get(indice)!, ...m }))
   const erroPreco = (preco: string) => ((reaisParaCentavos(preco) ?? 0) > LIMITES_RASCUNHO.precoMax ? 'O preço máximo é R$ 100.000,00' : undefined)
-  const incluidos = [...edits.values()].filter((e) => e.incluir).length
+  // muda de verdade: marcada, com preço e diferente do atual; o resto (desmarcada, em branco, igual) fica de fora
+  const mudam = props.mudancas.filter((m) => {
+    const e = edits.get(m.indice)!
+    const novo = reaisParaCentavos(e.preco)
+    return e.incluir && novo !== null && novo !== m.antes
+  }).length
+  const fora = props.ignorados.length + props.mudancas.length - mudam
 
   const montar = () => {
     if ([...edits.values()].some((e) => erroPreco(e.preco))) {
@@ -94,7 +100,7 @@ export function RevisaoSoPrecos(props: {
         <p className="text-sm text-muted-foreground">
           Só muda o preço de itens que já estão no cardápio. Confira cada valor: o que estiver aqui chega aos clientes.
         </p>
-        <Resumo partes={[[incluidos, 'preço muda', 'preços mudam'], [props.ignorados.length, 'fica de fora', 'ficam de fora']]} />
+        <Resumo partes={[[mudam, 'preço muda', 'preços mudam'], [fora, 'fica de fora', 'ficam de fora']]} />
       </div>
       {props.mudancas.length === 0 ? (
         <p className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
@@ -114,7 +120,7 @@ export function RevisaoSoPrecos(props: {
                 </div>
                 <p className="font-medium text-foreground">{m.nome}</p>
                 <p className="text-sm text-foreground">
-                  {m.antes === null ? 'sob consulta' : formatarCentavos(m.antes)} → {novo === null ? 'mantém o atual' : formatarCentavos(novo)}
+                  {m.antes === null ? 'sob consulta' : formatarCentavos(m.antes)} → {novo === null || novo === m.antes ? 'mantém o atual' : formatarCentavos(novo)}
                 </p>
                 <AvisoConflitoPreco precos={conflito} />
                 <Field id={`sp-${m.indice}-preco`} label="Novo preço" hint="Em branco mantém o preço atual." error={mostrarErros ? erroPreco(e.preco) : undefined}>
@@ -144,7 +150,7 @@ export function RevisaoSoPrecos(props: {
         podeAplicar={props.podeAplicar}
         aplicando={c.aplicando}
         erroGeral={c.erroGeral}
-        semIncluidos={incluidos === 0}
+        semIncluidos={mudam === 0}
         onConfirmar={() => void c.confirmar(montar)}
       />
     </div>
