@@ -11,6 +11,7 @@ afterAll(() => sql.end())
 
 const as = (sub: string): JwtClaims => ({ sub, role: 'authenticated', aal: 'aal2' })
 const DIA = '2026-10-10'
+const ANTES = new Date('2026-10-05T15:00:00Z') // relógio fixo antes do DIA
 
 async function cenario() {
   const { restaurantId, unitId: u1 } = await seedRestaurant(db)
@@ -96,14 +97,25 @@ describe('painel de avisos', () => {
     const c = await cenario()
     const r = await criarAvisoPainel(db, as(c.dono), aviso(c.u2))
     const id = r.ok ? r.valor.id : ''
-    expect(await cancelarAvisoPainel(db, as(c.atendente), id)).toEqual({ ok: false, erro: 'sem_permissao' })
-    expect(await cancelarAvisoPainel(db, as(c.gerenteU1), id)).toEqual({ ok: false, erro: 'nao_encontrada' })
-    expect(await cancelarAvisoPainel(db, as(c.dono), id)).toEqual({ ok: true, valor: null })
+    expect(await cancelarAvisoPainel(db, as(c.atendente), id, ANTES)).toEqual({ ok: false, erro: 'sem_permissao' })
+    expect(await cancelarAvisoPainel(db, as(c.gerenteU1), id, ANTES)).toEqual({ ok: false, erro: 'nao_encontrada' })
+    expect(await cancelarAvisoPainel(db, as(c.dono), id, ANTES)).toEqual({ ok: true, valor: null })
     const [a] = await db.select().from(attendanceNotices).where(eq(attendanceNotices.id, id))
     expect(a!.status).toBe('cancelado')
     const logs = await db.select().from(auditLog).where(eq(auditLog.entidadeId, id))
     expect(logs.map((l) => l.acao).sort()).toEqual(['aviso.cancelado_painel', 'aviso.criado_painel'])
-    expect(await cancelarAvisoPainel(db, as(c.dono), id)).toEqual({ ok: false, erro: 'nao_encontrada' })
-    expect(await cancelarAvisoPainel(db, as(c.dono), '00000000-0000-4000-8000-000000000000')).toEqual({ ok: false, erro: 'nao_encontrada' })
+    expect(await cancelarAvisoPainel(db, as(c.dono), id, ANTES)).toEqual({ ok: false, erro: 'nao_encontrada' })
+    expect(await cancelarAvisoPainel(db, as(c.dono), '00000000-0000-4000-8000-000000000000', ANTES)).toEqual({ ok: false, erro: 'nao_encontrada' })
+  })
+
+  it('cancelar: aviso de dia passado (fuso do restaurante) não é cancelado', async () => {
+    const c = await cenario()
+    const r = await criarAvisoPainel(db, as(c.dono), aviso(c.u2))
+    const id = r.ok ? r.valor.id : ''
+    // 11/10 02:00 UTC = 10/10 23:00 em São Paulo: ainda é o dia do aviso
+    expect(await cancelarAvisoPainel(db, as(c.dono), id, new Date('2026-10-11T03:00:00Z'))).toEqual({ ok: false, erro: 'nao_encontrada' })
+    const [a] = await db.select().from(attendanceNotices).where(eq(attendanceNotices.id, id))
+    expect(a!.status).toBe('ativo')
+    expect(await cancelarAvisoPainel(db, as(c.dono), id, new Date('2026-10-11T02:00:00Z'))).toEqual({ ok: true, valor: null })
   })
 })

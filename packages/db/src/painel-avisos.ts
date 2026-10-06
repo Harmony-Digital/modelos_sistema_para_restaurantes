@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, eq, gte, inArray, sql } from 'drizzle-orm'
 import { agoraLocal } from '@atd/core'
 import type { Db } from './client.ts'
 import { exigirPapel, falha, ok, registrarAuditoria, semPermissaoVira, type ResultadoPainel } from './painel-comum.ts'
@@ -101,14 +101,17 @@ export function criarAvisoPainel(
   }))
 }
 
-export function cancelarAvisoPainel(db: Db, claims: JwtClaims, avisoId: string): Promise<ResultadoPainel> {
+/** Cancela aviso ativo de hoje em diante (fuso do restaurante); dia passado é só consulta. */
+export function cancelarAvisoPainel(db: Db, claims: JwtClaims, avisoId: string, agora: Date = new Date()): Promise<ResultadoPainel> {
   return semPermissaoVira(() => withUserContext(db, claims, async (tx) => {
     // UPDATE que a policy filtra não dá erro: o papel é conferido antes
     if (!(await exigirPapel(tx, GESTAO))) return falha('sem_permissao')
+    const [rest] = await tx.select({ tz: restaurants.timezone }).from(restaurants)
+    const hoje = agoraLocal(agora, rest?.tz ?? FUSO_PADRAO).data
     const r = await tx
       .update(attendanceNotices)
       .set({ status: 'cancelado', updatedAt: sql`now()` })
-      .where(and(eq(attendanceNotices.id, avisoId), eq(attendanceNotices.status, 'ativo')))
+      .where(and(eq(attendanceNotices.id, avisoId), eq(attendanceNotices.status, 'ativo'), gte(attendanceNotices.data, hoje)))
       .returning({ restaurantId: attendanceNotices.restaurantId, unitId: attendanceNotices.unitId, data: attendanceNotices.data })
     const a = r[0]
     if (!a) return falha('nao_encontrada')
