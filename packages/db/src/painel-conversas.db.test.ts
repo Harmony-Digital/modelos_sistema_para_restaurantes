@@ -386,6 +386,24 @@ describe('tempoAteAssumirHoje', () => {
     expect(t).toBeGreaterThan(175)
     expect(t).toBeLessThan(190)
   })
+
+  it('gerente restrito vê só as suas unidades; dono vê tudo (inclusive sem unidade)', async () => {
+    const c = await cenario()
+    for (const m of [1, 3, 10]) {
+      const id = await conversa({ restaurantId: c.restaurantId, unitId: c.unitId, aguardandoDesde: minutos(m) })
+      await assumirConversa(db, as(c.dono), id, {})
+    }
+    const doNorte = await conversa({ restaurantId: c.restaurantId, unitId: c.u2, aguardandoDesde: minutos(60) })
+    await assumirConversa(db, as(c.dono), doNorte, {})
+    const semUnidade = await conversa({ restaurantId: c.restaurantId, unitId: null, aguardandoDesde: minutos(120) })
+    await assumirConversa(db, as(c.dono), semUnidade, {})
+    const doGerente = await tempoAteAssumirHoje(db, as(c.gerente))
+    expect(doGerente).toBeGreaterThan(175)
+    expect(doGerente).toBeLessThan(190)
+    const doDono = await tempoAteAssumirHoje(db, as(c.dono))
+    expect(doDono).toBeGreaterThan(595)
+    expect(doDono).toBeLessThan(610)
+  })
 })
 
 describe('respostas rápidas', () => {

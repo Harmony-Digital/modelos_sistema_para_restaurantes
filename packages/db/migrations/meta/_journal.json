@@ -225,6 +225,13 @@
       "when": 1791289271217,
       "tag": "0031_inbox_broadcast_status",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1791293710569,
+      "tag": "0032_metrica_assumir_por_unidade",
+      "breakpoints": true
     }
   ]
 }
