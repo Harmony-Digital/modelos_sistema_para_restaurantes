@@ -8,12 +8,18 @@ const LINK = 'inline-flex min-h-11 shrink-0 items-center text-sm font-medium tex
 /** 100% antes de 80% (a ordem do banco já é essa; aqui garante para quem montar a lista à mão). */
 const porGravidade = (alertas: AlertaPainel[]) => [...alertas].sort((a, b) => b.nivel - a.nivel)
 
-/** Faixa no topo do painel (dono/gerente) enquanto o período do alerta durar. */
+/**
+ * Faixa no topo do painel (dono/gerente) enquanto o período do alerta durar. Ela leva o recuo do notch (PWA no iPhone) e
+ * cobre o recuo igual da TopBar logo abaixo (margem negativa): sem o recuo em dobro; ao rolar, a TopBar fixa tem o dela.
+ */
 export function FaixaAlertaGastos(props: { alertas: AlertaPainel[] }) {
   if (props.alertas.length === 0) return null
   const [principal, ...outros] = porGravidade(props.alertas)
   return (
-    <section aria-label="Alerta de gastos" className="border-b border-warning bg-card pt-[env(safe-area-inset-top)]">
+    <section
+      aria-label="Alerta de gastos"
+      className="relative z-40 -mb-[env(safe-area-inset-top)] border-b border-warning bg-card pt-[env(safe-area-inset-top)]"
+    >
       <div className="mx-auto flex max-w-xl flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2">
         <AlertTriangle aria-hidden="true" className="size-5 shrink-0 text-warning" />
         <p className="min-w-0 flex-1 text-sm text-foreground">
