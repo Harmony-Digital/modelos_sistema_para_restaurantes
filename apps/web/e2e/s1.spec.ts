@@ -117,7 +117,7 @@ test('pergunta sem resposta: o dono responde e o simulador passa a responder', a
   await getSql()`insert into knowledge_gaps (restaurant_id, chave_normalizada, pergunta_mascarada)
     values (${r!.id}, ${'info:' + TEMA}, 'tem estacionamento?')`
   await entrarComoGestor(page)
-  await page.getByRole('link', { name: 'Respostas' }).click()
+  await page.getByRole('link', { name: 'Conteúdo' }).click()
   await page.getByRole('button', { name: new RegExp(`^Responder: ${TEMA}`, 'i') }).click()
   await page.getByLabel(/^Resposta/).fill(RESPOSTA)
   await page.getByRole('button', { name: 'Salvar resposta' }).click()

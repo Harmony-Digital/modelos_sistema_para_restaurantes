@@ -1,5 +1,5 @@
 'use client'
-import { CalendarDays, House, Menu, MessageSquareText, Store } from 'lucide-react'
+import { BookOpen, CalendarDays, House, Menu, Store } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -8,7 +8,7 @@ const ITENS = [
   { href: '/', label: 'Início', icon: House },
   { href: '/agenda', label: 'Agenda', icon: CalendarDays },
   { href: '/unidades', label: 'Unidades', icon: Store },
-  { href: '/respostas', label: 'Respostas', icon: MessageSquareText },
+  { href: '/conteudo', label: 'Conteúdo', icon: BookOpen },
   { href: '/mais', label: 'Mais', icon: Menu },
 ] as const
 

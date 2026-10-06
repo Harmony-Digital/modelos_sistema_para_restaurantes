@@ -154,7 +154,7 @@ export function salvarItem(db: Db, claims: JwtClaims, id: string | null, v: Dado
 }
 
 export type DadosExcecao =
-  | { itemId: string; unitId: string; disponivel: boolean; precoOverrideCentavos: number | null }
+  | { itemId: string; unitId: string; disponivel: boolean | null; precoOverrideCentavos: number | null }
   | { itemId: string; unitId: string; remover: true }
 
 /**
