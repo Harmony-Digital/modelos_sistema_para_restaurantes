@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -40,6 +40,7 @@ describe('AwaitingHuman', () => {
     render(<AwaitingHuman itens={[item]} action={vi.fn(async () => { throw new Error('boom') })} />)
     await user.click(screen.getByRole('button', { name: /Devolver à IA/ }))
     expect(toast.error).toHaveBeenCalledWith('Não foi possível salvar. Tente de novo.')
-    expect(screen.getByRole('button', { name: /Devolver à IA/ })).toBeEnabled()
+    // o toast sai antes do finally que reabilita o botão: sob carga o render seguinte ainda não aconteceu
+    await waitFor(() => expect(screen.getByRole('button', { name: /Devolver à IA/ })).toBeEnabled())
   })
 })

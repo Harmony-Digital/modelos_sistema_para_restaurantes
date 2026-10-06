@@ -73,28 +73,28 @@ export function salvarLote(db, id: string, p: { lote: number; lotesTotal: number
 export function concluirIngestao(...) // existente, generalizado por alvo
 ```
 - Aplicar por alvo: **cardápio completo** (código atual), **só preços** (só `preco_centavos` de itens existentes; null nunca sobrescreve), **informações** (insert/update de `knowledge_facts` por tema normalizado + unidade), **horários** (por unidade marcada: delete+insert da semana; upsert de exceções por data ≥ hoje no fuso), **espaços** (insert/update por nome na unidade; checks de capacidade).
-- [ ] Testes (falham): migrations e RLS dos novos campos/tabela; anexar/remover/limite 10/estado; dedup do conjunto; `iniciarLeitura` sem arquivo; `salvarLote` idempotente; cada aplicação (novo, atualizar, ignorar, transação, segunda aplicação ⇒ `ja_aplicado`, concorrência `Promise.all`, permissão de gerente restrito recusada, horário sem unidade recusado, só preços sem preço não zera); cardápio antigo (Etapa 05) continua funcionando.
-- [ ] Implementar; `pnpm vitest run --project db <arquivos> && pnpm typecheck && pnpm lint`; commit "Generaliza as importações por alvo com vários arquivos e lotes".
+- [x] Testes (falham): migrations e RLS dos novos campos/tabela; anexar/remover/limite 10/estado; dedup do conjunto; `iniciarLeitura` sem arquivo; `salvarLote` idempotente; cada aplicação (novo, atualizar, ignorar, transação, segunda aplicação ⇒ `ja_aplicado`, concorrência `Promise.all`, permissão de gerente restrito recusada, horário sem unidade recusado, só preços sem preço não zera); cardápio antigo (Etapa 05) continua funcionando.
+- [x] Implementar; `pnpm vitest run --project db <arquivos> && pnpm typecheck && pnpm lint`; commit "Generaliza as importações por alvo com vários arquivos e lotes".
 
 ### Task 2: Domínio — rascunhos e junção por alvo (`@atd/core/importacao`)
 - Schemas Zod por alvo (cardápio reaproveita `rascunhoSchema`; informações, horários, espaços novos; só preços = itens `{ nome, categoria | null, precoCentavos }`), limites e `juntar*` (dedupe por nome normalizado; conflito de preço marcado `precoConflito: number[]`; horários por unidade/dia com turnos ordenados e sem sobreposição; informações por tema).
-- [ ] Testes (falham) por alvo, incluindo os casos do Review Focus 2 e 4 → implementar → `pnpm vitest run --project unit packages/core` → commit "Adiciona os rascunhos e a junção da importação por alvo".
+- [x] Testes (falham) por alvo, incluindo os casos do Review Focus 2 e 4 → implementar → `pnpm vitest run --project unit packages/core` → commit "Adiciona os rascunhos e a junção da importação por alvo".
 
 ### Task 3: IA — prompts por alvo, leitura com várias partes e evals
 - `lerDocumentoPorIa(llm, { alvo, modo, partes: ConteudoUsuario[] })` escolhendo prompt + JSON schema estrito + parse pelo alvo; prompts `ingestao-{informacoes,horarios,espacos}-v1` (documento é dado; datas no formato ISO; turnos `HH:mm`; capacidades inteiras); "só preços" usa o prompt do cardápio (v1) e o parse reduz para nome+preço.
 - Evals: `evals/ingestao` ganha `--alvo` e exemplos gerados (`gerar-exemplos.ts`) para informações, horários, espaços e várias fotos de cardápio, com gabarito e linha de injeção; métrica por alvo; testes com `fetch` falso.
-- [ ] Testes (falham) → implementar → `pnpm vitest run --project unit packages/ai` → commit "Adiciona a leitura por IA de informações, horários e espaços".
+- [x] Testes (falham) → implementar → `pnpm vitest run --project unit packages/ai` → commit "Adiciona a leitura por IA de informações, horários e espaços".
 
 ### Task 4: Worker — lotes, retomada e reenfileiramento
 - `apps/worker/src/lotes.ts`: `planejarLotes(arquivos) → Lote[]` (PDF em blocos de 5 páginas via pdf-lib; imagens em grupos de 3) e `montarLote(lote, bytes)`; `ingest-document.ts`: processa `lote_atual`, reserva/liquida por lote, `ai_runs` por lote, junta com `juntar<Alvo>`, `salvarLote`, reenfileira o próximo; último lote ⇒ `concluirIngestao` (status `rascunho`); truncamento em lote de PDF ⇒ divide ao meio uma vez; magic bytes e sha256 por arquivo; erro amigável sem conteúdo.
-- [ ] Testes (falham): planejamento de lotes (PDF de 12 páginas = 3 lotes; 7 imagens = 3 lotes); retomada no lote do meio sem nova cobrança; reenfileiramento com `singletonKey`; truncamento dividido; sem modelo; sem saldo no lote 2 (para com erro e mantém o parcial); várias fotos de cardápio juntam num rascunho → implementar → `pnpm vitest run --project db apps/worker && pnpm typecheck && pnpm lint` → commit "Lê as importações em lotes no worker e retoma de onde parou".
+- [x] Testes (falham): planejamento de lotes (PDF de 12 páginas = 3 lotes; 7 imagens = 3 lotes); retomada no lote do meio sem nova cobrança; reenfileiramento com `singletonKey`; truncamento dividido; sem modelo; sem saldo no lote 2 (para com erro e mantém o parcial); várias fotos de cardápio juntam num rascunho → implementar → `pnpm vitest run --project db apps/worker && pnpm typecheck && pnpm lint` → commit "Lê as importações em lotes no worker e retoma de onde parou".
 
 ### Task 5: Painel — Conteúdo → Importar e revisão por alvo
 - Aba nova com seletor de alvo (e modo no cardápio), envio múltiplo (um arquivo por requisição; lista com remover), "Ler arquivos", progresso "Lendo n de m", histórico por alvo; revisão: cardápio (componente atual + conflitos de preço), só preços (antes → depois), informações (lista editável novo/atualizar), horários (por unidade: grade da semana + exceções; seletor de unidade para não reconhecida), espaços (lista por unidade); Cardápio → Importar leva à nova aba.
-- [ ] Testes (actions: papéis, limites, Zod por alvo; componentes por alvo; 360 px) → implementar → **`pnpm check`** → commit "Adiciona a aba Importar com revisão por alvo".
+- [x] Testes (actions: papéis, limites, Zod por alvo; componentes por alvo; 360 px) → implementar → **`pnpm check`** → commit "Adiciona a aba Importar com revisão por alvo".
 
 ### Task 6: E2E, homologação e registros
-- [ ] E2E (IA falsa devolvendo rascunhos por alvo; PDF de exemplo de várias páginas para os lotes): informações ⇒ revisar ⇒ confirmar ⇒ aparecem em Informações; horários com unidade não reconhecida ⇒ escolher ⇒ confirmar ⇒ grade atualizada; várias fotos de cardápio ⇒ um rascunho; só preços ⇒ antes→depois ⇒ preço atualizado; espaços ⇒ confirmados; PDF em lotes mostra progresso.
-- [ ] Docs: `docs/homologacao/etapa-07.md`, PRD (adendo, pdf-lib), PLAN (Etapa 07 com evidência), CLAUDE "Onde paramos", `cp CLAUDE.md AGENTS.md`; `pnpm check` + e2e verdes; banco pronto. Commit "Adiciona o e2e e o roteiro de homologação da Etapa 07".
+- [x] E2E (IA falsa devolvendo rascunhos por alvo; PDF de exemplo de várias páginas para os lotes): informações ⇒ revisar ⇒ confirmar ⇒ aparecem em Informações; horários com unidade não reconhecida ⇒ escolher ⇒ confirmar ⇒ grade atualizada; várias fotos de cardápio ⇒ um rascunho; só preços ⇒ antes→depois ⇒ preço atualizado; espaços ⇒ confirmados; PDF em lotes mostra progresso.
+- [x] Docs: `docs/homologacao/etapa-07.md`, PRD (adendo, pdf-lib), PLAN (Etapa 07 com evidência), CLAUDE "Onde paramos", `cp CLAUDE.md AGENTS.md`; `pnpm check` + e2e verdes; banco pronto. Commit "Adiciona o e2e e o roteiro de homologação da Etapa 07".
 
 **Fim → revisão final → onda única de correções → re-revisão.**

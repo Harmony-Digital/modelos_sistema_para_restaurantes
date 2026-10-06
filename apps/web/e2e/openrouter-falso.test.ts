@@ -102,6 +102,43 @@ describe('OpenRouter falso do e2e', () => {
       expect(falso.provedores).toEqual(['openai'])
     })
 
+    it('leitura por alvo (Etapa 07): responde pelo nome do schema e registra as partes de cada lote', async () => {
+      const pedidos: unknown[] = []
+      falso = await iniciarOpenRouterFalso(() => ({ itens: [], fora_escopo: true }), {
+        leituraDocumento: (p) => {
+          pedidos.push(p)
+          return { fatos: [{ tema: 'Estacionamento', texto: 'Gratuito.', exemplos: [], unidade: null }] }
+        },
+      })
+      const { status, json } = await post({
+        ...openai,
+        messages: [{ role: 'user', content: [
+          { type: 'text', text: 'anexo' },
+          { type: 'file', file: { filename: 'documento-1-paginas-1-a-5.pdf', file_data: 'data:application/pdf;base64,JVBERg==' } },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,iVBORw==' } },
+        ] }],
+        response_format: schema('rascunho_informacoes'),
+      })
+      expect(status).toBe(200)
+      expect(JSON.parse(json.choices![0]!.message.content)).toEqual({ fatos: [{ tema: 'Estacionamento', texto: 'Gratuito.', exemplos: [], unidade: null }] })
+      const esperado = { schema: 'rascunho_informacoes', partes: [{ tipo: 'pdf', nome: 'documento-1-paginas-1-a-5.pdf' }, { tipo: 'imagem', nome: null }] }
+      expect(pedidos).toEqual([esperado])
+      expect(falso.documentos).toEqual([esperado])
+      // a leitura não entra na triagem
+      expect(falso.chamadas).toEqual([])
+    })
+
+    it('rascunho_cardapio usa leituraDocumento quando não há leituraCardapio; sem nenhuma, 500', async () => {
+      falso = await iniciarOpenRouterFalso(() => ({ itens: [], fora_escopo: true }), { leituraDocumento: () => LEITURA })
+      const ok = await post({ ...openai, messages: [{ role: 'user', content: 'x' }], response_format: schema('rascunho_cardapio') })
+      expect(ok.status).toBe(200)
+      expect(falso.documentos).toEqual([{ schema: 'rascunho_cardapio', partes: [] }])
+      await falso.fechar()
+      falso = await iniciarOpenRouterFalso(() => ({ itens: [], fora_escopo: true }))
+      const semLeitura = await post({ ...openai, messages: [{ role: 'user', content: 'x' }], response_format: schema('rascunho_espacos') })
+      expect(semLeitura.status).toBe(500)
+    })
+
     it('recusa chamada sem store:false (OpenAI guardaria a conversa)', async () => {
       falso = await iniciarOpenRouterFalso(() => ({ itens: [], fora_escopo: true }))
       const { status } = await post({ model: 'gpt-4.1-mini', messages: [{ role: 'user', content: 'x' }], response_format: schema('triagem') })

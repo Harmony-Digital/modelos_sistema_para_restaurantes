@@ -89,8 +89,9 @@ aceitou a **retenção padrão de 30 dias para monitoramento de abuso, sem uso p
   (confira o preço atual na tabela do código antes de prometer valor).
 - **Leitura de cardápio (PDF/foto)** — `AI_INGEST_MODELS=gpt-4.1-mini,gpt-4.1` (o segundo entra se o primeiro der erro
   transitório ou recusar). Custo por importação de 1–3 páginas: **centavos**; a reserva de orçamento por importação é
-  de **US$ 0,50** (cobre a leitura e uma repetição no `gpt-4.1`). Cada leitura tem prazo total de 120 s somando os dois
-  modelos, e a importação inteira cabe nos 5 min do job.
+  de **US$ 0,50** por lote (cobre a leitura e uma repetição no `gpt-4.1`). Desde a Etapa 07 os arquivos são lidos em
+  lotes (5 páginas de PDF ou 3 fotos por lote, até 40 lotes), um lote por job: um PDF de 20 páginas = 4 lotes ≈ 4 leituras.
+  Cada leitura tem prazo total de 120 s somando os dois modelos, e cada lote cabe nos 420 s do job.
 - Outros modelos da tabela (`gpt-4.1-nano`, `gpt-5-mini`, `gpt-5-nano`) só entram depois de passar no `eval:prod`.
 - Com **US$ 10** de limite mensal: milhares de conversas simuladas ou centenas de importações.
 - **Confirmar com `smoke:ia:prod` e `eval:prod`** (passo 6) antes de apresentar.
@@ -205,7 +206,7 @@ scripts/producao/verificar.sh --bootstrap .env.production-bootstrap
 ```
 
 **Saída esperada:** o drizzle-kit aplica as migrations sem erro; o script mostra
-`OK migrations aplicadas: 40 de 40 (até 0039_…)`, `OK bucket cardapio existe e é privado`,
+`OK migrations aplicadas: 43 de 43 (até 0042_…)`, `OK bucket cardapio existe e é privado`,
 `OK bucket importacoes existe e é privado`, `OK role web_app existe com login`, `OK role worker_app existe com login`.
 **Se falhar:** erro de `MAINTAIN` → o banco não é PG 17 (passo 1); falha no meio → rode o mesmo comando de novo
 (o drizzle aplica só as que faltam) e, se repetir, pare e relate a mensagem do drizzle-kit. Nunca edite uma migration.
@@ -222,6 +223,12 @@ scripts/producao/verificar.sh --bootstrap .env.production-bootstrap
 
 Depois suba a imagem nova pelo passo 8 (Caminho A ou B, que fazem `up -d`) e confira a linha `worker iniciado`.
 Enquanto o worker está parado, as mensagens ficam na fila e são respondidas quando ele volta.
+
+**Etapa 07 (importação por alvo, migrations 0040–0042):** a 0040 recria o tipo do alvo da importação
+(`knowledge_document_target`) — mesmo motivo para parar o worker antes. No boot, o worker novo ajusta a fila
+`document.ingest` já existente para o prazo de **420 s** por job (`boss.updateQueue`; o `createQueue` não muda fila que
+já existe). Não há variável nova: a leitura de informações, horários e espaços usa os mesmos `AI_INGEST_MODELS`. Uma
+importação que estava sendo lida durante a troca de versão continua do último lote salvo quando o worker volta.
 
 ## Passo 3 — Senhas dos roles e URLs de conexão
 
@@ -428,7 +435,7 @@ scripts/producao/verificar.sh --bootstrap .env.production-bootstrap --vercel .en
 **Saída esperada:** só `OK` (e `AVISO` apenas se você usou outra porta de propósito) e `Resultado: 0 falha(s)`;
 código de saída 0. O script confere: arquivos `600` e fora do git; variáveis obrigatórias e proibidas por destino;
 chaves de 32 bytes iguais nos dois destinos; `NEXT_PUBLIC_LIMITE_UPLOAD_MB=4`; `AI_PROVIDER=openai` e `OPENAI_API_KEY` no worker (sem `OPENROUTER_API_KEY`) e ausência de `OPENROUTER_DEV_SEM_ZDR`;
-login real como `web_app`/`worker_app`; Postgres 17; 40 migrations; buckets privados; roles com login; restaurante,
+login real como `web_app`/`worker_app`; Postgres 17; 43 migrations; buckets privados; roles com login; restaurante,
 dono, limites de gasto e demo; `RESTAURANT_ID` igual ao do banco; cadastro público desligado; Data API sem `public`;
 chave de serviço lendo o Storage; `/login` 200 e webhook recusando POST sem assinatura.
 **Se falhar:** cada `FALHA` traz a correção depois do `—`. Corrigiu variável da Vercel → cadastre de novo (passo 5) e redeploy.
@@ -539,7 +546,7 @@ convite** no painel.
 ```
 Amostra publicada.
 - Painel: https://<domínio> (Vercel, região gru1, deploy <id/URL do deploy>)
-- Supabase: projeto <ref> em sa-east-1, Postgres <versão>, 40 migrations, buckets privados
+- Supabase: projeto <ref> em sa-east-1, Postgres <versão>, 43 migrations, buckets privados
 - Worker: VPS <host>, imagem <tag>, status running, "worker iniciado" às <hora>
 - IA: OpenAI direto (`AI_PROVIDER=openai`, `store: false`, retenção padrão de 30 dias aceita pelo time); triagem gpt-4.1-mini; cardápio gpt-4.1-mini → gpt-4.1 (smoke:ia:prod: <resultado>; eval:prod: <resultado>)
 - verificar.sh: 0 falha(s) em <data/hora>

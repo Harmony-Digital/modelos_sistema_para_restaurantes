@@ -82,7 +82,10 @@ test.afterAll(async () => {
     select storage_path from menu_files where titulo like ${'%' + SUFIXO + '%'}
     union all
     select storage_path from knowledge_documents
-     where storage_path is not null and enviado_por in (select id from auth.users where email like '%@teste.local')`
+     where storage_path is not null and enviado_por in (select id from auth.users where email like '%@teste.local')
+    union all
+    select f.storage_path from knowledge_document_files f join knowledge_documents k on k.id = f.importacao_id
+     where k.enviado_por in (select id from auth.users where email like '%@teste.local')`
   for (const { storage_path } of caminhos) {
     const [bucket, ...resto] = storage_path.split('/')
     await getAdmin().storage.from(bucket!).remove([resto.join('/')])
