@@ -93,7 +93,7 @@ Spec aprovada: [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-
 - [ ] Evals S2 · Homologação — evals de composição (camada 2, 57 casos, no `pnpm test`) e 36 frases de extração prontos em 05/10/2026 (onda final de correções incluída); pendentes: camada 1 (`pnpm --filter @atd/ai eval:s2`, precisa de crédito no OpenRouter) e homologação do dono ([docs/homologacao/etapa-03.md](docs/homologacao/etapa-03.md))
 
 ## Etapa 04 — Eventos (S3)
-- [ ] Refinamento · Plano detalhado
+- [ ] Refinamento · Plano detalhado — spec [docs/specs/2026-10-05-etapa-04-s3-design.md](docs/specs/2026-10-05-etapa-04-s3-design.md); plano enxuto [docs/plans/etapa-04-s3-eventos.md](docs/plans/etapa-04-s3-eventos.md) (7 tarefas, 4 blocos de revisão)
 - [ ] Espaços de evento (painel); tool `registrar_pedido_evento`; coleta guiada
 - [ ] Fila de pedidos com status e responsável
 - [ ] Evals S3 · Homologação
