@@ -1,5 +1,6 @@
 'use client'
 import dynamic from 'next/dynamic'
+import { usePathname } from 'next/navigation'
 import { useRef, useState } from 'react'
 import { SimuladorControles } from './controles'
 import { useSimulador, type AcoesSimulador } from './use-simulador'
@@ -19,6 +20,13 @@ const SimulatorDialog = dynamic(() => import('./simulator-dialog'), {
 export function SimulatorLauncher({ restaurante, timezone, acoes }: { restaurante: string; timezone: string; acoes: AcoesSimulador }) {
   const [aberto, setAberto] = useState(false)
   const [jaAbriu, setJaAbriu] = useState(false)
+  // navegar (ex.: link "Gastos e limites" do aviso) fecha o simulador: a tela nova não fica escondida atrás dele
+  const caminho = usePathname()
+  const [caminhoVisto, setCaminhoVisto] = useState(caminho)
+  if (caminho !== caminhoVisto) {
+    setCaminhoVisto(caminho)
+    setAberto(false)
+  }
   const fab = useRef<HTMLButtonElement>(null)
   const sim = useSimulador(acoes, aberto, timezone)
   return (

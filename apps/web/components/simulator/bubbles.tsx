@@ -106,7 +106,7 @@ export function Bubble(props: { m: SimMessage; onEscolher: (mensagemId: string, 
         {m.link && m.texto.includes(m.link.rotulo) ? (
           <>
             {m.texto.slice(0, m.texto.indexOf(m.link.rotulo))}
-            <Link href={m.link.href} className="underline underline-offset-2">{m.link.rotulo}</Link>
+            <Link href={m.link.href} className="inline-flex min-h-11 items-center underline underline-offset-2">{m.link.rotulo}</Link>
             {m.texto.slice(m.texto.indexOf(m.link.rotulo) + m.link.rotulo.length)}
           </>
         ) : m.texto}
