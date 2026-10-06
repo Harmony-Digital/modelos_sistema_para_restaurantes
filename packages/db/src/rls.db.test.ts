@@ -71,7 +71,8 @@ describe('RLS', () => {
     expect(lidos).toHaveLength(0)
     await expect(
       withUserContext(db, as(gerente, 'aal2'), (tx) =>
-        tx.insert(budgetLimits).values({ restaurantId, escopo: 'ia', periodo: 'mes', limiteUsd: '50' }),
+        // só as colunas com INSERT para authenticated (0035): a recusa vem da policy dono_write
+        tx.execute(dsql`insert into public.budget_limits (restaurant_id, escopo, periodo, limite_usd) values (${restaurantId}, 'ia', 'mes', 50)`),
       ),
     ).rejects.toMatchObject(cause(/row-level security/))
   })

@@ -9,6 +9,9 @@ export const QUEUES = {
   ingestDlq: 'document.ingest.dlq',
   deliver: 'conversation.deliver',
   deliverDlq: 'conversation.deliver.dlq',
+  convite: 'equipe.convite',
+  conviteDlq: 'equipe.convite.dlq',
+  retencao: 'retencao.diaria',
 } as const
 export const PROCESS_DELAY_SECONDS = 4
 /**
@@ -21,6 +24,8 @@ export type ProcessJob = { conversationId: string }
 export type IngestJob = { importacaoId: string }
 /** Entrega das mensagens `pendente` da conversa (resposta humana do painel). */
 export type DeliverJob = { conversationId: string }
+/** Convite de equipe (Server Action do dono, depois de `criarConvite`/`reenviarConvite`). Só o id: e-mail é PII. */
+export type ConviteJob = { conviteId: string }
 export type Enqueue = (tx: Tx, conversationId: string) => Promise<unknown>
 
 export function createBoss(
@@ -69,6 +74,17 @@ export async function ensureQueues(boss: PgBoss): Promise<void> {
     expireInSeconds: 120,
     deadLetter: QUEUES.deliverDlq,
   })
+  await boss.createQueue(QUEUES.conviteDlq, { policy: 'standard' })
+  await boss.createQueue(QUEUES.convite, {
+    policy: 'stately', // 1 job enfileirado + 1 ativo por singletonKey (= convite); o status `pendente` evita convite duplo
+    retryLimit: 2,
+    retryDelay: 30,
+    retryBackoff: true,
+    expireInSeconds: 60,
+    deadLetter: QUEUES.conviteDlq,
+  })
+  // agendada no boot do worker (boss.schedule, 03:00 America/Sao_Paulo); exclusive: nunca duas execuções juntas
+  await boss.createQueue(QUEUES.retencao, { policy: 'exclusive', retryLimit: 2, retryDelay: 300, expireInSeconds: 1800 })
 }
 
 export function enqueueProcess(boss: PgBoss): Enqueue {
@@ -90,4 +106,9 @@ export function enqueueIngest(boss: PgBoss): (importacaoId: string) => Promise<u
 export function enqueueDeliver(boss: PgBoss): (conversationId: string) => Promise<unknown> {
   return (conversationId) =>
     boss.send(QUEUES.deliver, { conversationId } satisfies DeliverJob, { singletonKey: conversationId })
+}
+
+/** Enfileira o convite de equipe (Server Action, depois do commit de `criarConvite`/`reenviarConvite`). */
+export function enqueueConvite(boss: PgBoss): (conviteId: string) => Promise<unknown> {
+  return (conviteId) => boss.send(QUEUES.convite, { conviteId } satisfies ConviteJob, { singletonKey: conviteId })
 }

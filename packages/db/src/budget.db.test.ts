@@ -2,8 +2,8 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { getTestDb, resetDb, seedRestaurant } from './test-utils.ts'
 import { withRole } from './rls.ts'
-import { budgetCounters, budgetLimits, spendLedger } from './schema/ops.ts'
-import { liberarReservasPendentes, releaseBudget, reserveBudget, settleBudget } from './budget.ts'
+import { auditLog, budgetAlerts, budgetCounters, budgetLimits, spendLedger } from './schema/ops.ts'
+import { liberarReservasPendentes, registrarAlertas, releaseBudget, reserveBudget, settleBudget } from './budget.ts'
 
 const { db, sql } = getTestDb()
 beforeEach(() => resetDb(sql))
@@ -145,3 +145,72 @@ describe('orçamento', () => {
   })
 })
 
+
+describe('alertas de gasto (registrarAlertas)', () => {
+  // 2026-10-05 12:00 em São Paulo: dia 2026-10-05, mês 2026-10-01
+  async function comLimites(escopo: 'ia' | 'simulacao' = 'ia') {
+    const { restaurantId } = await seedRestaurant(db)
+    await db.insert(budgetLimits).values([
+      { restaurantId, escopo, periodo: 'dia', limiteUsd: '1', alertaPct: 80 },
+      { restaurantId, escopo, periodo: 'mes', limiteUsd: '10', alertaPct: 50 },
+    ])
+    return restaurantId
+  }
+  async function contador(restaurantId: string, periodo: 'dia' | 'mes', gasto: string, reservado = '0', escopo: 'ia' | 'simulacao' = 'ia') {
+    const inicio = periodo === 'dia' ? '2026-10-05' : '2026-10-01'
+    await db.insert(budgetCounters).values({ restaurantId, escopo, periodo, inicioPeriodo: inicio, gasto, reservado })
+      .onConflictDoUpdate({ target: [budgetCounters.restaurantId, budgetCounters.escopo, budgetCounters.periodo, budgetCounters.inicioPeriodo], set: { gasto, reservado } })
+  }
+  const alertas = () => db.select().from(budgetAlerts).orderBy(budgetAlerts.periodo, budgetAlerts.nivel)
+  const registrar = (restaurantId: string, escopo: 'ia' | 'simulacao' = 'ia') =>
+    withRole(db, 'worker_app', (tx) => registrarAlertas(tx, { restaurantId, escopo, agora: now }))
+
+  it('abaixo do limiar não grava; cruzar alerta_pct grava 80; atingir o limite grava 100; cada nível uma vez só', async () => {
+    const rid = await comLimites()
+    await contador(rid, 'dia', '0.5', '0.29')
+    expect(await registrar(rid)).toEqual([])
+    await contador(rid, 'dia', '0.5', '0.30') // gasto + reservado = 80%
+    expect(await registrar(rid)).toEqual([80])
+    expect(await registrar(rid)).toEqual([])
+    await contador(rid, 'dia', '1', '0')
+    expect(await registrar(rid)).toEqual([100])
+    expect(await registrar(rid)).toEqual([])
+    expect((await alertas()).map((a) => [a.periodo, a.inicioPeriodo, a.nivel])).toEqual([['dia', '2026-10-05', 80], ['dia', '2026-10-05', 100]])
+    const audit = await db.select().from(auditLog).where(eq(auditLog.acao, 'orcamento.alerta'))
+    expect(audit.map((l) => [l.atorTipo, l.diff])).toEqual([
+      ['sistema', { escopo: 'ia', periodo: 'dia', inicioPeriodo: '2026-10-05', nivel: 80 }],
+      ['sistema', { escopo: 'ia', periodo: 'dia', inicioPeriodo: '2026-10-05', nivel: 100 }],
+    ])
+  })
+
+  it('pular direto para 100% grava 80 e 100 de uma vez; mês com alerta_pct próprio', async () => {
+    const rid = await comLimites()
+    await contador(rid, 'dia', '1.2')
+    await contador(rid, 'mes', '5')
+    expect((await registrar(rid)).sort()).toEqual([100, 80, 80].sort())
+    expect((await alertas()).map((a) => [a.periodo, a.nivel])).toEqual([['dia', 80], ['dia', 100], ['mes', 80]])
+  })
+
+  it('escopos separados: simulação não gera alerta de IA; sem limite não grava', async () => {
+    const rid = await comLimites('simulacao')
+    await contador(rid, 'dia', '1', '0', 'simulacao')
+    expect(await registrar(rid, 'ia')).toEqual([])
+    expect((await registrar(rid, 'simulacao')).sort()).toEqual([100, 80])
+    expect((await alertas()).every((a) => a.escopo === 'simulacao')).toBe(true)
+  })
+
+  it('período anterior não conta: contador de ontem não gera alerta hoje', async () => {
+    const rid = await comLimites()
+    await db.insert(budgetCounters).values({ restaurantId: rid, escopo: 'ia', periodo: 'dia', inicioPeriodo: '2026-10-04', gasto: '5' })
+    expect(await registrar(rid)).toEqual([])
+  })
+
+  it('concorrência: duas transações cruzando juntas gravam o nível uma vez só', async () => {
+    const rid = await comLimites()
+    await contador(rid, 'dia', '0.9')
+    const rs = await Promise.all([registrar(rid), registrar(rid), registrar(rid)])
+    expect(rs.flat()).toEqual([80])
+    expect(await alertas()).toHaveLength(1)
+    expect(await db.select().from(auditLog).where(eq(auditLog.acao, 'orcamento.alerta'))).toHaveLength(1)
+  })
+})

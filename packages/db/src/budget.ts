@@ -2,9 +2,13 @@ import { and, asc, eq, or, sql } from 'drizzle-orm'
 import { periodStarts } from '@atd/core'
 import type { Db } from './client.ts'
 import type { Tx } from './rls.ts'
-import { budgetCounters, budgetLimits, spendLedger } from './schema/ops.ts'
+import { auditLog, budgetCounters, budgetLimits, spendLedger } from './schema/ops.ts'
 
-export type BudgetScope = 'ia' | 'whatsapp'
+/** `simulacao`: conversas do simulador têm limite próprio e nunca consomem o limite dos clientes reais. */
+export type BudgetScope = 'ia' | 'simulacao' | 'whatsapp'
+export type Escopo = BudgetScope
+export const ESCOPOS: readonly Escopo[] = ['ia', 'simulacao', 'whatsapp']
+export type NivelAlerta = 80 | 100
 export type Reservation = { restaurantId: string; scope: BudgetScope; amountUsd: string; counterIds: string[]; reservationId: number }
 
 class NoBudget extends Error {}
@@ -164,3 +168,49 @@ export async function liberarReservasPendentes(
   return liberadas
 }
 
+
+/**
+ * Grava os alertas de gasto que o escopo cruzou nos períodos correntes (dia e mês, no fuso do restaurante — os mesmos
+ * contadores de `reserveBudget`): gasto + reservado ≥ `alerta_pct`% do limite ⇒ 80; ≥ 100% ⇒ 100. Um alerta por
+ * restaurante+escopo+período+início+nível (`on conflict do nothing`: concorrência e repetição não duplicam). Audita
+ * `orcamento.alerta` (ator `sistema`, sem PII) para cada alerta novo e devolve os níveis novos (um por período).
+ * Chamar na mesma transação da reserva/liquidação.
+ */
+export async function registrarAlertas(
+  tx: Db | Tx,
+  p: { restaurantId: string; escopo: Escopo; agora: Date },
+): Promise<NivelAlerta[]> {
+  const novos = await tx.execute<{ periodo: 'dia' | 'mes'; inicio_periodo: string; nivel: number }>(sql`
+    with r as (
+      select timezone as tz from public.restaurants where id = ${p.restaurantId}::uuid
+    ), lim as (
+      select l.periodo, l.limite_usd, l.alerta_pct,
+             case l.periodo when 'dia' then (${p.agora.toISOString()}::timestamptz at time zone r.tz)::date
+                            else date_trunc('month', ${p.agora.toISOString()}::timestamptz at time zone r.tz)::date end as inicio
+        from public.budget_limits l cross join r
+       where l.restaurant_id = ${p.restaurantId}::uuid and l.escopo = ${p.escopo}::public.budget_scope
+    ), uso as (
+      select lim.*, coalesce(c.gasto + c.reservado, 0) as usado
+        from lim left join public.budget_counters c
+          on c.restaurant_id = ${p.restaurantId}::uuid and c.escopo = ${p.escopo}::public.budget_scope
+         and c.periodo = lim.periodo and c.inicio_periodo = lim.inicio
+    )
+    insert into public.budget_alerts (restaurant_id, escopo, periodo, inicio_periodo, nivel)
+    select ${p.restaurantId}::uuid, ${p.escopo}::public.budget_scope, u.periodo, u.inicio, n.nivel
+      from uso u cross join (values (80::smallint), (100::smallint)) as n(nivel)
+     where (n.nivel = 80 and u.usado * 100 >= u.limite_usd * u.alerta_pct)
+        or (n.nivel = 100 and u.usado >= u.limite_usd)
+    on conflict do nothing
+    returning periodo, to_char(inicio_periodo, 'YYYY-MM-DD') as inicio_periodo, nivel`)
+  for (const a of novos) {
+    await tx.insert(auditLog).values({
+      restaurantId: p.restaurantId,
+      atorTipo: 'sistema',
+      acao: 'orcamento.alerta',
+      entidade: 'budget',
+      entidadeId: null,
+      diff: { escopo: p.escopo, periodo: a.periodo, inicioPeriodo: a.inicio_periodo, nivel: a.nivel },
+    })
+  }
+  return novos.map((a) => a.nivel as NivelAlerta)
+}

@@ -80,6 +80,27 @@ export const budgetCounters = pgTable(
   ],
 )
 
+/**
+ * Alerta de gasto (só no painel): nível 80 = cruzou `alerta_pct` do limite; 100 = atingiu o limite. Um por
+ * restaurante+escopo+período+início+nível. Gravado pelo worker (`registrarAlertas`) na reserva/liquidação.
+ */
+export const budgetAlerts = pgTable(
+  'budget_alerts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    restaurantId: restaurantFk(),
+    escopo: budgetScope('escopo').notNull(),
+    periodo: budgetPeriod('periodo').notNull(),
+    inicioPeriodo: date('inicio_periodo', { mode: 'string' }).notNull(),
+    nivel: smallint('nivel').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('budget_alerts_uq').on(t.restaurantId, t.escopo, t.periodo, t.inicioPeriodo, t.nivel),
+    check('budget_alerts_nivel_ck', sql`${t.nivel} in (80, 100)`),
+  ],
+)
+
 export const spendLedger = pgTable(
   'spend_ledger',
   {
@@ -145,7 +166,12 @@ export const retentionSettings = pgTable(
     acao: retentionAction('acao').notNull(),
     ...timestamps,
   },
-  (t) => [primaryKey({ columns: [t.restaurantId, t.dado] }), check('retention_dias_positive', sql`${t.dias} >= 0`)],
+  (t) => [
+    primaryKey({ columns: [t.restaurantId, t.dado] }),
+    check('retention_dias_positive', sql`${t.dias} >= 0`),
+    // mínimos (Etapa 08): mensagens ≥ 7 dias, áudio fixo (descartado após transcrever), demais ≥ 30 dias
+    check('retention_dias_minimo', sql`${t.dado} = 'audio' or ${t.dias} >= case ${t.dado} when 'messages' then 7 else 30 end`),
+  ],
 )
 
 // Tabela de infraestrutura (sem dado de negócio): sem restaurant_id, mas com RLS (Task 7).
