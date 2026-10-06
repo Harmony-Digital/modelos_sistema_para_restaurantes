@@ -23,6 +23,8 @@ export type IntegranteTela = {
   convitePendente?: boolean
   /** convite `enviado` de quem nunca entrou (para Reenviar) */
   conviteId?: string | null
+  /** vinculado a uma conta que já existia (nenhum e-mail saiu) */
+  contaExistente?: boolean
   statusConvite?: 'pendente' | 'enviado' | 'erro' | 'aceito'
 }
 export type UnidadeOpcao = { id: string; nome: string }
@@ -100,6 +102,7 @@ function ConviteFormulario(props: { unidades: UnidadeOpcao[]; onEnviado: () => v
 function situacao(i: IntegranteTela): string {
   if (i.tipo === 'convite') return i.statusConvite === 'erro' ? 'Falha ao enviar o convite' : 'Enviando o convite…'
   if (!i.ativo) return 'Desativado'
+  if (i.convitePendente && i.contaExistente) return 'Já tinha conta: entra com a senha atual (nenhum e-mail enviado)'
   return i.convitePendente ? 'Convite enviado, aguardando o primeiro acesso' : 'Ativo'
 }
 

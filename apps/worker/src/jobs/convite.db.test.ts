@@ -104,6 +104,8 @@ describe('equipe.convite (worker)', () => {
     expect(pedidos.map((p) => new URL(p.url).pathname)).toEqual(['/auth/v1/invite', '/auth/v1/admin/generate_link'])
     expect(pedidos[1]!.corpo).toEqual({ type: 'magiclink', email: EMAIL })
     expect(await membro(userId)).toMatchObject({ restaurantId, papel: 'gerente' })
+    // nenhum e-mail saiu: o painel avisa que a pessoa entra com a senha que já tem
+    expect(await convite(conviteId)).toMatchObject({ status: 'enviado', erro: 'conta_existente' })
     expect(linhas.join('')).not.toContain(EMAIL)
   })
 

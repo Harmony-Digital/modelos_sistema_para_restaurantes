@@ -8,6 +8,8 @@ import type { StaffRole } from './staff.ts'
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const PAPEIS_CONVITE = ['gerente', 'atendente'] as const
+/** `staff_invites.erro` informativo em convite `enviado`: a conta já existia e nenhum e-mail saiu. */
+const CONTA_EXISTENTE = 'conta_existente'
 
 export type PapelConvite = (typeof PAPEIS_CONVITE)[number]
 export type StatusConvite = 'pendente' | 'enviado' | 'erro' | 'aceito'
@@ -25,6 +27,8 @@ export type IntegranteEquipe =
       convitePendente: boolean
       /** convite `enviado` de quem nunca entrou (para "Reenviar"); null para os demais */
       conviteId: string | null
+      /** vinculado a uma conta que já existia: nenhum e-mail saiu, entra com a senha atual (sem "Reenviar") */
+      contaExistente: boolean
     }
   | {
       tipo: 'convite'
@@ -62,18 +66,23 @@ export function listarEquipe(db: Db, claims: JwtClaims): Promise<IntegranteEquip
       .where(and(sql`${staffInvites.restaurantId} = (select app.my_restaurant_id())`, inArray(staffInvites.status, ['pendente', 'erro'])))
       .orderBy(desc(staffInvites.createdAt))
     const enviados = await tx
-      .select({ id: staffInvites.id, userId: staffInvites.userId })
+      .select({ id: staffInvites.id, userId: staffInvites.userId, erro: staffInvites.erro })
       .from(staffInvites)
       .where(and(sql`${staffInvites.restaurantId} = (select app.my_restaurant_id())`, eq(staffInvites.status, 'enviado')))
       .orderBy(desc(staffInvites.createdAt))
-    const convitePorUsuario = new Map<string, string>()
-    for (const e of enviados) if (e.userId && !convitePorUsuario.has(e.userId)) convitePorUsuario.set(e.userId, e.id)
+    // o convite `enviado` mais recente de cada usuário
+    const convitePorUsuario = new Map<string, { id: string; contaExistente: boolean }>()
+    for (const e of enviados) {
+      if (e.userId && !convitePorUsuario.has(e.userId)) convitePorUsuario.set(e.userId, { id: e.id, contaExistente: e.erro === CONTA_EXISTENTE })
+    }
     return [
       ...membros.map((m) => {
         const pendente = porId.get(m.id)?.entrou === false
+        const cv = convitePorUsuario.get(m.id)
+        const contaExistente = cv?.contaExistente === true
         return {
           tipo: 'membro' as const, ...m, email: porId.get(m.id)?.email ?? null, convitePendente: pendente,
-          conviteId: pendente ? convitePorUsuario.get(m.id) ?? null : null,
+          conviteId: pendente && cv && !contaExistente ? cv.id : null, contaExistente,
         }
       }),
       ...convites.map((c) => ({ tipo: 'convite' as const, ...c, ativo: false as const })),
@@ -189,25 +198,26 @@ export async function conviteParaProcessar(
  * Resultado do convite no Supabase Auth. Sucesso: cria (ou atualiza, no mesmo restaurante) o `staff` com papel e unidades
  * do convite e marca `enviado`; usuário que já é de outro restaurante não é movido (`erro: outro_restaurante`) e o dono
  * nunca é rebaixado (`erro: ja_membro`). Falha: grava o código do erro — só `[a-z_]` (mensagem do Auth pode trazer o
- * e-mail); fora disso, `erro_desconhecido`. Só age sobre convite `pendente`.
+ * e-mail); fora disso, `erro_desconhecido`. Só age sobre convite `pendente` (senão `nada`). `contaExistente`: vínculo
+ * sem e-mail (a pessoa já tinha conta) ⇒ `erro = conta_existente`, informativo. Devolve o desfecho.
  */
 export async function concluirConvite(
   db: Db | Tx,
   id: string,
-  r: { ok: true; userId: string } | { ok: false; erro: string },
-): Promise<void> {
-  if (!UUID.test(id)) return
-  await (db as Db).transaction(async (tx) => {
+  r: { ok: true; userId: string; contaExistente?: boolean } | { ok: false; erro: string },
+): Promise<'enviado' | 'erro' | 'nada'> {
+  if (!UUID.test(id)) return 'nada'
+  return (db as Db).transaction(async (tx): Promise<'enviado' | 'erro' | 'nada'> => {
     const [c] = await tx
       .select({ restaurantId: staffInvites.restaurantId, nome: staffInvites.nome, papel: staffInvites.papel, unidades: staffInvites.unidades })
       .from(staffInvites)
       .where(and(eq(staffInvites.id, id), eq(staffInvites.status, 'pendente')))
       .for('update')
-    if (!c) return
+    if (!c) return 'nada'
     if (!r.ok) {
       const codigo = /^[a-z_]{1,60}$/.test(r.erro) ? r.erro : 'erro_desconhecido'
       await tx.update(staffInvites).set({ status: 'erro', erro: codigo }).where(eq(staffInvites.id, id))
-      return
+      return 'erro'
     }
     // SQL explícito: worker_app só tem INSERT/UPDATE nestas colunas (0035); o restaurante de quem já existe não muda
     const criado = await tx.execute<{ user_id: string }>(sql`
@@ -221,9 +231,12 @@ export async function concluirConvite(
       const [existente] = await tx.select({ restaurantId: staff.restaurantId }).from(staff).where(eq(staff.userId, r.userId))
       const erro = existente?.restaurantId === c.restaurantId ? 'ja_membro' : 'outro_restaurante'
       await tx.update(staffInvites).set({ status: 'erro', erro }).where(eq(staffInvites.id, id))
-      return
+      return 'erro'
     }
-    await tx.update(staffInvites).set({ status: 'enviado', erro: null, userId: r.userId }).where(eq(staffInvites.id, id))
+    await tx.update(staffInvites)
+      .set({ status: 'enviado', erro: r.contaExistente ? CONTA_EXISTENTE : null, userId: r.userId })
+      .where(eq(staffInvites.id, id))
+    return 'enviado'
   })
 }
 

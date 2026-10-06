@@ -1,5 +1,4 @@
-import { concluirConvite, conviteParaProcessar, schema, type Db } from '@atd/db'
-import { eq } from 'drizzle-orm'
+import { concluirConvite, conviteParaProcessar, type Db } from '@atd/db'
 import type { Logger } from '../logger.ts'
 import { cabecalhosDeServico } from '../storage.ts'
 
@@ -73,7 +72,8 @@ export async function processarConvite(deps: ConviteDeps, conviteId: string): Pr
   if (!c) return 'nada'
 
   let r = await deps.auth.convidar(c.email)
-  if (!r.ok && r.codigo === 'email_exists') r = await deps.auth.usuarioExistente(c.email)
+  const contaExistente = !r.ok && r.codigo === 'email_exists'
+  if (contaExistente) r = await deps.auth.usuarioExistente(c.email)
   if (!r.ok) {
     const erro = codigoDoErro(r)
     deps.log.warn({ conviteId, erro, status: r.status, codigoAuth: r.codigo }, 'convite de equipe não enviado')
@@ -81,15 +81,12 @@ export async function processarConvite(deps: ConviteDeps, conviteId: string): Pr
     return 'erro'
   }
 
-  await concluirConvite(deps.db, conviteId, { ok: true, userId: r.userId })
-  const [depois] = await deps.db
-    .select({ status: schema.staffInvites.status, erro: schema.staffInvites.erro })
-    .from(schema.staffInvites)
-    .where(eq(schema.staffInvites.id, conviteId))
-  if (depois?.status === 'enviado') {
-    deps.log.info({ conviteId }, 'convite de equipe enviado')
+  const desfecho = await concluirConvite(deps.db, conviteId, { ok: true, userId: r.userId, contaExistente })
+  if (desfecho === 'enviado') {
+    deps.log.info({ conviteId, contaExistente }, 'convite de equipe enviado')
     return 'enviado'
   }
-  deps.log.warn({ conviteId, erro: depois?.erro ?? null }, 'convite de equipe não concluído')
+  if (desfecho === 'nada') return 'nada' // outro processamento já concluiu
+  deps.log.warn({ conviteId }, 'convite de equipe não concluído')
   return 'erro'
 }

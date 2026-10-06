@@ -145,6 +145,26 @@ describe('worker: processamento do convite', () => {
     expect((await listarEquipe(db, as(c.dono))).find((x) => x.id === c.gerente)).toMatchObject({ conviteId: null })
   })
 
+  it('conta que já existia: concluirConvite devolve o desfecho e a equipe mostra "já tinha conta" sem Reenviar', async () => {
+    const c = await cenario()
+    const r = await criarConvite(db, as(c.dono), convite())
+    const id = r.ok ? r.valor.conviteId : ''
+    const userId = await createAuthUser(sql, 'nova@teste.local')
+    expect(await withRole(db, 'worker_app', (tx) => concluirConvite(tx, id, { ok: true, userId, contaExistente: true }))).toBe('enviado')
+    expect(await withRole(db, 'worker_app', (tx) => concluirConvite(tx, id, { ok: true, userId }))).toBe('nada') // já não está pendente
+    const [inv] = await db.select().from(staffInvites).where(eq(staffInvites.id, id))
+    expect(inv).toMatchObject({ status: 'enviado', erro: 'conta_existente' })
+    const m = (await listarEquipe(db, as(c.dono))).find((x) => x.id === userId)
+    expect(m).toMatchObject({ tipo: 'membro', convitePendente: true, contaExistente: true, conviteId: null })
+  })
+
+  it('concluirConvite devolve erro quando não vincula (falha do Auth)', async () => {
+    const c = await cenario()
+    const r = await criarConvite(db, as(c.dono), convite())
+    const id = r.ok ? r.valor.conviteId : ''
+    expect(await withRole(db, 'worker_app', (tx) => concluirConvite(tx, id, { ok: false, erro: 'limite_envio' }))).toBe('erro')
+  })
+
   it('nunca rebaixa o dono; erro fora do formato de código vira erro_desconhecido', async () => {
     const c = await cenario()
     const r1 = await criarConvite(db, as(c.dono), convite())

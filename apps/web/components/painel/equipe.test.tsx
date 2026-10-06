@@ -56,6 +56,16 @@ describe('Equipe', () => {
     expect(reenviarConviteAction).toHaveBeenCalledWith('cv2')
   })
 
+  it('quem já tinha conta: avisa que entra com a senha atual, sem Reenviar', () => {
+    const lista = [...integrantes, {
+      tipo: 'membro' as const, id: 'm3', nome: 'Duda', email: 'duda@x.com', papel: 'gerente' as const, unidades: [], ativo: true,
+      convitePendente: true, conviteId: null, contaExistente: true,
+    }]
+    render(<Equipe integrantes={lista} unidades={unidades} meuId="eu" somenteLeitura={false} />)
+    expect(screen.getByText('Já tinha conta: entra com a senha atual (nenhum e-mail enviado)')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Reenviar convite para Duda' })).toBeNull()
+  })
+
   it('desativar pede confirmação antes de chamar a ação', async () => {
     const user = userEvent.setup()
     render(<Equipe integrantes={integrantes} unidades={unidades} meuId="eu" somenteLeitura={false} />)
