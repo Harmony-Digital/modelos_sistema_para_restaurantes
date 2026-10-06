@@ -100,18 +100,28 @@ export function juntarCardapio(
 
 // ── Cardápio (só preços) ──
 
-/** Itens por nome; preço não lido (null) nunca apaga o lido; preços diferentes viram conflito. */
+/**
+ * Itens por categoria + nome (como a aplicação, que filtra por categoria): homônimos em categorias diferentes
+ * ("Picanha" em Grelhados e em Executivos) continuam separados. Item sem categoria lida junta ao único item de mesmo
+ * nome (com dois ou mais, fica à parte: a aplicação o trata como ambíguo); item com categoria completa o único de
+ * mesmo nome ainda sem categoria. Preço não lido (null) nunca apaga o lido; preços diferentes viram conflito.
+ */
 export function juntarSoPrecos(acumulado: RascunhoSoPrecos | null, lote: RascunhoSoPrecos): RascunhoSoPrecos {
   const itens: ItemSoPrecos[] = []
-  const pos = new Map<string, number>()
+  const unico = (f: (x: ItemSoPrecos) => boolean) => {
+    const achados = itens.flatMap((x, i) => (f(x) ? [i] : []))
+    return achados.length === 1 ? achados[0]! : undefined
+  }
   for (const item of [...(acumulado?.itens ?? []), ...lote.itens]) {
-    const k = chave(item.nome)
-    const i = pos.get(k)
+    const kn = chave(item.nome)
+    const mesmoNome = (x: ItemSoPrecos) => chave(x.nome) === kn
+    const i = unico((x) => mesmoNome(x) && chave(x.categoria) === chave(item.categoria))
+      ?? (item.categoria === null ? unico(mesmoNome) : unico((x) => mesmoNome(x) && x.categoria === null))
     if (i !== undefined) {
       const x = itens[i]!
       itens[i] = { ...juntarPreco(x, item), categoria: x.categoria ?? item.categoria }
     } else if (itens.length < L.itens) {
-      pos.set(k, itens.push({ ...item }) - 1)
+      itens.push({ ...item })
     }
   }
   return { itens }

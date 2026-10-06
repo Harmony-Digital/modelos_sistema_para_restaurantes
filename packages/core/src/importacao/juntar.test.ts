@@ -135,6 +135,30 @@ describe('juntarSoPrecos', () => {
     const a = juntarSoPrecos({ itens: [it_()] }, { itens: [it_({ precoCentavos: 6490 }), it_({ nome: 'Suco', precoCentavos: null })] })
     expect(juntarSoPrecos(a, a)).toEqual(a)
   })
+  it('I2: homônimos em categorias diferentes continuam separados, sem conflito (um lote só)', () => {
+    const r = juntarSoPrecos(null, { itens: [it_({ categoria: 'Grelhados', precoCentavos: 8900 }), it_({ categoria: 'Executivos', precoCentavos: 4900 })] })
+    expect(r.itens).toEqual([it_({ categoria: 'Grelhados', precoCentavos: 8900 }), it_({ categoria: 'Executivos', precoCentavos: 4900 })])
+  })
+  it('I2: homônimos em categorias diferentes em lotes diferentes também ficam separados', () => {
+    const a = juntarSoPrecos(null, { itens: [it_({ categoria: 'Grelhados', precoCentavos: 8900 })] })
+    const r = juntarSoPrecos(a, { itens: [it_({ categoria: 'executivos', precoCentavos: 4900 }), it_({ categoria: 'GRELHADOS', precoCentavos: 9100 })] })
+    expect(r.itens).toEqual([
+      { ...it_({ categoria: 'Grelhados', precoCentavos: 8900 }), precoConflito: [8900, 9100] },
+      it_({ categoria: 'executivos', precoCentavos: 4900 }),
+    ])
+    expect(juntarSoPrecos(r, r)).toEqual(r)
+  })
+  it('I2: categoria não lida junta ao único item de mesmo nome; com dois homônimos fica à parte', () => {
+    const um = juntarSoPrecos({ itens: [it_({ categoria: 'Grelhados' })] }, { itens: [it_({ categoria: null, precoCentavos: null })] })
+    expect(um.itens).toEqual([it_({ categoria: 'Grelhados' })])
+    const dois = juntarSoPrecos(
+      { itens: [it_({ categoria: 'Grelhados', precoCentavos: 8900 }), it_({ categoria: 'Executivos', precoCentavos: 4900 })] },
+      { itens: [it_({ categoria: null, precoCentavos: 5000 })] },
+    )
+    expect(dois.itens).toHaveLength(3)
+    expect(dois.itens[2]).toEqual(it_({ categoria: null, precoCentavos: 5000 }))
+    expect(juntarSoPrecos(dois, dois)).toEqual(dois)
+  })
 })
 
 describe('juntarInformacoes', () => {
