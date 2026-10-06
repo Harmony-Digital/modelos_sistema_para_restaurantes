@@ -49,7 +49,7 @@ pnpm --filter @atd/web e2e              # pare o worker local antes: o e2e sobe 
 ```
 Depois do `pnpm check`, prepare o banco de novo (seção 1): `pnpm db:migrate`, o **bootstrap** do restaurante e o `demo:s1`. O e2e precisa de `PHONE_ENC_KEY` no ambiente (a mesma do servidor web) para cifrar o telefone do pedido de teste: `set -a; source .env; set +a` antes. Se o e2e acusar "Há um worker rodando neste banco" logo depois do `pnpm check` sem nenhum worker de pé, é o batimento deixado pelos testes do worker: espere 90 s e rode de novo.
 
-Os evals de composição do S3 (sem custo) rodam no `pnpm test`; a extração com a IA de verdade (`pnpm --filter @atd/ai eval:s3`, e `eval:s1`/`eval:s2` para conferir que a v4 não regrediu) só depois de comprar crédito no OpenRouter.
+Os evals de composição do S3 (sem custo) rodam no `pnpm test`; a extração com a IA de verdade (`pnpm --filter @atd/ai eval:s3`, e `eval:s1`/`eval:s2`, que medem a v4 por padrão, para conferir que ela não regrediu; `--triagem v2`/`--triagem v3` mede a versão anterior) só depois de comprar crédito no OpenRouter.
 
 ## Se o simulador não responder
 - O worker está rodando? O Início mostra "IA: Online".

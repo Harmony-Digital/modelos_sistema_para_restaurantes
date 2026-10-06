@@ -1,24 +1,24 @@
 /**
- * Evals S2 — camada 1: extração de avisos de presença (triage-v3) com modelo real via OpenRouter.
- * Uso: pnpm --filter @atd/ai eval:s2 [--modelos a,b,c] [--teto 0.50] [--triagem v3|v4]
+ * Evals S2 — camada 1: extração de avisos de presença (padrão triage-v4; --triagem v3 mede a versão anterior) com modelo real via OpenRouter.
+ * Uso: pnpm --filter @atd/ai eval:s2 [--modelos a,b,c] [--teto 0.50] [--triagem v4|v3] (padrão v4)
  * Custo real, com teto por execução. Grava o relatório em evals/s2/resultados/AAAA-MM-DD-extracao.md.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import { createOpenRouterClient } from '../../src/openrouter.ts'
 import { triageV3, triageV4 } from '../../src/triage.ts'
+import { lerTriagem } from '../triagem.ts'
 import { custoDaChamada } from '../s1/custo.ts'
 import { FRASES } from './casos.ts'
 import { extracaoCorretaS2 } from './comparar.ts'
 import { CONTEXTO, CONTEXTO_PEQUENO } from './fixture.ts'
 
-const { values } = parseArgs({ options: { modelos: { type: 'string' }, triagem: { type: 'string', default: 'v3' }, teto: { type: 'string', default: '0.50' }, 'max-chamadas': { type: 'string', default: '500' } } })
+const { values } = parseArgs({ options: { modelos: { type: 'string' }, triagem: { type: 'string' }, teto: { type: 'string', default: '0.50' }, 'max-chamadas': { type: 'string', default: '500' } } })
 const apiKey = process.env.OPENROUTER_API_KEY
 if (!apiKey) throw new Error('Defina OPENROUTER_API_KEY (no .env da raiz ou no ambiente)')
 const modelos = (values.modelos ?? process.env.AI_TRIAGE_MODELS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
 if (modelos.length === 0) throw new Error('Informe --modelos ou AI_TRIAGE_MODELS')
-const triagem = values.triagem
-if (triagem !== 'v3' && triagem !== 'v4') throw new Error('--triagem deve ser v3 ou v4')
+const triagem = lerTriagem(values.triagem, 'v3')
 const extrair = triagem === 'v4' ? triageV4 : triageV3
 const teto = Number(values.teto)
 if (!(teto > 0)) throw new Error('--teto deve ser um valor em dólares maior que zero')
