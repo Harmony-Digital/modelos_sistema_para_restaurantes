@@ -4,7 +4,8 @@ import { loadEnv, workerEnvSchema } from '@atd/config'
 import { keyFromBase64 } from '@atd/core'
 import { createBoss, createDb, ensureQueues, QUEUES, type DeliverJob, type IngestJob, type ProcessJob } from '@atd/db'
 import { createWhatsAppClient } from '@atd/whatsapp'
-import { deliver } from './jobs/deliver.ts'
+import { CONCORRENCIA, POOL_DRIZZLE_WORKER } from './concorrencia.ts'
+import { entregarRespostaHumana } from './jobs/deliver.ts'
 import { ingestDocument } from './jobs/ingest-document.ts'
 import { processConversation, type ProcessDeps } from './jobs/process-conversation.ts'
 import { startHeartbeat } from './heartbeat.ts'
@@ -21,8 +22,9 @@ initSentry(env.SENTRY_DSN, VERSION)
 
 // Session pooler (IPv4) ou conexão direta: processo de longa duração com prepared statements (o modo
 // transaction não os suporta). O pg-boss 12 não usa LISTEN/NOTIFY por padrão (só polling + advisory
-// xact locks), então isso não exige sessão. Pools: drizzle 6 + pg-boss 3 = 9 conexões no máximo.
-const { db, sql } = createDb(env.DATABASE_URL, { max: 6 })
+// xact locks), então isso não exige sessão. Pools: drizzle 9 (4 process + 2 deliver + 1 ingest + heartbeat
+// + folga; ver concorrencia.ts) + pg-boss 3 = 12 conexões no máximo.
+const { db, sql } = createDb(env.DATABASE_URL, { max: POOL_DRIZZLE_WORKER })
 const boss = createBoss(env.DATABASE_URL, 'worker', (err) => {
   log.error({ err }, 'pg-boss erro')
   Sentry.captureException(err)
@@ -57,7 +59,7 @@ try {
       boss.send(QUEUES.process, { conversationId } satisfies ProcessJob, { singletonKey: conversationId, startAfter: 1 }),
   }
 
-  await boss.work<ProcessJob>(QUEUES.process, { localConcurrency: 4 }, async (jobs) => {
+  await boss.work<ProcessJob>(QUEUES.process, { localConcurrency: CONCORRENCIA.process }, async (jobs) => {
     for (const job of jobs) {
       try {
         const outcome = await processConversation(deps, job.data.conversationId)
@@ -73,11 +75,13 @@ try {
   })
 
   // resposta do atendente (painel): a action grava a mensagem `pendente` e enfileira; a entrega é a mesma da IA
-  await boss.work<DeliverJob>(QUEUES.deliver, { localConcurrency: 2 }, async (jobs) => {
+  // na última tentativa, a resposta que não saiu vira `falhou:temporaria` ("Tentar de novo" no painel) em vez de ir à DLQ
+  const opcoesDeliver = { localConcurrency: CONCORRENCIA.deliver, includeMetadata: true } as const
+  await boss.work<DeliverJob, unknown, typeof opcoesDeliver>(QUEUES.deliver, opcoesDeliver, async (jobs) => {
     for (const job of jobs) {
       try {
-        await deliver(deps, job.data.conversationId)
-        log.info({ conversationId: job.data.conversationId }, 'entrega processada')
+        const outcome = await entregarRespostaHumana(deps, job.data.conversationId, { ultimaTentativa: job.retryCount >= job.retryLimit })
+        log.info({ conversationId: job.data.conversationId, outcome }, 'entrega processada')
       } catch (err) {
         log.error({ err, conversationId: job.data.conversationId }, 'falha ao entregar mensagens da conversa')
         Sentry.captureException(err, { extra: { conversationId: job.data.conversationId } })
@@ -87,7 +91,7 @@ try {
   })
 
   if (!env.AI_INGEST_MODELS) log.warn('AI_INGEST_MODELS vazio: importação de cardápio por IA desligada (só CSV)')
-  await boss.work<IngestJob>(QUEUES.ingest, { localConcurrency: 1 }, async (jobs) => {
+  await boss.work<IngestJob>(QUEUES.ingest, { localConcurrency: CONCORRENCIA.ingest }, async (jobs) => {
     for (const job of jobs) {
       try {
         const outcome = await ingestDocument({ db, llm, storage, ingestModels: env.AI_INGEST_MODELS, log }, job.data.importacaoId)
