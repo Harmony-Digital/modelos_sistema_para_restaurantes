@@ -159,7 +159,7 @@ describe('prazos de retenção', () => {
 
 describe('concluir correção', () => {
   it('só dono/gerente; resposta obrigatória, até 300; grava aparada', async () => {
-    expect(await concluirCorrecaoAction(ID, { resposta: '  ' })).toMatchObject({ ok: false, fieldErrors: { resposta: expect.any(String) } })
+    expect(await concluirCorrecaoAction(ID, { resposta: '  ' })).toMatchObject({ ok: false, fieldErrors: { resposta: 'Diga o que foi corrigido em poucas palavras' } })
     expect(await concluirCorrecaoAction(ID, { resposta: 'x'.repeat(301) })).toMatchObject({ ok: false })
     expect(concluirCorrecao).not.toHaveBeenCalled()
     expect(await concluirCorrecaoAction(ID, { resposta: ' Nome corrigido. ' })).toEqual({ ok: true, data: null })

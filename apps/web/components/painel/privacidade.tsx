@@ -11,7 +11,7 @@ import {
   emAberto, nomeArquivoResumo, ROTULO_DADO_RETENCAO, ROTULO_STATUS_DSR, ROTULO_TIPO_DSR, situacaoPrazo, textoPrazo, textoResumo,
 } from '@/lib/privacidade'
 import {
-  confirmouExclusao, MAX_RESPOSTA_NEGAR, negarSchema, PALAVRA_EXCLUSAO, retencaoSchema, type NegarForm, type RetencaoForm,
+  confirmouExclusao, correcaoSchema, MAX_RESPOSTA_NEGAR, negarSchema, PALAVRA_EXCLUSAO, retencaoSchema, type NegarForm, type RetencaoForm,
 } from '@/lib/schemas/privacidade'
 import { cn } from '@/lib/utils'
 import { FolhaFormulario } from './folha-formulario'
@@ -204,8 +204,9 @@ function RespostaPedido(props: {
   rotuloBotao: string
   rotuloAndamento: string
   sucesso: string
+  schema: typeof negarSchema | typeof correcaoSchema
 }) {
-  const form = useZodForm(negarSchema, { defaultValues: { resposta: '' } })
+  const form = useZodForm(props.schema, { defaultValues: { resposta: '' } })
   const { errors, isSubmitting } = form.formState
   const enviando = useRef(false)
   const onSubmit = form.handleSubmit(async (v) => {
@@ -338,6 +339,7 @@ export function FilaPrivacidade(props: { pedidos: PedidoTitular[]; agora: Date; 
         <RespostaPedido
           pedidoId={negando}
           enviar={props.acoes.negar}
+          schema={negarSchema}
           onFechar={() => setNegando(null)}
           titulo="Negar pedido"
           descricao="Explique o motivo ao cliente em poucas palavras."
@@ -350,6 +352,7 @@ export function FilaPrivacidade(props: { pedidos: PedidoTitular[]; agora: Date; 
         <RespostaPedido
           pedidoId={corrigindo}
           enviar={props.acoes.concluirCorrecao}
+          schema={correcaoSchema}
           onFechar={() => setCorrigindo(null)}
           titulo="Concluir correção"
           descricao="Diga ao cliente o que foi corrigido, em poucas palavras."

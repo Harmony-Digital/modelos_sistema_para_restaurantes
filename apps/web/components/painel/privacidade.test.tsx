@@ -157,7 +157,7 @@ describe('FilaPrivacidade', () => {
     await user.click(screen.getByRole('button', { name: 'Concluir correção' }))
     const dialogo = await screen.findByRole('dialog')
     await user.click(within(dialogo).getByRole('button', { name: 'Concluir correção' }))
-    expect(await within(dialogo).findByText('Escreva o motivo em poucas palavras')).toBeInTheDocument()
+    expect(await within(dialogo).findByText('Diga o que foi corrigido em poucas palavras')).toBeInTheDocument()
     expect(acoes.concluirCorrecao).not.toHaveBeenCalled()
     await user.type(within(dialogo).getByLabelText('Resposta ao cliente'), 'Nome corrigido.')
     await user.click(within(dialogo).getByRole('button', { name: 'Concluir correção' }))

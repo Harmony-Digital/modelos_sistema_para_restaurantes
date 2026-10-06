@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DADOS_RETENCAO, MAXIMO_RETENCAO, minimoRetencao } from '@atd/db'
-import { confirmouExclusao, DADOS_RETENCAO_TELA, MAXIMO_DIAS_RETENCAO, minimoDiasRetencao, negarSchema, retencaoSchema } from './privacidade'
+import { confirmouExclusao, correcaoSchema, DADOS_RETENCAO_TELA, MAXIMO_DIAS_RETENCAO, minimoDiasRetencao, negarSchema, retencaoSchema } from './privacidade'
 
 describe('schemas de privacidade', () => {
   it('as regras da tela são as mesmas do banco', () => {
@@ -27,5 +27,8 @@ describe('schemas de privacidade', () => {
   it('negar: 1 a 300 caracteres', () => {
     expect(negarSchema.safeParse({ resposta: ' ' }).success).toBe(false)
     expect(negarSchema.safeParse({ resposta: 'ok' }).success).toBe(true)
+    // concluir correção: mesma regra, com o texto certo (não é motivo de negativa)
+    expect(correcaoSchema.safeParse({ resposta: ' ' }).error?.issues[0]?.message).toBe('Diga o que foi corrigido em poucas palavras')
+    expect(correcaoSchema.safeParse({ resposta: 'x'.repeat(301) }).success).toBe(false)
   })
 })

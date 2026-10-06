@@ -8,7 +8,7 @@ import {
 import { actionErrorFromZod, type ActionResult } from '@/lib/action-result'
 import { requireStaff } from '@/lib/dal'
 import { MENSAGEM_ERRO_PAINEL } from '@/lib/painel-erros'
-import { confirmouExclusao, negarSchema, PALAVRA_EXCLUSAO, retencaoSchema, type NegarForm, type RetencaoForm } from '@/lib/schemas/privacidade'
+import { confirmouExclusao, correcaoSchema, negarSchema, PALAVRA_EXCLUSAO, retencaoSchema, type NegarForm, type RetencaoForm } from '@/lib/schemas/privacidade'
 import { getDb } from '@/lib/server/db'
 import { env } from '@/lib/server/env'
 
@@ -87,7 +87,7 @@ export async function negarPedidoAction(pedidoId: string, input: NegarForm): Pro
 export async function concluirCorrecaoAction(pedidoId: string, input: NegarForm): Promise<ActionResult<null>> {
   const s = await requireStaff(GESTAO)
   if (!idValido(pedidoId)) return INDISPONIVEL
-  const p = negarSchema.safeParse(input)
+  const p = correcaoSchema.safeParse(input)
   if (!p.success) return actionErrorFromZod(p.error)
   const r = await concluirCorrecao(getDb(), s.claims, pedidoId, p.data.resposta)
   if (r.ok) revalidarFila()

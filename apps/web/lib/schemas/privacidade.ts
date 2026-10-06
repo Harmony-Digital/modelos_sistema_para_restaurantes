@@ -16,6 +16,10 @@ export const negarSchema = z.object({
   resposta: z.string().trim().min(1, 'Escreva o motivo em poucas palavras').max(MAX_RESPOSTA_NEGAR, `Use no máximo ${MAX_RESPOSTA_NEGAR} caracteres`),
 })
 export type NegarForm = z.input<typeof negarSchema>
+/** "Concluir correção": mesma forma da negativa, com o texto de erro certo. */
+export const correcaoSchema = z.object({
+  resposta: z.string().trim().min(1, 'Diga o que foi corrigido em poucas palavras').max(MAX_RESPOSTA_NEGAR, `Use no máximo ${MAX_RESPOSTA_NEGAR} caracteres`),
+})
 
 export const retencaoSchema = z
   .object({
