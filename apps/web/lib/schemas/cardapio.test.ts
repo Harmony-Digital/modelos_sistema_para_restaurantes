@@ -17,12 +17,14 @@ describe('itemSchema', () => {
     expect(itemSchema.parse(base)).toMatchObject({ preco: 8990, descricao: null })
     expect(itemSchema.parse({ ...base, preco: '' })).toMatchObject({ preco: null })
   })
-  it('rejeita categoria inválida, nome vazio/longo, tag fora do enum e excesso de listas', () => {
+  it('rejeita categoria inválida, nome vazio/longo, tag fora do formato e excesso de listas', () => {
     expect(itemSchema.safeParse({ ...base, categoryId: 'x' }).success).toBe(false)
     expect(itemSchema.safeParse({ ...base, nome: '' }).success).toBe(false)
     expect(itemSchema.safeParse({ ...base, nome: 'a'.repeat(81) }).success).toBe(false)
     expect(itemSchema.safeParse({ ...base, descricao: 'a'.repeat(301) }).success).toBe(false)
-    expect(itemSchema.safeParse({ ...base, tags: ['picante'] }).success).toBe(false)
+    // etiqueta própria vinda do CSV ("Do chef" ⇒ do_chef) é preservada ao salvar o item (M3)
+    expect(itemSchema.safeParse({ ...base, tags: ['picante', 'do_chef'] }).success).toBe(true)
+    for (const ruim of ['Picante', 'do chef', '', 'a'.repeat(31), '<b>']) expect(itemSchema.safeParse({ ...base, tags: [ruim] }).success, ruim).toBe(false)
     expect(itemSchema.safeParse({ ...base, tags: [TAGS_CARDAPIO[0]] }).success).toBe(true)
     expect(itemSchema.safeParse({ ...base, outrosNomes: Array.from({ length: 11 }, (_, i) => `n${i}`) }).success).toBe(false)
   })

@@ -15,6 +15,8 @@ export const ROTULO_TAG: Record<TagCardapio, string> = {
 }
 
 const PRECO_MAX = 10_000_000
+/** Forma das etiquetas lidas do CSV (normalizadas como as conhecidas). */
+const ETIQUETA_PROPRIA = /^[a-z0-9_]{1,30}$/
 const nome = z.string().trim().min(1, 'Informe o nome').max(80, 'Use no máximo 80 caracteres')
 const posicao = z.string().trim().regex(/^\d{1,4}$/, 'Use um número inteiro, como 1').transform(Number)
 
@@ -35,7 +37,8 @@ export const itemSchema = z.object({
   descricao: z.string().trim().max(300, 'Use no máximo 300 caracteres').transform((v) => (v === '' ? null : v)),
   /** "R$ 12,50" na tela; centavos (ou null = sob consulta) depois de validado */
   preco: preco(MSG_PRECO),
-  tags: z.array(z.enum(TAGS_CARDAPIO)).max(10, 'Use no máximo 10 etiquetas'),
+  /** as conhecidas (chips) e as próprias que vieram do CSV ("Do chef" ⇒ do_chef), preservadas ao editar o item */
+  tags: z.array(z.union([z.enum(TAGS_CARDAPIO), z.string().regex(ETIQUETA_PROPRIA, 'Etiqueta inválida')])).max(10, 'Use no máximo 10 etiquetas'),
   outrosNomes: z.array(z.string().trim().min(1).max(80, 'Cada nome pode ter até 80 caracteres')).max(10, 'Use no máximo 10 nomes'),
   disponivel: z.boolean(),
   ordem: z.number().int().min(0).max(9999),

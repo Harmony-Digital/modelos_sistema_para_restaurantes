@@ -140,7 +140,7 @@ export function Cardapio(props: {
                         inicial: {
                           categoryId: i.categoryId, nome: i.nome, descricao: i.descricao ?? '',
                           preco: i.precoCentavos === null ? '' : formatarCentavos(i.precoCentavos),
-                          tags: i.tags.filter((t): t is TagCardapio => t in ROTULO_TAG), outrosNomes: i.outrosNomes,
+                          tags: i.tags, outrosNomes: i.outrosNomes,
                           disponivel: i.disponivel, ordem: i.ordem,
                         },
                       })}>

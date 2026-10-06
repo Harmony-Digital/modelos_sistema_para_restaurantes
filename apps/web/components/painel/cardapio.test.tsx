@@ -63,6 +63,17 @@ describe('Cardapio (itens)', () => {
     })
   })
 
+  it('editar item com etiqueta própria do CSV preserva a etiqueta ao salvar (M3)', async () => {
+    const user = userEvent.setup()
+    acoes.salvarItemAction.mockResolvedValue({ ok: true, data: { id: I1 } })
+    render(<Cardapio categorias={categorias} itens={[item({ tags: ['sem_gluten', 'do_chef'] })]} podeEditar />)
+    await user.click(screen.getByRole('button', { name: 'Editar Picanha' }))
+    expect(screen.getByRole('button', { name: 'do_chef' })).toHaveAttribute('aria-pressed', 'true')
+    await user.click(screen.getByRole('button', { name: 'Salvar item' }))
+    await waitFor(() => expect(acoes.salvarItemAction).toHaveBeenCalledTimes(1))
+    expect(acoes.salvarItemAction.mock.calls[0]![1].tags).toEqual(['sem_gluten', 'do_chef'])
+  })
+
   it('item sem nome mostra a mensagem e não chama a ação; erro do servidor aparece no campo', async () => {
     const user = userEvent.setup()
     render(<Cardapio categorias={categorias} itens={[item()]} podeEditar />)

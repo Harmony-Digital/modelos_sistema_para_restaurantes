@@ -8,7 +8,7 @@ import {
 import { MaskedInput } from '@/components/form/masked-input'
 import { chamarAcao, type ActionResult } from '@/lib/action-result'
 import { maskReais } from '@/lib/dinheiro'
-import { itemSchema, ROTULO_TAG, TAGS_CARDAPIO, type ItemForm as Valores } from '@/lib/schemas/cardapio'
+import { itemSchema, ROTULO_TAG, TAGS_CARDAPIO, type ItemForm as Valores, type TagCardapio } from '@/lib/schemas/cardapio'
 import { cn } from '@/lib/utils'
 
 export function ItemForm(props: {
@@ -64,7 +64,8 @@ export function ItemForm(props: {
           <fieldset className="flex flex-col gap-1.5">
             <legend className="text-sm font-medium text-foreground">Etiquetas</legend>
             <div className="flex flex-wrap gap-2">
-              {TAGS_CARDAPIO.map((t) => {
+              {/* as próprias (vindas do CSV) aparecem depois das conhecidas e são preservadas ao salvar */}
+              {[...TAGS_CARDAPIO, ...props.inicial.tags.filter((t) => !(TAGS_CARDAPIO as readonly string[]).includes(t))].map((t) => {
                 const marcada = field.value.includes(t)
                 return (
                   <button
@@ -77,7 +78,7 @@ export function ItemForm(props: {
                       marcada ? 'border-transparent bg-primary text-primary-foreground' : 'border-border bg-card text-foreground',
                     )}
                   >
-                    {ROTULO_TAG[t]}
+                    {ROTULO_TAG[t as TagCardapio] ?? t}
                   </button>
                 )
               })}
