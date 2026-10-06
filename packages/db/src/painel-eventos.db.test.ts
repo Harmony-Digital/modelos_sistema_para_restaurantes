@@ -145,6 +145,19 @@ describe('painel de pedidos de evento', () => {
     expect(await logs(p.id)).toHaveLength(0)
   })
 
+  it('responsável só com acesso à unidade do pedido: gerente de outra unidade ⇒ responsavel_sem_acesso; dono e quem acessa a unidade passam', async () => {
+    const c = await cenario()
+    const p = await novoPedido(c, { unitId: c.u2 })
+    expect(await atualizarPedido(db, as(c.dono), p.id, { responsavelId: c.gerenteU1 })).toEqual({ ok: false, erro: 'responsavel_sem_acesso' })
+    expect(await logs(p.id)).toHaveLength(0)
+    expect(await atualizarPedido(db, as(c.dono), p.id, { responsavelId: c.dono })).toEqual({ ok: true, valor: null })
+    expect(await atualizarPedido(db, as(c.dono), p.id, { responsavelId: c.atendente })).toEqual({ ok: true, valor: null }) // lista vazia = todas
+    const q = await novoPedido(c)
+    expect(await atualizarPedido(db, as(c.dono), q.id, { responsavelId: c.gerenteU1 })).toEqual({ ok: true, valor: null })
+    // quem já era responsável e perdeu acesso não bloqueia outras mudanças
+    expect(await atualizarPedido(db, as(c.dono), q.id, { status: 'em_contato' })).toEqual({ ok: true, valor: null })
+  })
+
   it('revelarTelefonePedido: decifra, audita sem o número; outra unidade, sem cliente ou simulado ⇒ nao_encontrada', async () => {
     const c = await cenario()
     const p = await novoPedido(c)
@@ -172,6 +185,9 @@ describe('painel de pedidos de evento', () => {
     await seedStaff(db, sql, { restaurantId: outro.restaurantId, papel: 'dono' })
     await db.update(staff).set({ ativo: false }).where(eq(staff.userId, c.dono))
     const m = await membrosDaEquipe(db, as(c.atendente, 'aal1'))
-    expect(m).toEqual([{ id: c.atendente, nome: 'atendente' }, { id: c.gerenteU1, nome: 'Gerente Um' }])
+    expect(m).toEqual([
+      { id: c.atendente, nome: 'atendente', todas: true, unidades: [] },
+      { id: c.gerenteU1, nome: 'Gerente Um', todas: false, unidades: [c.u1] },
+    ])
   })
 })

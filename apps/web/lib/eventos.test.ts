@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { alternarStatus, dataDoEvento, haQuanto, hrefEventos, linksTelefone, statusDaUrl, statusPossiveis } from './eventos'
+import { alternarStatus, dataDoEvento, haQuanto, hrefEventos, linksTelefone, membrosDaUnidade, statusDaUrl, statusPossiveis } from './eventos'
 
 describe('eventos: filtros e transições', () => {
   it('statusPossiveis: atual mais as transições válidas', () => {
@@ -39,5 +39,17 @@ describe('eventos: apresentação', () => {
   })
   it('links do telefone só com dígitos', () => {
     expect(linksTelefone('+55 (61) 99999-0000')).toEqual({ tel: 'tel:+5561999990000', wa: 'https://wa.me/5561999990000' })
+  })
+})
+
+describe('eventos: responsável', () => {
+  it('só quem acessa todas as unidades ou a unidade do pedido', () => {
+    const ms = [
+      { id: 'a', nome: 'Dono', todas: true, unidades: [] },
+      { id: 'b', nome: 'Gerente U1', todas: false, unidades: ['u1'] },
+      { id: 'c', nome: 'Gerente U2', todas: false, unidades: ['u2'] },
+    ]
+    expect(membrosDaUnidade(ms, 'u1').map((m) => m.id)).toEqual(['a', 'b'])
+    expect(membrosDaUnidade(ms, 'u3').map((m) => m.id)).toEqual(['a'])
   })
 })

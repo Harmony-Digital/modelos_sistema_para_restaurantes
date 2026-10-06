@@ -60,3 +60,10 @@ export function linksTelefone(telefone: string): { tel: string; wa: string } {
   const digitos = telefone.replace(/\D/g, '')
   return { tel: `tel:+${digitos}`, wa: `https://wa.me/${digitos}` }
 }
+
+export type MembroTela = { id: string; nome: string; todas: boolean; unidades: string[] }
+
+/** Quem pode ser responsável por um pedido: acessa todas as unidades ou tem a do pedido (mesma regra da DAL). */
+export function membrosDaUnidade<T extends { todas: boolean; unidades: string[] }>(membros: T[], unitId: string): T[] {
+  return membros.filter((m) => m.todas || m.unidades.includes(unitId))
+}

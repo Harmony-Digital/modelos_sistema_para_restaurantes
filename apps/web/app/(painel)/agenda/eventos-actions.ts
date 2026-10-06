@@ -25,6 +25,9 @@ export async function atualizarPedidoAction(id: string, input: PedidoForm): Prom
   })
   if (r.ok) revalidatePath('/agenda')
   if (!r.ok && r.erro === 'transicao_invalida') return { ok: false, fieldErrors: { status: 'Esse status não pode mais ser alterado assim.' } }
+  if (!r.ok && r.erro === 'responsavel_sem_acesso') {
+    return { ok: false, fieldErrors: { responsavelId: 'Essa pessoa não tem acesso à unidade do pedido. Escolha outra.' } }
+  }
   if (!r.ok && r.erro === 'nao_encontrada') return INDISPONIVEL
   return resultadoDoPainel(r)
 }

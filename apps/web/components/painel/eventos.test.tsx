@@ -23,7 +23,7 @@ const pedido = (over = {}) => ({
 const base = {
   pedidos: [pedido(), pedido({ id: '00000000-0000-4000-8000-0000000000ab', nome: null, status: 'em_contato', espaco: null, convidados: 1 })],
   unidades: [{ id: U1, nome: 'Asa Sul' }, { id: '00000000-0000-4000-8000-000000000002', nome: 'Lago Sul' }],
-  status: ['novo' as const, 'em_contato' as const], unidade: null, membros: [{ id: M1, nome: 'Bia' }], agora,
+  status: ['novo' as const, 'em_contato' as const], unidade: null, membros: [{ id: M1, nome: 'Bia', todas: true, unidades: [] }], agora,
 }
 
 beforeEach(() => {
@@ -66,6 +66,20 @@ describe('Eventos: detalhe', () => {
     await user.click(screen.getByRole('button', { name: /Ana/ }))
     return { user, dialogo: await screen.findByRole('dialog') }
   }
+
+  it('o seletor de responsável lista só quem acessa a unidade do pedido', async () => {
+    const user = userEvent.setup()
+    const membros = [
+      { id: M1, nome: 'Bia', todas: false, unidades: [U1] },
+      { id: 'm2', nome: 'Caio', todas: false, unidades: ['00000000-0000-4000-8000-000000000002'] },
+      { id: 'm3', nome: 'Dani', todas: true, unidades: [] },
+    ]
+    render(<Eventos {...base} membros={membros} pedidos={[pedido()]} />)
+    await user.click(screen.getByRole('button', { name: /Ana/ }))
+    const dialogo = await screen.findByRole('dialog')
+    const opcoes = within(within(dialogo).getByLabelText('Responsável')).getAllByRole('option').map((o) => o.textContent)
+    expect(opcoes).toEqual(['Ninguém', 'Bia', 'Dani'])
+  })
 
   it('mostra os dados, as observações e só as transições válidas', async () => {
     const { dialogo } = await abrir(pedido({ status: 'confirmado' }))

@@ -477,3 +477,11 @@ export function salvarHorarioHumano(db: Db, claims: JwtClaims, v: Record<string,
   }))
 }
 
+
+/** `restaurants.horario_atendimento_humano` do restaurante da sessão (jsonb cru; a tela valida com `horarioHumanoSchema`). */
+export function lerHorarioHumano(db: Db, claims: JwtClaims): Promise<Record<string, unknown>> {
+  return withUserContext(db, claims, async (tx) => {
+    const [r] = await tx.select({ h: restaurants.horarioAtendimentoHumano }).from(restaurants).where(eq(restaurants.id, sql`app.my_restaurant_id()`))
+    return (r?.h ?? {}) as Record<string, unknown>
+  })
+}

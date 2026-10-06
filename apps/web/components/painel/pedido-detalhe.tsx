@@ -7,7 +7,7 @@ import { revelarTelefoneAction, atualizarPedidoAction } from '@/app/(painel)/age
 import { applyServerErrors, Field, FormError, Select, SubmitButton, Textarea, useZodForm } from '@/components/form'
 import { Button } from '@/components/ui/button'
 import { chamarAcao } from '@/lib/action-result'
-import { dataDoEvento, linksTelefone, ROTULO_STATUS, statusPossiveis } from '@/lib/eventos'
+import { dataDoEvento, linksTelefone, membrosDaUnidade, ROTULO_STATUS, statusPossiveis, type MembroTela } from '@/lib/eventos'
 import { MAX_NOTAS, pedidoSchema } from '@/lib/schemas/eventos'
 import { SeloStatus } from './selo-status'
 
@@ -57,7 +57,7 @@ function Telefone({ pedidoId }: { pedidoId: string }) {
 
 export function PedidoDetalhe(props: {
   pedido: PedidoPainel
-  membros: { id: string; nome: string }[]
+  membros: MembroTela[]
   onSalvo: () => void
 }) {
   const p = props.pedido
@@ -83,9 +83,11 @@ export function PedidoDetalhe(props: {
     }
   })
   // responsável que saiu da equipe ainda aparece, para o select não mentir
-  const membros = p.responsavelId && !props.membros.some((m) => m.id === p.responsavelId)
-    ? [...props.membros, { id: p.responsavelId, nome: p.responsavel ?? 'Ex-integrante' }]
-    : props.membros
+  // só quem acessa a unidade do pedido pode ser responsável
+  const doPedido = membrosDaUnidade(props.membros, p.unitId)
+  const membros = p.responsavelId && !doPedido.some((m) => m.id === p.responsavelId)
+    ? [...doPedido, { id: p.responsavelId, nome: p.responsavel ?? 'Ex-integrante' }]
+    : doPedido
   const status = statusPossiveis(p.status)
 
   return (

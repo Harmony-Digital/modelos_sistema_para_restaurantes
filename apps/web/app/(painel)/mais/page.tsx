@@ -1,5 +1,5 @@
 import { carregarUnidadesPainel } from '@atd/db'
-import { ChevronRight, LogOut, Store } from 'lucide-react'
+import { ChevronRight, Headset, LogOut, Store } from 'lucide-react'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { Button } from '@/components/ui/button'
@@ -41,6 +41,15 @@ export default async function MaisPage() {
             <span className="flex items-center gap-3"><Store aria-hidden="true" className="size-5" /> Unidades</span>
             <ChevronRight aria-hidden="true" className="size-5 text-muted-foreground" />
           </Link>
+          {session.role === 'dono' && (
+            <Link
+              href="/mais/atendimento-humano"
+              className="flex min-h-12 items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 text-foreground [@media(hover:hover)]:hover:bg-accent"
+            >
+              <span className="flex items-center gap-3"><Headset aria-hidden="true" className="size-5" /> Atendimento humano</span>
+              <ChevronRight aria-hidden="true" className="size-5 text-muted-foreground" />
+            </Link>
+          )}
         </nav>
         <ThemeForm atual={tema} action={setTheme} />
         <section aria-labelledby="conta" className="flex flex-col gap-3">

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { z } from 'zod'
 import {
-  carregarUnidadesPainel, lerImportacao, listarCardapio, listarFatos, listarImportacoes, listarLacunas, listarModelos,
+  carregarUnidadesPainel, lerImportacao, listarCardapio, listarFatos, listarImportacoes, listarLacunas, listarModelos, listarRespostasRapidas,
   podeEditarCardapioGeral, withUserContext,
 } from '@atd/db'
 import { Abas } from '@/components/painel/abas'
@@ -11,6 +11,7 @@ import { ExcecoesItem } from '@/components/painel/excecoes-item'
 import { AcompanharImportacao, Importar } from '@/components/painel/importar'
 import { Informacoes } from '@/components/painel/informacoes'
 import { Modelos } from '@/components/painel/modelos'
+import { RespostasRapidas } from '@/components/painel/respostas-rapidas'
 import { RevisaoRascunho } from '@/components/painel/revisao-rascunho'
 import { SemResposta } from '@/components/painel/sem-resposta'
 import { TopBar } from '@/components/shell/top-bar'
@@ -66,11 +67,17 @@ export default async function ConteudoPage(props: { searchParams: Promise<{ aba?
         )}
         {aba === 'informacoes' && <Informacoes somenteLeitura={somenteLeitura} unidades={opcoes} fatos={await listarFatos(db, s.claims)} />}
         {aba === 'mensagens' && (
-          <Modelos
-            somenteLeitura={somenteLeitura}
-            personalizados={await listarModelos(db, s.claims)}
-            unidade={unidades.find((u) => u.ativo) ?? null}
-          />
+          <>
+            <Modelos
+              somenteLeitura={somenteLeitura}
+              personalizados={await listarModelos(db, s.claims)}
+              unidade={unidades.find((u) => u.ativo) ?? null}
+            />
+            <RespostasRapidas
+              somenteLeitura={somenteLeitura}
+              respostas={(await listarRespostasRapidas(db, s.claims)).map(({ id, titulo, texto, ativo }) => ({ id, titulo, texto, ativo }))}
+            />
+          </>
         )}
       </main>
     </>
