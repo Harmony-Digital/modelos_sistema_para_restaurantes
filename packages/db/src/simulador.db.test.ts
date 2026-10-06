@@ -3,7 +3,7 @@ import { asc } from 'drizzle-orm'
 import { createDb } from './client.ts'
 import { getTestDb, resetDb, seedRestaurant, seedStaff, setupPgbossRoles, WEB_URL } from './test-utils.ts'
 import { conversations, customers, messages } from './schema/conversation.ts'
-import { aiRuns } from './schema/ops.ts'
+import { aiRuns, auditLog } from './schema/ops.ts'
 import type { Enqueue } from './queue.ts'
 import {
   abrirSimulacao, definirRelogioSimulado, detalhesSimulacao, enviarMensagemSimulada, mensagensSimuladas, novoClienteSimulado,
@@ -146,6 +146,10 @@ describe('simulador (banco)', () => {
       expect(await enviarMensagemSimulada(web.db, { ...p, conversationId, texto: 'oi' }, enqueue)).toBe('ok')
       expect(await definirRelogioSimulado(web.db, { ...p, conversationId, offsetSegundos: 60 })).toBe('ok')
       expect((await mensagensSimuladas(web.db, { ...p, conversationId, desdeId: 0 }))!.mensagens).toHaveLength(1)
+      // aviso do limite de simulação: audit_log não é legível por web_app, a leitura passa pela função estreita
+      expect((await mensagensSimuladas(web.db, { ...p, conversationId, desdeId: 0 }))!.limiteSimulacao).toBe(false)
+      await db.insert(auditLog).values({ restaurantId, atorTipo: 'sistema', acao: 'orcamento.sem_saldo_simulacao', entidade: 'conversation', entidadeId: conversationId })
+      expect((await mensagensSimuladas(web.db, { ...p, conversationId, desdeId: 0 }))!.limiteSimulacao).toBe(true)
       await novoClienteSimulado(web.db, p)
     } finally {
       await web.sql.end()

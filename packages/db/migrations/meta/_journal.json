@@ -260,6 +260,13 @@
       "when": 1791315365572,
       "tag": "0036_retencao_inativos_defesa",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1791315829172,
+      "tag": "0037_simulacao_limite_leitura",
+      "breakpoints": true
     }
   ]
 }

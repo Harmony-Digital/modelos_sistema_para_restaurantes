@@ -5,7 +5,7 @@ import { ingestInbound } from './ingest.ts'
 import type { Enqueue } from './queue.ts'
 import { withUserContext, type JwtClaims, type Tx } from './rls.ts'
 import { conversations, customers, messages } from './schema/conversation.ts'
-import { aiRuns, auditLog } from './schema/ops.ts'
+import { aiRuns } from './schema/ops.ts'
 
 /** Não decifra: se um defeito tentar enviar pela Meta, a decifragem falha antes de qualquer chamada. */
 export const TELEFONE_SIMULADO = 'simulado'
@@ -176,15 +176,9 @@ export async function mensagensSimuladas(db: Db, p: NaConversa & { desdeId: numb
     .where(and(doChat, eq(messages.direcao, 'in'), gt(messages.id, c.processedUpToId)))
     .limit(1)
   // auditoria da conversa (entidade_id = id) gravada depois da última mensagem do cliente = a resposta mais recente veio do limite
-  const [limite] = await db
-    .select({ id: auditLog.id })
-    .from(auditLog)
-    .where(and(
-      eq(auditLog.restaurantId, p.restaurantId), eq(auditLog.entidade, 'conversation'), eq(auditLog.entidadeId, c.id),
-      eq(auditLog.acao, 'orcamento.sem_saldo_simulacao'),
-      gt(auditLog.createdAt, sql`coalesce((select max(m.created_at) from messages m where m.conversation_id = ${c.id} and m.direcao = 'in'), 'epoch'::timestamptz)`),
-    ))
-    .limit(1)
+  const limite = await db.execute<{ atingido: boolean }>(
+    sql`select app.simulacao_limite_atingido(${p.restaurantId}::uuid, ${c.id}::uuid) as atingido`,
+  )
   const ultimo = mensagens.at(-1)?.id ?? p.desdeId
   const primeiraPendente = pend?.id ?? null
   return {
@@ -193,7 +187,7 @@ export async function mensagensSimuladas(db: Db, p: NaConversa & { desdeId: numb
     digitando: c.estado === 'ia' && (!!naoLida || primeiraPendente !== null),
     estado: c.estado,
     relogioOffsetSegundos: c.relogioOffsetSegundos,
-    limiteSimulacao: !!limite,
+    limiteSimulacao: limite[0]?.atingido === true,
   }
 }
 
