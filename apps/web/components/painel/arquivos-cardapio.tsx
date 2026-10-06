@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { chamarAcao } from '@/lib/action-result'
-import { LIMITE_ARQUIVO_BYTES } from '@/lib/arquivo-cardapio'
+import { LIMITE_ARQUIVO_BYTES, LIMITE_ARQUIVO_MB, MENSAGEM_LIMITE } from '@/lib/arquivo-cardapio'
 import { cn } from '@/lib/utils'
 
 export type ArquivoTela = { id: string; unitId: string | null; titulo: string; mime: string; tamanho: number; ativo: boolean; criadoEm: string }
@@ -43,7 +43,7 @@ export function ArquivosCardapio(props: {
     if (emAndamento.current) return
     const arquivo = entrada.current?.files?.[0]
     if (!arquivo) return setErros({ arquivo: 'Escolha o arquivo do cardápio.' })
-    if (arquivo.size > LIMITE_ARQUIVO_BYTES) return setErros({ arquivo: 'O arquivo passa de 20 MB. Envie um menor.' })
+    if (arquivo.size > LIMITE_ARQUIVO_BYTES) return setErros({ arquivo: MENSAGEM_LIMITE })
     emAndamento.current = true
     setEnviando(true)
     setErros({})
@@ -88,7 +88,7 @@ export function ArquivosCardapio(props: {
         <form noValidate onSubmit={enviar} className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4">
           <h2 className="text-base font-semibold text-foreground">Enviar arquivo do cardápio</h2>
           {erros.geral && <p role="alert" className="text-sm text-destructive">{erros.geral}</p>}
-          <Field id="arquivo" label="Arquivo" hint="PDF, JPEG, PNG ou WebP, até 20 MB." error={erros.arquivo} required>
+          <Field id="arquivo" label="Arquivo" hint={`PDF, JPEG, PNG ou WebP, até ${LIMITE_ARQUIVO_MB} MB.`} error={erros.arquivo} required>
             {(a) => (
               <input
                 {...a}

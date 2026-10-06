@@ -1,5 +1,7 @@
 # Runbook de deploy em produção
 
+> **Amostra em produção (só simulador, sem Meta, um ambiente):** siga [producao-amostra.md](producao-amostra.md), escrito para um agente executar sozinho. Este arquivo é o go-live completo (Etapa 09).
+
 Ordem recomendada: 1 → 6, 8 → 10, e só então 7 (Meta): o webhook só deve ser assinado depois que o worker estiver no ar. Para **staging**, siga a seção [Staging](#staging) (mesmos passos, recursos separados).
 
 ## 1. Supabase produção

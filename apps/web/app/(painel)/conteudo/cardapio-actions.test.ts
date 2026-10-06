@@ -111,7 +111,7 @@ describe('enviarArquivoAction', () => {
     const grande = new File([new Uint8Array(1)], 'g.pdf', { type: 'application/pdf' })
     Object.defineProperty(grande, 'size', { value: 20 * 1024 * 1024 + 1 })
     const r = await A.enviarArquivoAction(form(grande))
-    expect(r).toEqual({ ok: false, fieldErrors: { arquivo: 'O arquivo passa de 20 MB. Envie um menor.' } })
+    expect(r).toEqual({ ok: false, fieldErrors: { arquivo: 'O arquivo passa de 20 MB. Envie um PDF menor ou uma foto.' } })
     expect(upload).not.toHaveBeenCalled()
   })
   it('sem arquivo, texto no lugar do arquivo e título vazio', async () => {

@@ -180,7 +180,7 @@ describe('ArquivosCardapio', () => {
     Object.defineProperty(grande, 'size', { value: 21 * 1024 * 1024 })
     escolher(grande)
     await user.click(screen.getByRole('button', { name: 'Enviar arquivo' }))
-    expect(await screen.findByText('O arquivo passa de 20 MB. Envie um menor.')).toBeInTheDocument()
+    expect(await screen.findByText('O arquivo passa de 20 MB. Envie um PDF menor ou uma foto.')).toBeInTheDocument()
     expect(acoes.enviarArquivoAction).not.toHaveBeenCalled()
   })
 

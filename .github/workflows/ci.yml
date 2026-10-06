@@ -10,7 +10,8 @@ concurrency: { group: "ci-${{ github.ref }}", cancel-in-progress: true }
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Testes de banco em paralelo (um banco por processo) tiraram ~4 min do job; 20 min deixam folga para o e2e.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
@@ -24,6 +25,8 @@ jobs:
         run: pnpm exec supabase start
       - run: pnpm db:migrate
       - run: pnpm test:db
+        # Runner padrão do GitHub tem 2–4 vCPUs: 2 processos (2 bancos clonados) sem disputar CPU com o Postgres.
+        env: { ATD_DB_WORKERS: "2" }
       - run: pnpm build
       - name: E2E
         run: |

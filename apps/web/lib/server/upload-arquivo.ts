@@ -1,6 +1,6 @@
 import 'server-only'
 import { createHash } from 'node:crypto'
-import { LIMITE_ARQUIVO_BYTES, validarArquivoCardapio } from '@/lib/arquivo-cardapio'
+import { LIMITE_ARQUIVO_BYTES, MENSAGEM_LIMITE, validarArquivoCardapio } from '@/lib/arquivo-cardapio'
 import { createClient } from '@/lib/supabase/server'
 
 /**
@@ -22,7 +22,7 @@ export function arquivoDoForm(valor: FormDataEntryValue | null): File | null {
 
 /** Confere o tamanho declarado antes de ler o corpo; depois, os primeiros bytes. */
 export async function lerArquivoCardapio(arquivo: File): Promise<ArquivoRecebido> {
-  if (arquivo.size > LIMITE_ARQUIVO_BYTES) return { ok: false, erro: 'O arquivo passa de 20 MB. Envie um menor.' }
+  if (arquivo.size > LIMITE_ARQUIVO_BYTES) return { ok: false, erro: MENSAGEM_LIMITE }
   const bytes = new Uint8Array(await arquivo.arrayBuffer())
   const v = validarArquivoCardapio(bytes)
   if (!v.ok) return v

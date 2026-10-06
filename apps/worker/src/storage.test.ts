@@ -17,6 +17,16 @@ describe('baixarObjeto (Storage por REST, chave de serviço)', () => {
     expect(init.signal).toBeInstanceOf(AbortSignal)
   })
 
+  it('chave secreta nova (sb_secret_…): só no apikey — não é JWT e o Supabase recusa como Bearer', async () => {
+    const f = vi.fn(async () => new Response(new Uint8Array([9])))
+    const secreta = 'sb_secret_0123456789abcdefghij'
+    await createStorage({ url: URL_BASE, serviceRoleKey: secreta, fetch: f }).baixarObjeto('cardapio', 'x/a.pdf')
+    const [, init] = f.mock.calls[0]! as unknown as [string, RequestInit]
+    const headers = init.headers as Record<string, string>
+    expect(headers.apikey).toBe(secreta)
+    expect(headers.Authorization).toBeUndefined()
+  })
+
   it('objeto inexistente ou erro do Storage: lança sem a chave na mensagem', async () => {
     const erro = await make(async () => new Response('{"message":"Object not found"}', { status: 404 }))
       .baixarObjeto('cardapio', 'x/a.pdf').catch((e: Error) => e)

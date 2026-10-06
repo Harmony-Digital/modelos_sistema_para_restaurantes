@@ -33,7 +33,7 @@ describe('OpenRouter completeJson — mensagem multimodal', () => {
       ],
     })
     expect(b.plugins).toBeUndefined()
-    expect(b.provider).toEqual({ data_collection: 'deny', zdr: true })
+    expect(b.provider).toEqual({ data_collection: 'deny', zdr: true, require_parameters: true })
   })
 
   it('PDF: parte file com file_data e plugin file-parser com motor nativo; provider estrito presente', async () => {
@@ -44,7 +44,7 @@ describe('OpenRouter completeJson — mensagem multimodal', () => {
       { type: 'text', text: 'extra' },
     ])
     expect(b.plugins).toEqual([{ id: 'file-parser', pdf: { engine: 'native' } }])
-    expect(b.provider).toEqual({ data_collection: 'deny', zdr: true })
+    expect(b.provider).toEqual({ data_collection: 'deny', zdr: true, require_parameters: true })
     expect(b.messages[0]).toEqual({ role: 'system', content: 'sys' })
   })
 

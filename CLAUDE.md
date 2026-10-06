@@ -48,8 +48,19 @@ TypeScript strict · pnpm + Turborepo · Next.js 16 (Vercel gru1) · Node 24 wor
 - Prompts versionados em `packages/ai/prompts/vN.ts`; nunca editar uma versão publicada — criar `vN+1`.
 - Segredos só em env (validado por Zod no boot); `.env*` nunca commitado.
 
+## Deploy da amostra
+
+Vai publicar a amostra em produção (painel na Vercel + worker no VPS, só simulador, sem Meta)? Siga
+[docs/runbooks/producao-amostra.md](docs/runbooks/producao-amostra.md) do passo 0 ao 9, na ordem: ele diz o que
+conferir, o comando exato, a saída esperada e onde **parar e pedir ao humano** (🔑). Confira com
+`scripts/producao/verificar.sh` (só leitura, não imprime segredos). Segredos só nos arquivos `.env.*-producao` /
+`.env.production-bootstrap` fora do git. **Nunca** `vercel deploy` da máquina local (a CLI não respeita o `.gitignore`):
+o build de produção é pelo Git. O go-live completo (Meta, staging) é [docs/runbooks/deploy.md](docs/runbooks/deploy.md).
+
 ## Onde paramos
 
+- **06/10/2026** — Revisão final da `producao-amostra` e onda de correções aplicadas (`06522b9..HEAD`; deploy da Vercel pelo Git com link na raiz, convite de 1 h com recuperação, `require_parameters` no OpenRouter com smoke test pelo cliente do worker, `verificar.sh` com a Data API certa; `pnpm check` com 1950 testes; e2e 37/37). Próximo: mesclar na `main` e publicação por quem tem acesso à Vercel/VPS.
+- **06/10/2026** — Amostra em produção preparada na branch `producao-amostra` (`c901521..HEAD`): testes de banco em paralelo (um banco por processo; `pnpm check` ~1m45 com 1940 testes), limite de upload configurável (`NEXT_PUBLIC_LIMITE_UPLOAD_MB=4` na Vercel), `bootstrap:prod`/`demo:s1:prod`, runbook para outro agente publicar (`docs/runbooks/producao-amostra.md`) com `scripts/producao/verificar.sh`, modelos com ZDR (triagem `mistral-nemo` → `mistral-small-3.2`; cardápio `gemini-3.1-flash-lite` → `gpt-4.1-mini`; a família gemini-2.5 expira em 20/10/2026), worker aceita a Secret key nova do Supabase; e2e 37/37. Próximo: revisão final da branch e publicação por quem tem acesso à Vercel/VPS.
 - **06/10/2026** — Revisão final da Etapa 06 e onda única de correções aplicadas (`b431d82..HEAD`; falha do webhook vira `falhou:<código>`, entrega esgotada vira `falhou:temporaria`, encerrar preserva a despedida humana, pool do worker 9, texto neutro de evento recusado, `humano` sem atendente livre, cortesia não conta falha, unidade única gravada cedo, `returnToAi` removido, métrica por unidade na 0032; `pnpm check` com 1928 testes; e2e 37/37). Pendentes externos: crédito no OpenRouter (`eval:frustracao` e camada 1 dos evals). Próximo: homologação do dono (`docs/homologacao/etapa-06.md`) e fechamento da Etapa 06.
 - **06/10/2026** — Etapa 06 (atendimento humano: inbox de Conversas com tempo real, handoff automático com frustração na `triage-v6`, horário humano, respostas rápidas) implementada na branch `etapa-06-inbox` (37337a9..HEAD; migrations 0029–0031; áudio adiado para "Melhorias futuras"; `pnpm check` com 1900 testes; e2e 37/37). Pendentes externos: crédito no OpenRouter (`eval:frustracao` e camada 1 dos evals). Próximo: revisão final da branch e homologação do dono (`docs/homologacao/etapa-06.md`).
 - **06/10/2026** — Revisão final da Etapa 05 e onda de correções aplicadas (`2fcb24d..HEAD`; busca separa correspondência de item parecido, reimportação preserva dados curados, saída cortada não repete a leitura paga, troca de unidade do evento vai para a equipe, sha256 conferido no worker; `pnpm check` com 1685 testes; e2e 33/33). Pendentes externos: crédito no OpenRouter (camada 1 dos evals e `eval:ingestao`). Próximo: homologação do dono (`docs/homologacao/etapa-05.md`) e fechamento da Etapa 05.

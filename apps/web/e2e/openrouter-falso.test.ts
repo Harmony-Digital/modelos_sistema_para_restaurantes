@@ -13,7 +13,7 @@ afterEach(async () => {
   falso = undefined
 })
 
-const provider = { data_collection: 'deny', zdr: true }
+const provider = { data_collection: 'deny', zdr: true, require_parameters: true }
 
 async function post(body: unknown) {
   const r = await fetch(`${falso!.url}/chat/completions`, { method: 'POST', body: JSON.stringify(body) })
@@ -59,5 +59,15 @@ describe('OpenRouter falso do e2e', () => {
       response_format: { type: 'json_schema', json_schema: { name: 'rascunho_cardapio' } },
     })
     expect(status).toBe(400)
+  })
+
+  it('recusa chamada sem require_parameters (provedor sem structured outputs ignoraria o schema)', async () => {
+    falso = await iniciarOpenRouterFalso(() => ({ itens: [], fora_escopo: true }))
+    const { status } = await post({
+      provider: { data_collection: 'deny', zdr: true },
+      messages: [{ role: 'user', content: '<mensagem_cliente>\noi\n</mensagem_cliente>' }],
+    })
+    expect(status).toBe(400)
+    expect(falso.chamadas).toEqual([])
   })
 })

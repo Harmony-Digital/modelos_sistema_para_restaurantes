@@ -7,3 +7,17 @@ export function ehBancoLocal(url: string): boolean {
     return false
   }
 }
+
+/**
+ * Dados de demonstração: no banco local sempre; em banco remoto só com `--producao`
+ * (o `demo:s1:prod`, que lê `.env.production-bootstrap`). Pedido explícito, nunca por acaso.
+ */
+export function podeRodarDemo(url: string, argv: readonly string[]): boolean {
+  if (ehBancoLocal(url)) return true
+  if (!argv.includes('--producao')) return false
+  try {
+    return ['postgres:', 'postgresql:'].includes(new URL(url).protocol)
+  } catch {
+    return false
+  }
+}

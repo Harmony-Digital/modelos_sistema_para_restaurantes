@@ -31,7 +31,9 @@ describe('OpenRouter completeJson', () => {
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer KEY')
     const body = JSON.parse(String(init.body))
     expect(body.models).toEqual(['barato/modelo-1', 'outro/modelo-2'])
-    expect(body.provider).toEqual({ data_collection: 'deny', zdr: true })
+    // require_parameters: só provedor que honra o json_schema recebe o pedido (sem ele, um provedor sem
+    // structured outputs ignora o schema); nunca no lugar de deny + zdr
+    expect(body.provider).toEqual({ data_collection: 'deny', zdr: true, require_parameters: true })
     expect(body.response_format).toEqual({
       type: 'json_schema',
       json_schema: { name: 'x', strict: true, schema: expect.any(Object) },
@@ -106,8 +108,8 @@ describe('OpenRouter completeJson', () => {
       })
       return JSON.parse(String((f.mock.calls[0]! as unknown as [string, RequestInit])[1].body))
     }
-    expect((await corpo()).provider).toEqual({ data_collection: 'deny', zdr: true })
-    expect((await corpo(false)).provider).toEqual({ data_collection: 'deny', zdr: true })
+    expect((await corpo()).provider).toEqual({ data_collection: 'deny', zdr: true, require_parameters: true })
+    expect((await corpo(false)).provider).toEqual({ data_collection: 'deny', zdr: true, require_parameters: true })
     expect((await corpo(true)).provider).toBeUndefined()
   })
 

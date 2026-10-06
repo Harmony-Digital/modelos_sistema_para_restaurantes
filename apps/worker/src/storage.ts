@@ -10,13 +10,18 @@ const BUCKET = /^[a-z0-9_-]+$/
 export function createStorage(cfg: { url: string; serviceRoleKey: string; fetch?: typeof fetch }) {
   const doFetch = cfg.fetch ?? fetch
   const base = cfg.url.replace(/\/+$/, '')
+  // chave secreta nova (sb_secret_…) não é JWT: o Supabase a recusa como Bearer; vai só no apikey.
+  // A service_role legada (JWT) segue nos dois cabeçalhos.
+  const headers: Record<string, string> = cfg.serviceRoleKey.startsWith('sb_secret_')
+    ? { apikey: cfg.serviceRoleKey }
+    : { Authorization: `Bearer ${cfg.serviceRoleKey}`, apikey: cfg.serviceRoleKey }
   return {
     async baixarObjeto(bucket: string, caminho: string): Promise<Uint8Array> {
       const partes = caminho.split('/')
       if (!BUCKET.test(bucket) || partes.some((p) => !p || p === '.' || p === '..')) throw new Error('caminho de Storage inválido')
       const url = `${base}/storage/v1/object/${bucket}/${partes.map(encodeURIComponent).join('/')}`
       const res = await doFetch(url, {
-        headers: { Authorization: `Bearer ${cfg.serviceRoleKey}`, apikey: cfg.serviceRoleKey },
+        headers,
         signal: AbortSignal.timeout(TIMEOUT_MS),
       })
       if (!res.ok) {

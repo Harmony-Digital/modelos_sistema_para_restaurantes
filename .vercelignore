@@ -1,0 +1,6 @@
+# Defesa: a CLI da Vercel NÃO respeita o .gitignore. Se alguém rodar `vercel deploy` na raiz,
+# os arquivos de segredo locais não podem subir junto. O deploy da amostra é pelo Git (runbook).
+.env
+.env.*
+.vercel
+.superpowers
