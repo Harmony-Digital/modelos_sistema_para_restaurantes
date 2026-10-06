@@ -45,7 +45,7 @@ export async function iniciarWorkerE2e(openrouterUrl: string): Promise<ChildProc
       AI_TRIAGE_MODELS: 'e2e/falso',
       SUPABASE_URL: env.SUPABASE_URL ?? env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321',
       SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
-      AI_INGEST_MODELS: env.AI_INGEST_MODELS ?? '', // vazio = importação por IA desligada; com valor, também vai ao OpenRouter falso
+      AI_INGEST_MODELS: 'e2e/falso', // leitura de PDF/foto também vai ao OpenRouter falso (nunca a um modelo de verdade)
       LOG_LEVEL: 'info',
       SENTRY_DSN: '',
     },
