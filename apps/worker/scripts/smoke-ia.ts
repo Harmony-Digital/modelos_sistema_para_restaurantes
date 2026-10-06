@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url'
 import { createLlmClient } from '@atd/ai'
 import { iaEnvSchema, loadEnv } from '@atd/config'
 import { configurarIa } from '../src/ia.ts'
-import { ambienteDoSmoke, smokeIa } from '../src/smoke-ia.ts'
+import { ambienteDoSmoke, avisoDoProvedor, smokeIa } from '../src/smoke-ia.ts'
 
 const arquivo = fileURLToPath(new URL('../../../.env.worker-producao', import.meta.url))
 const falhar = (motivo: string) => {
@@ -28,6 +28,8 @@ try {
   throw e
 }
 process.stdout.write(`Provedor: ${ia.resumo.provedorIa}\n`)
+const aviso = avisoDoProvedor(ia.resumo.provedorIa)
+if (aviso) process.stdout.write(`${aviso}\n`)
 const r = await smokeIa(createLlmClient(ia.cliente), [ia.resumo.modelosTriagem, ia.resumo.modelosCardapio])
 process.stdout.write(`${r.linhas.join('\n')}\nResultado: ${r.ok ? 'OK' : 'FALHA'}\n`)
 process.exitCode = r.ok ? 0 : 1

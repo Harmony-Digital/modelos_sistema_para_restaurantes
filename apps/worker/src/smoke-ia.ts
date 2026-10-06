@@ -68,3 +68,8 @@ export function ambienteDoSmoke(shell: Record<string, string | undefined>, arqui
   delete env.OPENROUTER_BASE_URL
   return env
 }
+
+/** O arquivo de produção sem `AI_PROVIDER=openai` cai no OpenRouter (padrão local): o smoke avisa em vez de calar. */
+export function avisoDoProvedor(provedor: string): string | null {
+  return provedor === 'openai' ? null : `AVISO: provedor ${provedor}; produção exige AI_PROVIDER=openai no .env.worker-producao`
+}

@@ -88,7 +88,8 @@ aceitou a **retenção padrão de 30 dias para monitoramento de abuso, sem uso p
   (confira o preço atual na tabela do código antes de prometer valor).
 - **Leitura de cardápio (PDF/foto)** — `AI_INGEST_MODELS=gpt-4.1-mini,gpt-4.1` (o segundo entra se o primeiro der erro
   transitório ou recusar). Custo por importação de 1–3 páginas: **centavos**; a reserva de orçamento por importação é
-  de US$ 0,10.
+  de **US$ 0,50** (cobre a leitura e uma repetição no `gpt-4.1`). Cada leitura tem prazo total de 120 s somando os dois
+  modelos, e a importação inteira cabe nos 5 min do job.
 - Outros modelos da tabela (`gpt-4.1-nano`, `gpt-5-mini`, `gpt-5-nano`) só entram depois de passar no `eval:prod`.
 - Com **US$ 10** de limite mensal: milhares de conversas simuladas ou centenas de importações.
 - **Confirmar com `smoke:ia:prod` e `eval:prod`** (passo 6) antes de apresentar.
@@ -368,7 +369,8 @@ pnpm --filter @atd/worker smoke:ia:prod; echo "saida=$?"
 carregado antes (`set -a; source .env`) não troca provedor, chave nem modelos. Os dois ignoram `OPENAI_BASE_URL` e
 `OPENROUTER_BASE_URL` (só e2e local); o smoke também ignora `OPENROUTER_DEV_SEM_ZDR`.
 
-**Saída esperada:** a linha `Provedor: openai`, uma linha `OK <modelo> → <modelo usado> (US$ …, … ms)` por modelo
+**Saída esperada:** a linha `Provedor: openai` (se aparecer `AVISO: provedor openrouter`, falta `AI_PROVIDER=openai` no
+`.env.worker-producao`: corrija antes de seguir), uma linha `OK <modelo> → <modelo usado> (US$ …, … ms)` por modelo
 sozinho e por lista (o modelo usado pode vir com data, ex.: `gpt-4.1-mini-2025-04-14`), `Resultado: OK` e `saida=0`.
 O custo total fica abaixo de US$ 0,01. **Se falhar** (`saida=1`; cada `FALHA` traz o erro da OpenAI, com qualquer
 pedaço de chave trocado por `sk-…`):
@@ -381,7 +383,7 @@ pedaço de chave trocado por `sk-…`):
 - `… Incorrect API key provided: sk-… (HTTP 401)` → 🔑 chave errada, revogada ou de outro projeto;
 - `… does not have access to model … (HTTP 403)` (ou `HTTP 404` com "does not exist") → 🔑 o modelo não está liberado
   no projeto (passo 3);
-- `… You exceeded your current quota … (HTTP 429)` → 🔑 sem saldo ou limite mensal do projeto atingido;
+- `sem_cota: … You exceeded your current quota … (HTTP 429)` → 🔑 sem saldo ou limite mensal do projeto atingido;
   `… Rate limit reached … (HTTP 429)` → espere um minuto e rode de novo;
 - `saida_invalida`/`saida_truncada` → troque o modelo pelo próximo da lista e registre.
 

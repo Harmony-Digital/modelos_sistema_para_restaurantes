@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createOpenAiClient, createOpenRouterClient } from '@atd/ai'
-import { ambienteDoSmoke, smokeIa } from './smoke-ia.ts'
+import { ambienteDoSmoke, avisoDoProvedor, smokeIa } from './smoke-ia.ts'
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -87,7 +87,7 @@ describe('smoke test da IA com a OpenAI (mesmo cliente do worker)', () => {
     const r = await smokeIa(clienteOpenAi(f), [['gpt-4.1'], ['gpt-4.1-mini']])
     expect(r.ok).toBe(false)
     expect(r.linhas[0]).toBe('FALHA gpt-4.1 — Project `proj_x` does not have access to model `gpt-4.1` (HTTP 403)')
-    expect(r.linhas[1]).toBe('FALHA gpt-4.1-mini — You exceeded your current quota, please check your plan and billing details. (HTTP 429)')
+    expect(r.linhas[1]).toBe('FALHA gpt-4.1-mini — sem_cota: You exceeded your current quota, please check your plan and billing details. (HTTP 429)')
   })
 
   it('resposta recusada (refusal) ou fora do esperado: FALHA saida_invalida', async () => {
@@ -108,5 +108,12 @@ describe('ambiente do smoke test de produção', () => {
     expect(env).toMatchObject({ AI_PROVIDER: 'openai', AI_TRIAGE_MODELS: 'gpt-4.1-mini', OPENROUTER_DEV_SEM_ZDR: '0', PATH: '/bin' })
     expect(env.OPENAI_BASE_URL).toBeUndefined()
     expect(env.OPENROUTER_BASE_URL).toBeUndefined()
+  })
+})
+
+describe('aviso de provedor no smoke de produção', () => {
+  it('openrouter ⇒ aviso explícito; openai ⇒ nenhum', () => {
+    expect(avisoDoProvedor('openrouter')).toBe('AVISO: provedor openrouter; produção exige AI_PROVIDER=openai no .env.worker-producao')
+    expect(avisoDoProvedor('openai')).toBeNull()
   })
 })
