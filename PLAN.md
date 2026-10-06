@@ -101,7 +101,7 @@ Spec aprovada: [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-
 - [ ] Evals S3 · Homologação — camada 2 do S3 (68 casos, no `pnpm test`) e 37 frases de extração prontos em 06/10/2026 (onda final de correções incluída); pendentes: camada 1 (`pnpm --filter @atd/ai eval:s3`, e `eval:s1`/`eval:s2`, que medem a v4 por padrão, precisa de crédito no OpenRouter) e homologação do dono ([docs/homologacao/etapa-04.md](docs/homologacao/etapa-04.md))
 
 ## Etapa 05 — Cardápio (S4)
-- [ ] Refinamento · Plano detalhado
+- [ ] Refinamento · Plano detalhado — spec [docs/specs/2026-10-06-etapa-05-s4-design.md](docs/specs/2026-10-06-etapa-05-s4-design.md); plano enxuto [docs/plans/etapa-05-s4-cardapio.md](docs/plans/etapa-05-s4-cardapio.md) (7 tarefas, 4 blocos; inclui importação de cardápio por CSV/PDF/foto e correções do S3)
 - [ ] CRUD categorias/itens, exceções por unidade, arquivos de cardápio
 - [ ] Busca full-text + trigram; tools `buscar_cardapio`, `enviar_cardapio` (cache `wa_media_id`)
 - [ ] Evals S4 · Homologação
