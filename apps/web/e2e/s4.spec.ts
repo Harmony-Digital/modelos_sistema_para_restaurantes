@@ -36,8 +36,12 @@ const LEITURA: LeituraCardapioFalsa = {
 }
 
 /** PDF mínimo (o upload confere os magic bytes); o sufixo deixa o sha256 único a cada execução. */
+// PDF mínimo com uma página: a leitura por lotes (Etapa 07) conta as páginas com pdf-lib e recusa PDF sem página
 const pdf = (marca: string) =>
-  Buffer.from(`%PDF-1.4\n% ${marca} ${SUFIXO}\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n`)
+  Buffer.from(
+    `%PDF-1.4\n% ${marca} ${SUFIXO}\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n` +
+      `3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n`,
+  )
 
 const CSV = [
   'categoria;nome;descricao;preco;tags;outros_nomes;unidade',
