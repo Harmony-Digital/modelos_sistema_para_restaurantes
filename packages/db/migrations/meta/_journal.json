@@ -253,6 +253,13 @@
       "when": 1791313001427,
       "tag": "0035_gastos_lgpd_funcoes",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1791315365572,
+      "tag": "0036_retencao_inativos_defesa",
+      "breakpoints": true
     }
   ]
 }

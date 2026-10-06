@@ -125,6 +125,35 @@ describe('worker: processamento do convite', () => {
     expect(await withRole(db, 'worker_app', (tx) => conviteParaProcessar(tx, '00000000-0000-0000-0000-000000000000'))).toBeNull()
   })
 
+  it('membro convidado que nunca entrou expõe o conviteId (reenviar); quem já entrou não', async () => {
+    const c = await cenario()
+    const r = await criarConvite(db, as(c.dono), convite())
+    const id = r.ok ? r.valor.conviteId : ''
+    const userId = await createAuthUser(sql, 'nova@teste.local')
+    await withRole(db, 'worker_app', (tx) => concluirConvite(tx, id, { ok: true, userId }))
+    const m = (await listarEquipe(db, as(c.dono))).find((x) => x.id === userId)
+    expect(m).toMatchObject({ tipo: 'membro', convitePendente: true, conviteId: id })
+    expect((await listarEquipe(db, as(c.dono))).filter((x) => x.tipo === 'convite')).toEqual([])
+    expect(await reenviarConvite(db, as(c.dono), id)).toEqual({ ok: true, valor: null })
+    await sql`update auth.users set last_sign_in_at = now() where id = ${userId}`
+    const depois = (await listarEquipe(db, as(c.dono))).find((x) => x.id === userId)
+    expect(depois).toMatchObject({ convitePendente: false, conviteId: null })
+    expect((await listarEquipe(db, as(c.dono))).find((x) => x.id === c.gerente)).toMatchObject({ conviteId: null })
+  })
+
+  it('nunca rebaixa o dono; erro fora do formato de código vira erro_desconhecido', async () => {
+    const c = await cenario()
+    const r1 = await criarConvite(db, as(c.dono), convite())
+    const id1 = r1.ok ? r1.valor.conviteId : ''
+    await withRole(db, 'worker_app', (tx) => concluirConvite(tx, id1, { ok: true, userId: c.dono }))
+    expect((await db.select().from(staff).where(eq(staff.userId, c.dono)))[0]).toMatchObject({ papel: 'dono' })
+    expect((await db.select().from(staffInvites).where(eq(staffInvites.id, id1)))[0]).toMatchObject({ status: 'erro', erro: 'ja_membro' })
+    const r2 = await criarConvite(db, as(c.dono), convite({ email: 'outra@teste.local' }))
+    const id2 = r2.ok ? r2.valor.conviteId : ''
+    await withRole(db, 'worker_app', (tx) => concluirConvite(tx, id2, { ok: false, erro: 'User outra@teste.local already registered' }))
+    expect((await db.select().from(staffInvites).where(eq(staffInvites.id, id2)))[0]).toMatchObject({ status: 'erro', erro: 'erro_desconhecido' })
+  })
+
   it('erro grava o código; usuário de outro restaurante não é movido (erro outro_restaurante)', async () => {
     const c = await cenario()
     const b = await seedRestaurant(db)

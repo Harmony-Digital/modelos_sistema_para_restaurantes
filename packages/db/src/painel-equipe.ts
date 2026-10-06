@@ -23,6 +23,8 @@ export type IntegranteEquipe =
       ativo: boolean
       /** convidado que ainda não entrou (nunca fez login) */
       convitePendente: boolean
+      /** convite `enviado` de quem nunca entrou (para "Reenviar"); null para os demais */
+      conviteId: string | null
     }
   | {
       tipo: 'convite'
@@ -59,10 +61,21 @@ export function listarEquipe(db: Db, claims: JwtClaims): Promise<IntegranteEquip
       .from(staffInvites)
       .where(and(sql`${staffInvites.restaurantId} = (select app.my_restaurant_id())`, inArray(staffInvites.status, ['pendente', 'erro'])))
       .orderBy(desc(staffInvites.createdAt))
+    const enviados = await tx
+      .select({ id: staffInvites.id, userId: staffInvites.userId })
+      .from(staffInvites)
+      .where(and(sql`${staffInvites.restaurantId} = (select app.my_restaurant_id())`, eq(staffInvites.status, 'enviado')))
+      .orderBy(desc(staffInvites.createdAt))
+    const convitePorUsuario = new Map<string, string>()
+    for (const e of enviados) if (e.userId && !convitePorUsuario.has(e.userId)) convitePorUsuario.set(e.userId, e.id)
     return [
-      ...membros.map((m) => ({
-        tipo: 'membro' as const, ...m, email: porId.get(m.id)?.email ?? null, convitePendente: porId.get(m.id)?.entrou === false,
-      })),
+      ...membros.map((m) => {
+        const pendente = porId.get(m.id)?.entrou === false
+        return {
+          tipo: 'membro' as const, ...m, email: porId.get(m.id)?.email ?? null, convitePendente: pendente,
+          conviteId: pendente ? convitePorUsuario.get(m.id) ?? null : null,
+        }
+      }),
       ...convites.map((c) => ({ tipo: 'convite' as const, ...c, ativo: false as const })),
     ]
   })
@@ -168,8 +181,9 @@ export async function conviteParaProcessar(
 
 /**
  * Resultado do convite no Supabase Auth. Sucesso: cria (ou atualiza, no mesmo restaurante) o `staff` com papel e unidades
- * do convite e marca `enviado`; usuário que já é de outro restaurante não é movido (`erro: outro_restaurante`).
- * Falha: grava o código do erro (sem PII). Só age sobre convite `pendente`.
+ * do convite e marca `enviado`; usuário que já é de outro restaurante não é movido (`erro: outro_restaurante`) e o dono
+ * nunca é rebaixado (`erro: ja_membro`). Falha: grava o código do erro — só `[a-z_]` (mensagem do Auth pode trazer o
+ * e-mail); fora disso, `erro_desconhecido`. Só age sobre convite `pendente`.
  */
 export async function concluirConvite(
   db: Db | Tx,
@@ -185,7 +199,8 @@ export async function concluirConvite(
       .for('update')
     if (!c) return
     if (!r.ok) {
-      await tx.update(staffInvites).set({ status: 'erro', erro: r.erro.slice(0, 60) }).where(eq(staffInvites.id, id))
+      const codigo = /^[a-z_]{1,60}$/.test(r.erro) ? r.erro : 'erro_desconhecido'
+      await tx.update(staffInvites).set({ status: 'erro', erro: codigo }).where(eq(staffInvites.id, id))
       return
     }
     // SQL explícito: worker_app só tem INSERT/UPDATE nestas colunas (0035); o restaurante de quem já existe não muda
@@ -194,10 +209,12 @@ export async function concluirConvite(
       values (${r.userId}::uuid, ${c.restaurantId}::uuid, ${c.nome}, ${c.papel}::public.staff_role, ${`{${c.unidades.join(',')}}`}::uuid[])
       on conflict (user_id) do update
         set nome = excluded.nome, papel = excluded.papel, unidades_permitidas = excluded.unidades_permitidas, updated_at = now()
-        where public.staff.restaurant_id = excluded.restaurant_id
+        where public.staff.restaurant_id = excluded.restaurant_id and public.staff.papel <> 'dono'
       returning user_id`)
     if (criado.length === 0) {
-      await tx.update(staffInvites).set({ status: 'erro', erro: 'outro_restaurante' }).where(eq(staffInvites.id, id))
+      const [existente] = await tx.select({ restaurantId: staff.restaurantId }).from(staff).where(eq(staff.userId, r.userId))
+      const erro = existente?.restaurantId === c.restaurantId ? 'ja_membro' : 'outro_restaurante'
+      await tx.update(staffInvites).set({ status: 'erro', erro }).where(eq(staffInvites.id, id))
       return
     }
     await tx.update(staffInvites).set({ status: 'enviado', erro: null, userId: r.userId }).where(eq(staffInvites.id, id))

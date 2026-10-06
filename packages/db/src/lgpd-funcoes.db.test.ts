@@ -36,9 +36,12 @@ async function novaMensagem(restaurantId: string, conversationId: string, criada
   return m!
 }
 
-const excluir = (customerId: string, ator: string) =>
-  withRole(db, 'web_app', (tx) => tx.execute<{ r: Record<string, unknown> }>(dsql`select app.excluir_titular(${customerId}::uuid, ${ator}::uuid) as r`))
-    .then((rows) => rows[0]!.r)
+/** Como a DAL: claims do usuário na transação e a chamada como web_app. `sub` diferente do ator = chamada forjada. */
+const excluir = (customerId: string, ator: string, sub: string = ator) =>
+  withRole(db, 'web_app', async (tx) => {
+    await tx.execute(dsql`select set_config('request.jwt.claim.sub', ${sub}, true)`)
+    return tx.execute<{ r: Record<string, unknown> }>(dsql`select app.excluir_titular(${customerId}::uuid, ${ator}::uuid) as r`)
+  }).then((rows) => rows[0]!.r)
 
 const reter = (restaurantId: string, lote?: number) =>
   withRole(db, 'worker_app', (tx) => tx.execute<{ r: Record<string, number | boolean> }>(lote === undefined
@@ -106,6 +109,8 @@ describe('app.excluir_titular', () => {
     const donoB = await seedStaff(db, sql, { restaurantId: b.restaurantId, papel: 'dono' })
     await expect(excluir(c.alvo.id, c.atendente)).rejects.toMatchObject(negado)
     await expect(excluir(c.alvo.id, donoB)).rejects.toMatchObject(negado)
+    // ator diferente do usuário da sessão (defesa em profundidade): recusado
+    await expect(excluir(c.alvo.id, c.dono, c.atendente)).rejects.toMatchObject(negado)
     await db.update(staff).set({ ativo: false }).where(eq(staff.userId, c.dono))
     await expect(excluir(c.alvo.id, c.dono)).rejects.toMatchObject(negado)
     expect(await db.select().from(customers).where(eq(customers.id, c.alvo.id))).toHaveLength(1)
@@ -121,6 +126,26 @@ describe('app.excluir_titular', () => {
     const [f] = await sql<{ def: boolean; path: string[] }[]>`
       select prosecdef as def, proconfig as path from pg_proc where proname = 'excluir_titular'`
     expect(f).toEqual({ def: true, path: ['search_path=""'] })
+  })
+})
+
+describe('app.resumo_titular', () => {
+  it('só devolve o resumo quando o usuário da sessão é dono/gerente ativo do restaurante', async () => {
+    const a = await seedRestaurant(db)
+    const b = await seedRestaurant(db)
+    const gerente = await seedStaff(db, sql, { restaurantId: a.restaurantId, papel: 'gerente' })
+    const atendente = await seedStaff(db, sql, { restaurantId: a.restaurantId, papel: 'atendente' })
+    const donoB = await seedStaff(db, sql, { restaurantId: b.restaurantId, papel: 'dono' })
+    const cli = await novoCliente(a.restaurantId)
+    const resumo = (sub: string | null) => withRole(db, 'web_app', async (tx) => {
+      if (sub) await tx.execute(dsql`select set_config('request.jwt.claim.sub', ${sub}, true)`)
+      const [r] = await tx.execute<{ r: { nomePerfil: string } | null }>(dsql`select app.resumo_titular(${cli.id}::uuid, ${a.restaurantId}::uuid) as r`)
+      return r!.r
+    })
+    expect(await resumo(gerente)).toMatchObject({ nomePerfil: 'Maria' })
+    expect(await resumo(atendente)).toBeNull()
+    expect(await resumo(donoB)).toBeNull()
+    expect(await resumo(null)).toBeNull()
   })
 })
 
@@ -216,26 +241,54 @@ describe('app.aplicar_retencao', () => {
     expect((await db.select().from(auditLog)).map((l) => l.acao)).toEqual(['nova'])
   })
 
-  it('clientes inativos > 365 dias somem em cascata, salvo conversa aberta, pedido do titular ou evento em aberto', async () => {
+  it('clientes inativos > 365 dias somem em cascata (conversa da IA antiga não protege); ficam conversa humana, pedido do titular e atividade recente', async () => {
     const a = await base()
     const inativo = await novoCliente(a.restaurantId, { ultimaInteracaoAt: diasAtras(366) })
     const conv = await novaConversa(a.restaurantId, inativo.id, { estado: 'encerrada', lastMessageAt: diasAtras(366) })
     await novaMensagem(a.restaurantId, conv.id, diasAtras(30))
     await db.insert(attendanceNotices).values({ restaurantId: a.restaurantId, unitId: a.unitId, customerId: inativo.id, nome: 'Maria', data: '2026-10-01', pessoas: 2, origem: 'ia' })
+    // a IA nunca encerra a conversa: `ia` antiga não é "aberta"
+    const iaAntiga = await novoCliente(a.restaurantId, { ultimaInteracaoAt: diasAtras(400) })
+    const cIa = await novaConversa(a.restaurantId, iaAntiga.id, { estado: 'ia', lastMessageAt: diasAtras(380) })
+    await novaMensagem(a.restaurantId, cIa.id, diasAtras(380))
+    // `ultima_interacao_at` velho, mas a conversa teve mensagem recente: ainda ativo
+    const iaRecente = await novoCliente(a.restaurantId, { ultimaInteracaoAt: diasAtras(400) })
+    const cRec = await novaConversa(a.restaurantId, iaRecente.id, { estado: 'ia', lastMessageAt: diasAtras(10) })
+    await novaMensagem(a.restaurantId, cRec.id, diasAtras(10))
     const ativo = await novoCliente(a.restaurantId, { ultimaInteracaoAt: diasAtras(364) })
-    const comConversa = await novoCliente(a.restaurantId, { ultimaInteracaoAt: diasAtras(400) })
-    await novaConversa(a.restaurantId, comConversa.id, { estado: 'humano' })
+    const comHumano = await novoCliente(a.restaurantId, { ultimaInteracaoAt: diasAtras(400) })
+    const cHum = await novaConversa(a.restaurantId, comHumano.id, { estado: 'humano', lastMessageAt: diasAtras(400) })
+    await novaMensagem(a.restaurantId, cHum.id, diasAtras(80))
+    const aguardando = await novoCliente(a.restaurantId, { ultimaInteracaoAt: diasAtras(400) })
+    const cAg = await novaConversa(a.restaurantId, aguardando.id, { estado: 'aguardando_humano', lastMessageAt: diasAtras(400) })
+    await novaMensagem(a.restaurantId, cAg.id, diasAtras(80))
     const comPedido = await novoCliente(a.restaurantId, { ultimaInteracaoAt: diasAtras(400) })
     await db.insert(dataSubjectRequests).values({ restaurantId: a.restaurantId, customerId: comPedido.id, tipo: 'acesso' })
+    // evento futuro não protege (ruling): o pedido fica, anonimizado
     const comEvento = await novoCliente(a.restaurantId, { ultimaInteracaoAt: diasAtras(400) })
-    await db.insert(eventRequests).values({ restaurantId: a.restaurantId, unitId: a.unitId, customerId: comEvento.id, data: '2026-12-20', convidados: 30, tipo: 'casamento', status: 'confirmado' })
+    await db.insert(eventRequests).values({ restaurantId: a.restaurantId, unitId: a.unitId, customerId: comEvento.id, nome: 'Ana', data: '2026-12-20', convidados: 30, tipo: 'casamento', status: 'confirmado' })
     const r = await reter(a.restaurantId)
-    expect(r).toMatchObject({ clientes: 1 })
+    expect(r).toMatchObject({ clientes: 3 })
     const restantes = (await db.select().from(customers)).map((c) => c.id).sort()
-    expect(restantes).toEqual([ativo.id, comConversa.id, comPedido.id, comEvento.id].sort())
-    expect(await db.select().from(messages)).toHaveLength(0)
+    expect(restantes).toEqual([iaRecente.id, ativo.id, comHumano.id, aguardando.id, comPedido.id].sort())
+    expect((await db.select().from(conversations)).map((c) => c.id).sort()).toEqual([cRec.id, cHum.id, cAg.id].sort())
     const [av] = await db.select().from(attendanceNotices)
     expect(av).toMatchObject({ customerId: null, nome: null, anonimizado: true })
+    const [ev] = await db.select().from(eventRequests)
+    expect(ev).toMatchObject({ customerId: null, nome: null, anonimizado: true, status: 'confirmado' })
+    expect(await reter(a.restaurantId)).toMatchObject({ clientes: 0 })
+  })
+
+  it('conversas vazias e vencidas somem em qualquer estado; as recentes ficam', async () => {
+    const a = await base()
+    const ids: Record<string, string> = {}
+    for (const [nome, estado, dias] of [['ia', 'ia', 100], ['humano', 'humano', 100], ['aguardando', 'aguardando_humano', 100], ['recente', 'ia', 10]] as const) {
+      const cli = await novoCliente(a.restaurantId, { ultimaInteracaoAt: diasAtras(1) })
+      ids[nome] = (await novaConversa(a.restaurantId, cli.id, { estado, lastMessageAt: diasAtras(dias) })).id
+    }
+    expect(await reter(a.restaurantId)).toMatchObject({ conversas: 3, clientes: 0 })
+    expect((await db.select().from(conversations)).map((c) => c.id)).toEqual([ids.recente])
+    expect(await db.select().from(customers)).toHaveLength(4)
   })
 
   it('só toca o restaurante pedido; só worker_app executa', async () => {

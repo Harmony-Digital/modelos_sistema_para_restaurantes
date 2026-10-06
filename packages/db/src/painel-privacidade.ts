@@ -174,6 +174,26 @@ export function executarExclusao(
   }))
 }
 
+/**
+ * Conclui o pedido de correção (a equipe corrige o dado por fora, p.ex. o nome do perfil) com resposta curta
+ * (1–300 caracteres, sem PII — a tela orienta). A resposta não vai para a auditoria.
+ */
+export function concluirCorrecao(db: Db, claims: JwtClaims, pedidoId: string, resposta: string): Promise<ResultadoPrivacidade> {
+  const texto = resposta.trim()
+  if (texto.length === 0 || [...texto].length > 300) return Promise.resolve({ ok: false, erro: 'valor_invalido' })
+  if (!UUID.test(pedidoId)) return nada()
+  return semPermissaoVira(() => withUserContext(db, claims, async (tx): Promise<ResultadoPrivacidade> => {
+    const p = await pedidoVisivel(tx, pedidoId, true)
+    if (!p) return falha('nao_encontrada')
+    if (p.tipo !== 'correcao' || (FINAIS as readonly string[]).includes(p.status)) return { ok: false, erro: 'transicao_invalida' }
+    await tx.update(dataSubjectRequests).set({ status: 'concluido', resposta: texto, resolvidoPor: claims.sub }).where(eq(dataSubjectRequests.id, pedidoId))
+    await registrarAuditoria(tx, claims, {
+      restaurantId: p.restaurantId, acao: 'lgpd.correcao_concluida', entidade: 'data_subject_request', entidadeId: pedidoId,
+    })
+    return ok(null)
+  }))
+}
+
 /** Nega o pedido com resposta curta (1–300 caracteres, sem PII — a tela orienta). A resposta não vai para a auditoria. */
 export function negarPedido(db: Db, claims: JwtClaims, pedidoId: string, resposta: string): Promise<ResultadoPrivacidade> {
   const texto = resposta.trim()

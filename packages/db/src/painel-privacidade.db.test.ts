@@ -5,7 +5,7 @@ import { encryptPhone } from '@atd/core'
 import { getTestDb, resetDb, seedRestaurant, seedStaff } from './test-utils.ts'
 import type { JwtClaims } from './rls.ts'
 import {
-  concluirAcesso, executarExclusao, lerRetencao, listarPedidosTitular, negarPedido, resumoAcessoTitular, revelarTelefoneTitular,
+  concluirAcesso, concluirCorrecao, executarExclusao, lerRetencao, listarPedidosTitular, negarPedido, resumoAcessoTitular, revelarTelefoneTitular,
   salvarRetencao,
 } from './painel-privacidade.ts'
 import {
@@ -158,6 +158,22 @@ describe('exclusão', () => {
     expect(await executarExclusao(db, as(c.dono, 'aal1'), c.exclusao.id)).toEqual({ ok: false, erro: 'nao_encontrada' })
     expect(await executarExclusao(db, as(donoB), c.exclusao.id)).toEqual({ ok: false, erro: 'nao_encontrada' })
     expect(await db.select().from(customers)).toHaveLength(1)
+  })
+})
+
+describe('correção', () => {
+  it('concluirCorrecao: só pedido de correção em aberto; resposta curta obrigatória; auditoria sem o texto', async () => {
+    const c = await cenario()
+    const [cor] = await db.insert(dataSubjectRequests).values({ restaurantId: c.restaurantId, customerId: c.cli.id, tipo: 'correcao' }).returning()
+    expect(await concluirCorrecao(db, as(c.gerente), cor!.id, ' ')).toEqual({ ok: false, erro: 'valor_invalido' })
+    expect(await concluirCorrecao(db, as(c.gerente), cor!.id, 'x'.repeat(301))).toEqual({ ok: false, erro: 'valor_invalido' })
+    expect(await concluirCorrecao(db, as(c.gerente), c.acesso.id, 'Nome corrigido')).toEqual({ ok: false, erro: 'transicao_invalida' })
+    expect(await concluirCorrecao(db, as(c.atendente, 'aal1'), cor!.id, 'Nome corrigido')).toEqual({ ok: false, erro: 'nao_encontrada' })
+    expect(await concluirCorrecao(db, as(c.gerente), cor!.id, ' Nome de perfil corrigido ')).toEqual({ ok: true, valor: null })
+    const [p] = await db.select().from(dataSubjectRequests).where(eq(dataSubjectRequests.id, cor!.id))
+    expect(p).toMatchObject({ status: 'concluido', resposta: 'Nome de perfil corrigido', resolvidoPor: c.gerente })
+    expect(await concluirCorrecao(db, as(c.gerente), cor!.id, 'de novo')).toEqual({ ok: false, erro: 'transicao_invalida' })
+    expect((await logs('lgpd.correcao_concluida')).map((l) => l.diff)).toEqual([null])
   })
 })
 
