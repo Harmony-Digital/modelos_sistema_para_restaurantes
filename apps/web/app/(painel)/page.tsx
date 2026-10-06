@@ -1,8 +1,9 @@
 import Link from 'next/link'
 import {
-  contarPedidosNovos, getPanelStatus, lerLimites, listAwaitingHuman, resumoGastos, resumoInicio, tempoAteAssumirHoje, totalPrevistoHoje,
+  contarPedidosNovos, getPanelStatus, lerLimites, listAwaitingHuman, listarPedidosTitular, resumoGastos, resumoInicio, tempoAteAssumirHoje, totalPrevistoHoje,
 } from '@atd/db'
 import { AwaitingHuman } from '@/components/conversations/awaiting-human'
+import { CartaoPrazoLgpd } from '@/components/home/cartao-prazo-lgpd'
 import { PerguntasSemResposta } from '@/components/home/perguntas-sem-resposta'
 import { SpendCard } from '@/components/home/spend-card'
 import { CartaoAlertasGastos } from '@/components/painel/alerta-gastos'
@@ -30,6 +31,7 @@ export default async function InicioPage() {
   const [limites, gastos] = gestao
     ? await Promise.all([lerLimites(getDb(), session.claims), resumoGastos(getDb(), session.claims, new Date())])
     : [null, null]
+  const pedidosLgpd = gestao ? await listarPedidosTitular(getDb(), session.claims, { status: ['aberto', 'em_andamento'] }) : []
   const online = s.workerLastSeen !== null && Date.now() - s.workerLastSeen.getTime() < ONLINE_MS
   return (
     <>
@@ -78,6 +80,7 @@ export default async function InicioPage() {
             />
           )}
         </div>
+        {gestao && <CartaoPrazoLgpd pedidos={pedidosLgpd} agora={new Date()} />}
         {resumo && <PerguntasSemResposta lacunas={resumo.lacunas} />}
         {gastos && <CartaoAlertasGastos alertas={gastos.alertas} />}
         {limites && <SpendCard gastos={s.gastos} cotacao={limites.cotacao} provedor={rotuloProvedorIa()} />}

@@ -21,6 +21,8 @@ export type IntegranteTela = {
   unidades: string[]
   ativo: boolean
   convitePendente?: boolean
+  /** convite `enviado` de quem nunca entrou (para Reenviar) */
+  conviteId?: string | null
   statusConvite?: 'pendente' | 'enviado' | 'erro' | 'aceito'
 }
 export type UnidadeOpcao = { id: string; nome: string }
@@ -157,6 +159,16 @@ export function Equipe(props: { integrantes: IntegranteTela[]; unidades: Unidade
                         disabled={ocupadoId !== null}
                         aria-label={`Reenviar convite para ${i.nome}`}
                         onClick={() => void executar(i.id, () => reenviarConviteAction(i.id), 'Convite reenviado')}
+                      >
+                        <Send aria-hidden="true" className="size-4" /> Reenviar convite
+                      </Button>
+                    )}
+                    {i.tipo === 'membro' && i.convitePendente && i.conviteId && (
+                      <Button
+                        variant="outline"
+                        disabled={ocupadoId !== null}
+                        aria-label={`Reenviar convite para ${i.nome}`}
+                        onClick={() => void executar(i.id, () => reenviarConviteAction(i.conviteId!), 'Convite reenviado')}
                       >
                         <Send aria-hidden="true" className="size-4" /> Reenviar convite
                       </Button>

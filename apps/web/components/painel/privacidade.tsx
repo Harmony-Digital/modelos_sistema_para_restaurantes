@@ -22,6 +22,7 @@ export type AcoesPrivacidade = {
   concluirAcesso: (id: string) => Promise<ActionResult<null>>
   excluir: (id: string, confirmacao: string) => Promise<ActionResult<{ contagens: Record<string, number> }>>
   negar: (id: string, input: NegarForm) => Promise<ActionResult<null>>
+  concluirCorrecao: (id: string, input: NegarForm) => Promise<ActionResult<null>>
 }
 
 const erroDe = (r: ActionResult<unknown>, padrao: string) => (r.ok ? padrao : (r.formError ?? padrao))
@@ -194,7 +195,16 @@ function ConfirmarExclusao(props: { pedidoId: string; excluir: AcoesPrivacidade[
   )
 }
 
-function NegarPedido(props: { pedidoId: string; negar: AcoesPrivacidade['negar']; onFechar: () => void }) {
+function RespostaPedido(props: {
+  pedidoId: string
+  enviar: (id: string, input: NegarForm) => Promise<ActionResult<null>>
+  onFechar: () => void
+  titulo: string
+  descricao: string
+  rotuloBotao: string
+  rotuloAndamento: string
+  sucesso: string
+}) {
   const form = useZodForm(negarSchema, { defaultValues: { resposta: '' } })
   const { errors, isSubmitting } = form.formState
   const enviando = useRef(false)
@@ -202,25 +212,25 @@ function NegarPedido(props: { pedidoId: string; negar: AcoesPrivacidade['negar']
     if (enviando.current) return
     enviando.current = true
     try {
-      const r = await chamarAcao(() => props.negar(props.pedidoId, v))
+      const r = await chamarAcao(() => props.enviar(props.pedidoId, v))
       if (!r.ok) {
         applyServerErrors(form, r)
         return
       }
-      toast.success('Pedido negado.')
+      toast.success(props.sucesso)
       props.onFechar()
     } finally {
       enviando.current = false
     }
   })
   return (
-    <FolhaFormulario aberto onAbertoChange={(a) => { if (!a) props.onFechar() }} titulo="Negar pedido" descricao="Explique o motivo ao cliente em poucas palavras.">
+    <FolhaFormulario aberto onAbertoChange={(a) => { if (!a) props.onFechar() }} titulo={props.titulo} descricao={props.descricao}>
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-4">
         <FormError form={form} />
         <Field id="resposta" label="Resposta ao cliente" hint={`Sem dados pessoais. Até ${MAX_RESPOSTA_NEGAR} caracteres.`} error={errors.resposta?.message}>
           {(a) => <Textarea {...a} rows={3} {...form.register('resposta')} />}
         </Field>
-        <SubmitButton pending={isSubmitting} pendingText="Negando…">Negar pedido</SubmitButton>
+        <SubmitButton pending={isSubmitting} pendingText={props.rotuloAndamento}>{props.rotuloBotao}</SubmitButton>
       </form>
     </FolhaFormulario>
   )
@@ -236,6 +246,7 @@ function ItemPedido(props: {
   onResumo: (id: string, r: ResumoTitular) => void
   onExcluir: (id: string) => void
   onNegar: (id: string) => void
+  onCorrecao: (id: string) => void
 }) {
   const p = props.pedido
   const [gerando, setGerando] = useState(false)
@@ -277,6 +288,7 @@ function ItemPedido(props: {
           {p.tipo === 'exclusao' && (
             <Button type="button" variant="destructive" onClick={() => props.onExcluir(p.id)}>Excluir dados</Button>
           )}
+          {p.tipo === 'correcao' && <Button type="button" onClick={() => props.onCorrecao(p.id)}>Concluir correção</Button>}
           <Button type="button" variant="outline" onClick={() => props.onNegar(p.id)}>Negar</Button>
         </div>
       )}
@@ -289,6 +301,7 @@ export function FilaPrivacidade(props: { pedidos: PedidoTitular[]; agora: Date; 
   const [resumo, setResumo] = useState<{ id: string; r: ResumoTitular } | null>(null)
   const [excluindo, setExcluindo] = useState<string | null>(null)
   const [negando, setNegando] = useState<string | null>(null)
+  const [corrigindo, setCorrigindo] = useState<string | null>(null)
   const abertos = props.pedidos.filter((p) => emAberto(p.status))
   const resolvidos = props.pedidos.filter((p) => !emAberto(p.status))
   const item = (p: PedidoTitular) => (
@@ -301,6 +314,7 @@ export function FilaPrivacidade(props: { pedidos: PedidoTitular[]; agora: Date; 
       onResumo={(id, r) => setResumo({ id, r })}
       onExcluir={setExcluindo}
       onNegar={setNegando}
+      onCorrecao={setCorrigindo}
     />
   )
   return (
@@ -320,7 +334,30 @@ export function FilaPrivacidade(props: { pedidos: PedidoTitular[]; agora: Date; 
         </FolhaFormulario>
       )}
       {excluindo && <ConfirmarExclusao pedidoId={excluindo} excluir={props.acoes.excluir} onFechar={() => setExcluindo(null)} />}
-      {negando && <NegarPedido pedidoId={negando} negar={props.acoes.negar} onFechar={() => setNegando(null)} />}
+      {negando && (
+        <RespostaPedido
+          pedidoId={negando}
+          enviar={props.acoes.negar}
+          onFechar={() => setNegando(null)}
+          titulo="Negar pedido"
+          descricao="Explique o motivo ao cliente em poucas palavras."
+          rotuloBotao="Negar pedido"
+          rotuloAndamento="Negando…"
+          sucesso="Pedido negado."
+        />
+      )}
+      {corrigindo && (
+        <RespostaPedido
+          pedidoId={corrigindo}
+          enviar={props.acoes.concluirCorrecao}
+          onFechar={() => setCorrigindo(null)}
+          titulo="Concluir correção"
+          descricao="Diga ao cliente o que foi corrigido, em poucas palavras."
+          rotuloBotao="Concluir correção"
+          rotuloAndamento="Concluindo…"
+          sucesso="Correção concluída."
+        />
+      )}
     </div>
   )
 }

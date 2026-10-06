@@ -14,7 +14,7 @@ export default async function EquipePage() {
   const [lista, { unidades }] = await Promise.all([listarEquipe(db, s.claims), carregarUnidadesPainel(db, s.claims)])
   const integrantes: IntegranteTela[] = lista.map((i) =>
     i.tipo === 'membro'
-      ? { tipo: 'membro', id: i.id, nome: i.nome, email: i.email, papel: i.papel, unidades: i.unidades, ativo: i.ativo, convitePendente: i.convitePendente }
+      ? { tipo: 'membro', id: i.id, nome: i.nome, email: i.email, papel: i.papel, unidades: i.unidades, ativo: i.ativo, convitePendente: i.convitePendente, conviteId: i.conviteId }
       : { tipo: 'convite', id: i.id, nome: i.nome, email: i.email, papel: i.papel, unidades: i.unidades, ativo: false, statusConvite: i.status },
   )
   return (

@@ -2,7 +2,7 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import {
-  concluirAcesso, executarExclusao, negarPedido, resumoAcessoTitular, revelarTelefoneTitular, salvarRetencao,
+  concluirAcesso, concluirCorrecao, executarExclusao, negarPedido, resumoAcessoTitular, revelarTelefoneTitular, salvarRetencao,
   type ResultadoPrivacidade, type ResumoTitular,
 } from '@atd/db'
 import { actionErrorFromZod, type ActionResult } from '@/lib/action-result'
@@ -79,6 +79,17 @@ export async function negarPedidoAction(pedidoId: string, input: NegarForm): Pro
   const p = negarSchema.safeParse(input)
   if (!p.success) return actionErrorFromZod(p.error)
   const r = await negarPedido(getDb(), s.claims, pedidoId, p.data.resposta)
+  if (r.ok) revalidarFila()
+  return resultado(r)
+}
+
+/** Conclui o pedido de correção (a equipe corrigiu o dado por fora) com resposta curta, sem dado pessoal. */
+export async function concluirCorrecaoAction(pedidoId: string, input: NegarForm): Promise<ActionResult<null>> {
+  const s = await requireStaff(GESTAO)
+  if (!idValido(pedidoId)) return INDISPONIVEL
+  const p = negarSchema.safeParse(input)
+  if (!p.success) return actionErrorFromZod(p.error)
+  const r = await concluirCorrecao(getDb(), s.claims, pedidoId, p.data.resposta)
   if (r.ok) revalidarFila()
   return resultado(r)
 }

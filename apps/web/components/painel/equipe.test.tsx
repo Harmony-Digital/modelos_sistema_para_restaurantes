@@ -13,6 +13,7 @@ const U1 = '00000000-0000-4000-8000-000000000001'
 const integrantes = [
   { tipo: 'membro' as const, id: 'eu', nome: 'Dona', email: 'dona@x.com', papel: 'dono' as const, unidades: [], ativo: true },
   { tipo: 'membro' as const, id: 'm1', nome: 'Ana', email: 'ana@x.com', papel: 'atendente' as const, unidades: [U1], ativo: true },
+  { tipo: 'membro' as const, id: 'm2', nome: 'Caio', email: 'caio@x.com', papel: 'atendente' as const, unidades: [], ativo: true, convitePendente: true, conviteId: 'cv2' },
   { tipo: 'convite' as const, id: 'c1', nome: 'Beto', email: 'beto@x.com', papel: 'gerente' as const, unidades: [], ativo: false, statusConvite: 'erro' as const },
 ]
 const unidades = [{ id: U1, nome: 'Lago Sul' }]
@@ -45,6 +46,14 @@ describe('Equipe', () => {
     render(<Equipe integrantes={integrantes} unidades={unidades} meuId="eu" somenteLeitura={false} />)
     await user.click(screen.getByRole('button', { name: 'Reenviar convite para Beto' }))
     expect(reenviarConviteAction).toHaveBeenCalledWith('c1')
+  })
+
+  it('membro convidado que nunca entrou ganha Reenviar com o id do convite; quem já entrou não', async () => {
+    const user = userEvent.setup()
+    render(<Equipe integrantes={integrantes} unidades={unidades} meuId="eu" somenteLeitura={false} />)
+    expect(screen.queryByRole('button', { name: 'Reenviar convite para Ana' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Reenviar convite para Caio' }))
+    expect(reenviarConviteAction).toHaveBeenCalledWith('cv2')
   })
 
   it('desativar pede confirmação antes de chamar a ação', async () => {

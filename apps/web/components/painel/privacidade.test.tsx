@@ -23,7 +23,7 @@ const resumo: ResumoTitular = {
   mensagens: 10, avisos: [], eventos: [], pedidos: [],
 }
 const acoes = {
-  gerarResumo: vi.fn(), revelarTelefone: vi.fn(), concluirAcesso: vi.fn(), excluir: vi.fn(), negar: vi.fn(),
+  gerarResumo: vi.fn(), revelarTelefone: vi.fn(), concluirAcesso: vi.fn(), excluir: vi.fn(), negar: vi.fn(), concluirCorrecao: vi.fn(),
 }
 const renderFila = (pedidos: PedidoTitular[]) =>
   render(<FilaPrivacidade pedidos={pedidos} agora={agora} timeZone="America/Sao_Paulo" acoes={acoes} />)
@@ -34,6 +34,7 @@ beforeEach(() => {
   acoes.concluirAcesso.mockResolvedValue({ ok: true, data: null })
   acoes.excluir.mockResolvedValue({ ok: true, data: { contagens: { mensagens: 10, conversas: 2, avisos: 1, eventos: 0 } } })
   acoes.negar.mockResolvedValue({ ok: true, data: null })
+  acoes.concluirCorrecao.mockResolvedValue({ ok: true, data: null })
 })
 
 describe('FilaPrivacidade', () => {
@@ -145,6 +146,22 @@ describe('FilaPrivacidade', () => {
     await user.type(within(dialogo).getByLabelText('Resposta ao cliente'), 'Pedido em duplicidade.')
     await user.click(within(dialogo).getByRole('button', { name: 'Negar pedido' }))
     await waitFor(() => expect(acoes.negar).toHaveBeenCalledWith(A, { resposta: 'Pedido em duplicidade.' }))
+  })
+
+  it('correção: "Concluir correção" exige resposta curta e chama a ação; acesso não mostra o botão', async () => {
+    const user = userEvent.setup()
+    const { unmount } = renderFila([pedido()])
+    expect(screen.queryByRole('button', { name: 'Concluir correção' })).toBeNull()
+    unmount()
+    renderFila([pedido({ tipo: 'correcao' })])
+    await user.click(screen.getByRole('button', { name: 'Concluir correção' }))
+    const dialogo = await screen.findByRole('dialog')
+    await user.click(within(dialogo).getByRole('button', { name: 'Concluir correção' }))
+    expect(await within(dialogo).findByText('Escreva o motivo em poucas palavras')).toBeInTheDocument()
+    expect(acoes.concluirCorrecao).not.toHaveBeenCalled()
+    await user.type(within(dialogo).getByLabelText('Resposta ao cliente'), 'Nome corrigido.')
+    await user.click(within(dialogo).getByRole('button', { name: 'Concluir correção' }))
+    await waitFor(() => expect(acoes.concluirCorrecao).toHaveBeenCalledWith(A, { resposta: 'Nome corrigido.' }))
   })
 
   it('pedido resolvido não tem ações', () => {

@@ -6,6 +6,7 @@ const revelarTelefoneTitular = vi.fn()
 const concluirAcesso = vi.fn()
 const executarExclusao = vi.fn()
 const negarPedido = vi.fn()
+const concluirCorrecao = vi.fn()
 const salvarRetencao = vi.fn()
 const revalidatePath = vi.fn()
 vi.mock('@/lib/dal', () => ({ requireStaff }))
@@ -13,11 +14,11 @@ vi.mock('@/lib/server/db', () => ({ getDb: () => 'db' }))
 vi.mock('@/lib/server/env', () => ({ env: () => ({ phoneKey: 'chave' }) }))
 vi.mock('next/cache', () => ({ revalidatePath }))
 vi.mock('@atd/db', () => ({
-  resumoAcessoTitular, revelarTelefoneTitular, concluirAcesso, executarExclusao, negarPedido, salvarRetencao,
+  resumoAcessoTitular, revelarTelefoneTitular, concluirAcesso, executarExclusao, negarPedido, concluirCorrecao, salvarRetencao,
 }))
 
 const {
-  gerarResumoAction, revelarTelefoneTitularAction, concluirAcessoAction, excluirTitularAction, negarPedidoAction, salvarRetencaoAction,
+  gerarResumoAction, revelarTelefoneTitularAction, concluirAcessoAction, excluirTitularAction, negarPedidoAction, concluirCorrecaoAction, salvarRetencaoAction,
 } = await import('./actions')
 
 const ID = '00000000-0000-4000-8000-0000000000aa'
@@ -30,6 +31,7 @@ beforeEach(() => {
   concluirAcesso.mockResolvedValue({ ok: true, valor: null })
   executarExclusao.mockResolvedValue({ ok: true, valor: { contagens: { mensagens: 3, conversas: 1, avisos: 0, eventos: 1 } } })
   negarPedido.mockResolvedValue({ ok: true, valor: null })
+  concluirCorrecao.mockResolvedValue({ ok: true, valor: null })
   salvarRetencao.mockResolvedValue({ ok: true, valor: null })
 })
 
@@ -152,5 +154,21 @@ describe('prazos de retenção', () => {
   it('sem permissão no banco vira mensagem', async () => {
     salvarRetencao.mockResolvedValue({ ok: false, erro: 'sem_permissao' })
     expect(await salvarRetencaoAction({ dado: 'messages', dias: 30 })).toEqual({ ok: false, formError: 'Você não tem permissão para fazer essa alteração.' })
+  })
+})
+
+describe('concluir correção', () => {
+  it('só dono/gerente; resposta obrigatória, até 300; grava aparada', async () => {
+    expect(await concluirCorrecaoAction(ID, { resposta: '  ' })).toMatchObject({ ok: false, fieldErrors: { resposta: expect.any(String) } })
+    expect(await concluirCorrecaoAction(ID, { resposta: 'x'.repeat(301) })).toMatchObject({ ok: false })
+    expect(concluirCorrecao).not.toHaveBeenCalled()
+    expect(await concluirCorrecaoAction(ID, { resposta: ' Nome corrigido. ' })).toEqual({ ok: true, data: null })
+    expect(concluirCorrecao).toHaveBeenCalledWith('db', { sub: 'u' }, ID, 'Nome corrigido.')
+    expect(requireStaff).toHaveBeenCalledWith(GESTAO)
+  })
+
+  it('pedido que não é correção ⇒ mensagem de já resolvido', async () => {
+    concluirCorrecao.mockResolvedValue({ ok: false, erro: 'transicao_invalida' })
+    expect(await concluirCorrecaoAction(ID, { resposta: 'ok' })).toEqual({ ok: false, formError: 'Esse pedido já foi resolvido ou não aceita essa ação.' })
   })
 })

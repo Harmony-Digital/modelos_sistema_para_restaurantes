@@ -5,7 +5,7 @@ import { TopBar } from '@/components/shell/top-bar'
 import { requireStaff } from '@/lib/dal'
 import { getDb } from '@/lib/server/db'
 import {
-  concluirAcessoAction, excluirTitularAction, gerarResumoAction, negarPedidoAction, revelarTelefoneTitularAction, salvarRetencaoAction,
+  concluirAcessoAction, concluirCorrecaoAction, excluirTitularAction, gerarResumoAction, negarPedidoAction, revelarTelefoneTitularAction, salvarRetencaoAction,
 } from './actions'
 
 export const dynamic = 'force-dynamic'
@@ -16,6 +16,7 @@ const ACOES = {
   concluirAcesso: concluirAcessoAction,
   excluir: excluirTitularAction,
   negar: negarPedidoAction,
+  concluirCorrecao: concluirCorrecaoAction,
 }
 
 // dono e gerente; o atendente é redirecionado pelo requireStaff
