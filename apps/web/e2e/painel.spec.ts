@@ -22,10 +22,10 @@ test('tema: cookie claro chega na primeira resposta e a troca funciona', async (
   expect(cookies.find((c) => c.name === 'atd-tema')?.value).toBe('escuro')
 })
 
-test('navegação inferior leva às 4 seções', async ({ page }) => {
+test('navegação inferior leva às 5 seções', async ({ page }) => {
   const { email, senha } = await criarMembro('atendente')
   await entrar(page, email, senha)
-  for (const [link, titulo] of [['Unidades', 'Unidades'], ['Respostas', 'Respostas'], ['Mais', 'Mais'], ['Início', 'Início']] as const) {
+  for (const [link, titulo] of [['Previsão', 'Previsão'], ['Unidades', 'Unidades'], ['Respostas', 'Respostas'], ['Mais', 'Mais'], ['Início', 'Início']] as const) {
     await page.getByRole('link', { name: link }).click()
     await expect(page.getByRole('heading', { level: 1, name: titulo })).toBeVisible()
   }

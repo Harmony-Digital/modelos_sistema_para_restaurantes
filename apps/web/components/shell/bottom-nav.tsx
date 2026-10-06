@@ -1,11 +1,12 @@
 'use client'
-import { House, Menu, MessageSquareText, Store } from 'lucide-react'
+import { CalendarCheck, House, Menu, MessageSquareText, Store } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 
 const ITENS = [
   { href: '/', label: 'Início', icon: House },
+  { href: '/previsao', label: 'Previsão', icon: CalendarCheck },
   { href: '/unidades', label: 'Unidades', icon: Store },
   { href: '/respostas', label: 'Respostas', icon: MessageSquareText },
   { href: '/mais', label: 'Mais', icon: Menu },
@@ -16,7 +17,7 @@ export function BottomNav() {
   const ativo = (href: string) => (href === '/' ? path === '/' : path === href || path.startsWith(href + '/'))
   return (
     <nav aria-label="Navegação principal" className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur">
-      <ul className="mx-auto grid max-w-xl grid-cols-4">
+      <ul className="mx-auto grid max-w-xl grid-cols-5">
         {ITENS.map(({ href, label, icon: Icon }) => {
           const on = ativo(href)
           return (
@@ -25,7 +26,7 @@ export function BottomNav() {
                 href={href}
                 aria-current={on ? 'page' : undefined}
                 className={cn(
-                  'relative flex min-h-16 focus-visible:outline-offset-[-2px] flex-col items-center justify-center gap-1 text-xs font-medium transition-colors duration-150',
+                  'relative flex min-h-16 focus-visible:outline-offset-[-2px] flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors duration-150',
                   on ? 'text-link' : 'text-muted-foreground [@media(hover:hover)]:hover:text-foreground',
                 )}
               >

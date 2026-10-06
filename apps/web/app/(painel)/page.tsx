@@ -1,4 +1,5 @@
-import { getPanelStatus, listAwaitingHuman, resumoInicio } from '@atd/db'
+import Link from 'next/link'
+import { getPanelStatus, listAwaitingHuman, resumoInicio, totalPrevistoHoje } from '@atd/db'
 import { AwaitingHuman } from '@/components/conversations/awaiting-human'
 import { PerguntasSemResposta } from '@/components/home/perguntas-sem-resposta'
 import { SpendCard } from '@/components/home/spend-card'
@@ -17,6 +18,7 @@ export default async function InicioPage() {
   const session = await requireStaff()
   const s = await getPanelStatus(getDb(), session.claims)
   const gestao = session.role !== 'atendente'
+  const previstos = await totalPrevistoHoje(getDb(), session.claims)
   const resumo = gestao ? await resumoInicio(getDb(), session.claims) : null
   const online = s.workerLastSeen !== null && Date.now() - s.workerLastSeen.getTime() < ONLINE_MS
   return (
@@ -26,6 +28,16 @@ export default async function InicioPage() {
         <div className="grid grid-cols-2 gap-3">
           <StatCard label="IA" value={online ? 'Online' : 'Offline'} tone={online ? 'ok' : 'alerta'} hint={online ? 'Respondendo clientes' : 'Verifique o worker'} />
           <StatCard label="Conversas abertas" value={String(s.conversasAbertas)} hint={`${s.aguardandoHumano} aguardando atendente`} />
+          <StatCard
+            label="Previstos hoje"
+            value={String(previstos)}
+            hint={previstos === 1 ? 'pessoa avisou que vai' : 'pessoas avisaram que vão'}
+            action={
+              <Link href="/previsao" className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 [@media(hover:hover)]:hover:underline">
+                Ver previsão
+              </Link>
+            }
+          />
           {resumo && (
             <StatCard
               label="Respondido pela IA hoje"
