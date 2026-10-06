@@ -371,9 +371,10 @@ export function encerrarConversa(db: Db, claims: JwtClaims, id: string): Promise
     acao: 'conversa.encerrada',
     set: sql`estado = 'encerrada', pendente = null`,
     origem: sql`c.estado in ('ia', 'aguardando_humano')`,
-    // nada sai depois de encerrar: um deliver já enfileirado encontra as pendentes canceladas
+    // a IA não fala depois de encerrar (o deliver encontra as dela canceladas); a despedida do atendente e o aviso do
+    // sistema ainda pendentes saem normalmente
     depois: sql`update public.messages set status_envio = 'cancelado'
-      where conversation_id = ${id}::uuid and direcao = 'out' and status_envio = 'pendente'`,
+      where conversation_id = ${id}::uuid and direcao = 'out' and autor = 'ia' and status_envio = 'pendente'`,
   })
 }
 

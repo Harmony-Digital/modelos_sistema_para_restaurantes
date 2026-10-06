@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { asc, eq } from 'drizzle-orm'
 import { encryptPhone, keyFromBase64 } from '@atd/core'
-import { abrirSimulacao, ingestInbound, schema, type Enqueue } from '@atd/db'
+import { abrirSimulacao, encerrarConversa, ingestInbound, schema, type Enqueue } from '@atd/db'
 import { getTestDb, resetDb, seedRestaurant, seedStaff } from '@atd/db/test-utils'
 import type { SendResult } from '@atd/whatsapp'
 import { createLogger } from '../logger.ts'
@@ -116,6 +116,17 @@ describe('deliver: resposta humana', () => {
     const wa = fakeWa()
     await deliver(deps(wa), c.conversationId)
     expect((await saidas(c.conversationId))[0]!.statusEnvio).toBe('enviado')
+  })
+
+  it('responder → encerrar → deliver: a despedida do atendente sai; a resposta pendente da IA não', async () => {
+    const c = await conversaReal()
+    await pendente({ ...c, autor: 'ia', texto: 'Abrimos às 11h.' })
+    await pendente({ ...c, autor: 'humano', texto: 'Obrigado, até mais!' })
+    expect(await encerrarConversa(db, { sub: c.atendente, role: 'authenticated', aal: 'aal1' }, c.conversationId)).toEqual({ ok: true })
+    const wa = fakeWa()
+    await deliver(deps(wa), c.conversationId)
+    expect(wa.enviados.map((e) => e.texto)).toEqual(['Obrigado, até mais!'])
+    expect((await saidas(c.conversationId)).map((m) => [m.autor, m.statusEnvio])).toEqual([['ia', 'cancelado'], ['humano', 'enviado']])
   })
 
   it('duas entregas ao mesmo tempo (job de entrega + job da conversa) enviam cada mensagem uma vez só', async () => {
