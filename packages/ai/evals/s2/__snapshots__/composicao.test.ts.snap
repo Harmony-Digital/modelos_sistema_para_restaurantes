@@ -782,7 +782,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
   "lacunas": [],
   "lista": {
     "botao": "Ver unidades",
-    "corpo": "De qual unidade você quer saber? Toque em "Ver unidades" e escolha.",
+    "corpo": "Para qual unidade é o aviso? Toque em "Ver unidades" e escolha.",
     "opcoes": [
       {
         "descricao": "Asa Sul · Brasília",
@@ -831,7 +831,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
   "lacunas": [],
   "lista": {
     "botao": "Ver unidades",
-    "corpo": "De qual unidade você quer saber? Toque em "Ver unidades" e escolha.",
+    "corpo": "Para qual unidade é o aviso? Toque em "Ver unidades" e escolha.",
     "opcoes": [
       {
         "descricao": "Asa Sul · Brasília",
@@ -893,7 +893,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
   "lacunas": [],
   "lista": {
     "botao": "Ver unidades",
-    "corpo": "De qual unidade você quer saber? Toque em "Ver unidades" e escolha.",
+    "corpo": "Para qual unidade é o aviso? Toque em "Ver unidades" e escolha.",
     "opcoes": [
       {
         "descricao": "Asa Sul · Brasília",
@@ -1244,7 +1244,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > x
   "lacunas": [],
   "lista": {
     "botao": "Ver unidades",
-    "corpo": "De qual unidade você quer saber? Toque em "Ver unidades" e escolha.",
+    "corpo": "Para qual unidade é o aviso? Toque em "Ver unidades" e escolha.",
     "opcoes": [
       {
         "descricao": "Asa Sul · Brasília",

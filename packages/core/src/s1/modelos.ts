@@ -24,6 +24,7 @@ export const MODELOS_S1 = {
   lacuna: { texto: 'Ainda não tenho essa informação; vou verificar com a equipe.', variaveis: [] },
   em_breve: { texto: 'Sobre {servico}, ainda estou aprendendo e em breve vou conseguir responder por aqui.', variaveis: ['servico'] },
   // S2 — avisos de presença (Etapa 03)
+  escolher_unidade_aviso: { texto: 'Para qual unidade é o aviso? Toque em "Ver unidades" e escolha.', variaveis: [] },
   aviso_registrado: {
     texto: 'Anotado: {unidade}, {quando}, {pessoas}{horario}. Se mudar de ideia, é só me avisar.',
     variaveis: ['unidade', 'quando', 'pessoas', 'horario'],

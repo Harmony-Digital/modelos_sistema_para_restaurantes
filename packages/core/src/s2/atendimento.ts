@@ -21,7 +21,8 @@ export function resolverAtendimento(
   return {
     ...s1,
     texto: comporTexto([s1.texto, ...s2.trechos, pergunta]),
-    lista: pendente.length ? listaDeUnidades(ctx) : null,
+    // só avisos esperando a unidade: "De qual unidade você quer saber?" não faz sentido
+    lista: pendente.length ? listaDeUnidades(ctx, s1.pendente.length ? 'escolher_unidade' : 'escolher_unidade_aviso') : null,
     pendente,
     validos: s1.validos + s2.validos,
     respondidos: s1.respondidos + s2.respondidos,

@@ -49,11 +49,14 @@ describe('resolverAtendimento', () => {
     expect(depois.pendente).toEqual([])
   })
 
-  it('só S2 pendente: monta a mesma lista do S1', () => {
+  it('só S2 pendente: mesmas opções do S1, com o texto que pergunta a unidade do aviso', () => {
     const r = resolverAtendimento([reg({ pessoas: 2 })], CONTEXTO, SEG_14H, [])
     const s1 = resolverS1([h('horario_dia')], CONTEXTO, SEG_14H)
-    expect(r.lista).toEqual(s1.lista)
+    expect(r.lista).toEqual({ ...s1.lista, corpo: 'Para qual unidade é o aviso? Toque em "Ver unidades" e escolha.' })
     expect(r.pendente).toHaveLength(1)
+    // texto personalizado do restaurante
+    const ctx = { ...CONTEXTO, modelos: { escolher_unidade_aviso: 'Em qual casa?' } }
+    expect(resolverAtendimento([reg({ pessoas: 2 })], ctx, SEG_14H, []).lista?.corpo).toBe('Em qual casa?')
   })
 
   it('pergunta pessoas por último, depois das respostas do S1', () => {

@@ -30,10 +30,10 @@ export function unidadesOrdenadas(ctx: ContextoS1): UnidadeS1[] {
   return [...ctx.unidades].sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome, 'pt-BR'))
 }
 
-/** Lista interativa "Ver unidades" (a mesma para pendentes do S1 e do S2). */
-export function listaDeUnidades(ctx: ContextoS1): ListaUnidades {
+/** Lista interativa "Ver unidades" (as mesmas opções para pendentes do S1 e do S2; muda só o texto). */
+export function listaDeUnidades(ctx: ContextoS1, corpo: 'escolher_unidade' | 'escolher_unidade_aviso' = 'escolher_unidade'): ListaUnidades {
   return {
-    corpo: renderModelo('escolher_unidade', {}, ctx.modelos),
+    corpo: renderModelo(corpo, {}, ctx.modelos),
     botao: BOTAO_LISTA,
     opcoes: unidadesOrdenadas(ctx).slice(0, MAX_OPCOES).map((u) => ({
       id: u.id,
