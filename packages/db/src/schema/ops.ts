@@ -138,7 +138,13 @@ export const auditLog = pgTable(
     ip: text('ip'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index('audit_log_restaurant_created_idx').on(t.restaurantId, t.createdAt.desc())],
+  (t) => [
+    index('audit_log_restaurant_created_idx').on(t.restaurantId, t.createdAt.desc()),
+    // polling de 1 s do simulador (app.simulacao_limite_atingido): só as recusas por limite de simulação
+    index('audit_log_sem_saldo_simulacao_idx')
+      .on(t.entidadeId, t.createdAt)
+      .where(sql`${t.acao} = 'orcamento.sem_saldo_simulacao'`),
+  ],
 )
 
 export const dataSubjectRequests = pgTable(

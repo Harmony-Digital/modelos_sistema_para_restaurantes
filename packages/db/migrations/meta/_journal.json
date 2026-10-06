@@ -267,6 +267,20 @@
       "when": 1791315829172,
       "tag": "0037_simulacao_limite_leitura",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1791318046738,
+      "tag": "0038_simulacao_limite_indice",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1791318050955,
+      "tag": "0039_simulacao_limite_sem_entrada",
+      "breakpoints": true
     }
   ]
 }

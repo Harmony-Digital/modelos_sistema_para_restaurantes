@@ -136,6 +136,26 @@ describe('simulador (banco)', () => {
     expect(d!.map((x) => x.intent)).toEqual(['b', 'a'])
   })
 
+  it('aviso de limite: conversa sem mensagem do cliente devolve false mesmo com auditoria antiga; outro restaurante devolve false', async () => {
+    const { restaurantId, dono } = await setup()
+    const p = { restaurantId, userId: dono }
+    const { conversationId } = await abrirSimulacao(db, p)
+    const limite = async (rest: string) =>
+      (await sql<{ a: boolean }[]>`select app.simulacao_limite_atingido(${rest}::uuid, ${conversationId}::uuid) as a`)[0]!.a
+    await db.insert(auditLog).values({
+      restaurantId, atorTipo: 'sistema', acao: 'orcamento.sem_saldo_simulacao', entidade: 'conversation', entidadeId: conversationId,
+      createdAt: new Date('2025-01-01T00:00:00Z'),
+    })
+    expect(await limite(restaurantId)).toBe(false)
+    expect((await mensagensSimuladas(db, { ...p, conversationId, desdeId: 0 }))!.limiteSimulacao).toBe(false)
+    // com mensagem do cliente e auditoria posterior: true; mas só no restaurante certo
+    await enviarMensagemSimulada(db, { ...p, conversationId, texto: 'oi' }, enqueue)
+    await db.insert(auditLog).values({ restaurantId, atorTipo: 'sistema', acao: 'orcamento.sem_saldo_simulacao', entidade: 'conversation', entidadeId: conversationId, createdAt: new Date(Date.now() + 60_000) })
+    expect(await limite(restaurantId)).toBe(true)
+    const { restaurantId: outro } = await seedRestaurant(db)
+    expect(await limite(outro)).toBe(false)
+  })
+
   it('fidelidade de produção: tudo funciona conectado como web_app', async () => {
     await setupPgbossRoles()
     const { restaurantId, dono } = await setup()
