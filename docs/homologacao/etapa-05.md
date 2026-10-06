@@ -75,3 +75,4 @@ Os evals de composição do cardápio (sem custo) rodam no `pnpm test`. Com cré
 - Erro do OpenRouter aparece em **Ver detalhes** do simulador. Crédito zerado ou modelo sem ZDR: ver `docs/homologacao/etapa-02b.md`, "Se a triagem falhar".
 - Limite de gastos de IA atingido (triagem ou leitura): ajuste `budget_limits` como em `docs/homologacao/etapa-02c.md`.
 - Importação parada em "Lendo o cardápio…": confira se o worker está rodando com `AI_INGEST_MODELS`; ao reiniciar, ele retoma ou marca a importação com erro.
+- Item parecido respondido como se fosse o pedido (ex.: "tem coca?" → *Cocada*): a busca tolera erros de digitação, então nomes muito curtos podem casar com outro item. Cadastre como o cliente chama o produto em **outros nomes** (ex.: "coca" no refrigerante).
