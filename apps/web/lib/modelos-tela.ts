@@ -18,7 +18,7 @@ export const ROTULOS_MODELO: Record<ChaveModelo, { titulo: string; quando: strin
   escolher_unidade: { titulo: 'Pedir a unidade', quando: 'Texto da lista enviada quando há mais de 3 unidades.' },
   escolher_unidade_aviso: { titulo: 'Pedir a unidade do aviso', quando: 'Texto da lista enviada quando o cliente avisa que vai e não diz a unidade.' },
   data_nao_entendida: { titulo: 'Data não entendida', quando: 'A IA não entendeu o dia da pergunta.' },
-  lista_expirada: { titulo: 'Lista vencida', quando: 'O cliente toca numa lista antiga (mais de 30 minutos).' },
+  lista_expirada: { titulo: 'Lista vencida', quando: 'O cliente toca numa lista antiga (mais de 30 minutos; 60 na lista de um pedido de evento).' },
   lacuna: { titulo: 'Ainda não sabe responder', quando: 'Não há informação cadastrada; a pergunta vai para "Sem resposta".' },
   em_breve: { titulo: 'Serviço em breve', quando: 'Pergunta sobre o cardápio (próxima etapa).' },
   aviso_registrado: { titulo: 'Aviso anotado', quando: 'O cliente avisa que vai a uma unidade e o aviso é registrado.' },

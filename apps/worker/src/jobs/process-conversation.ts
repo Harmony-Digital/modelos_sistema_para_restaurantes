@@ -401,7 +401,9 @@ function decisaoAtendimento(r: ResultadoAtendimento, now: Date, pergunta: string
     : r.lista && r.pendente.length
       ? {
         tipo: 'unidade', pergunta, perguntaEnviada: r.lista.corpo.slice(0, MAX_PERGUNTA_ENVIADA), itens: r.pendente,
-        opcoes: r.lista.opcoes.map((o) => o.id), expiraEm: expira(PENDENTE_MIN),
+        opcoes: r.lista.opcoes.map((o) => o.id),
+        // a lista que espera a unidade do pedido de evento vale o mesmo que as outras perguntas da coleta
+        expiraEm: expira(r.pendente.some((i) => i.servico === 'evento') ? PENDENTE_EVENTO_MIN : PENDENTE_MIN),
       }
       : r.perguntarPessoas
         ? {

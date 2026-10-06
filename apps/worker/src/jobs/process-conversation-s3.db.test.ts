@@ -420,6 +420,17 @@ describe('S3 no worker', () => {
     expect(await acoesAudit()).toHaveLength(0)
   })
 
+  it('lista de unidades aberta por pedido de evento vale 60 minutos (a do S1 segue com 30)', async () => {
+    const { restaurantId } = await setup(4)
+    const conv = await receive(restaurantId, 'quero fazer um evento')
+    await processConversation(deps(fakeLlm([triagem(ev())]).llm, fakeWa()), conv)
+    expect((await conversa(conv)).pendente).toMatchObject({ tipo: 'unidade', expiraEm: '2026-10-05T18:00:00.000Z' })
+    const conv2 = await receive(restaurantId, 'que horas abre?', null, 'bia')
+    const s1 = ev({ servico: 'horario_unidades', tipo: 'horario_dia', data: 'hoje' })
+    await processConversation(deps(fakeLlm([triagem(s1)]).llm, fakeWa()), conv2)
+    expect((await conversa(conv2)).pendente).toMatchObject({ tipo: 'unidade', expiraEm: '2026-10-05T17:30:00.000Z' })
+  })
+
   it('pendente de evento vencido: a triagem roda sem a pergunta pendente', async () => {
     const { restaurantId } = await setup()
     const conv = await receive(restaurantId, 'quero fazer um evento na asa sul')
