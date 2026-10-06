@@ -1,15 +1,10 @@
+import Link from 'next/link'
+import { emReais, formatarUsd } from '@atd/core/gastos'
+import { usdParaCampo } from '@/lib/gastos-tela'
+import type { RotuloProvedor } from '@/lib/provedor-ia'
+
 type Periodos = { dia: string | null; mes: string | null }
-export type Gastos = { ia: Periodos; whatsapp: Periodos }
-
-const usd4 = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'USD', minimumFractionDigits: 4, maximumFractionDigits: 4 })
-const usd2 = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
-/** Centavos de centavo importam no dia a dia (IA custa frações de centavo): 4 casas abaixo de US$ 1, 2 casas acima. */
-export function formatUsd(valor: string | null): string {
-  const n = Number(valor ?? 0)
-  // NBSP do Intl vira espaço comum: mesmo texto na tela e nos testes.
-  return (Math.abs(n) < 1 ? usd4 : usd2).format(n).replace(/ /g, ' ')
-}
+export type Gastos = { ia: Periodos; simulacao: Periodos; whatsapp: Periodos }
 
 /** Soma valores numeric (até 6 casas) em micro-dólares inteiros, sem erro de ponto flutuante. */
 function somar(...valores: (string | null)[]): string {
@@ -23,13 +18,25 @@ function somar(...valores: (string | null)[]): string {
   return `${s.slice(0, -6)}.${s.slice(-6)}`
 }
 
-const linhas = [
-  { chave: 'ia', rotulo: 'IA', detalhe: 'OpenRouter' },
-  { chave: 'whatsapp', rotulo: 'WhatsApp', detalhe: 'API oficial' },
-] as const
+/** US$ em cima, R$ (US$ × cotação, só exibição) embaixo. */
+function Valor(props: { usd: string | null; cotacao: string; forte?: boolean }) {
+  const usd = somar(props.usd)
+  return (
+    <>
+      <span className={props.forte ? 'block font-display font-semibold text-foreground' : 'block text-foreground'}>{formatarUsd(usd)}</span>
+      <span className="block text-xs text-muted-foreground">{emReais(usd, props.cotacao)}</span>
+    </>
+  )
+}
 
-export function SpendCard(props: { gastos: Gastos }) {
-  const { ia, whatsapp } = props.gastos
+const celula = 'py-2 text-right align-top break-words'
+
+export function SpendCard(props: { gastos: Gastos; cotacao: string; provedor: RotuloProvedor }) {
+  const { ia, simulacao, whatsapp } = props.gastos
+  const linhas = [
+    { chave: 'ia', rotulo: 'IA (clientes)', detalhe: props.provedor, valores: ia },
+    { chave: 'whatsapp', rotulo: 'WhatsApp', detalhe: 'API oficial', valores: whatsapp },
+  ] as const
   return (
     <section aria-labelledby="gastos-titulo" className="min-w-0 rounded-lg border border-border bg-card p-4">
       <h2 id="gastos-titulo" className="text-sm text-muted-foreground">Gastos</h2>
@@ -49,23 +56,35 @@ export function SpendCard(props: { gastos: Gastos }) {
         <tbody>
           {linhas.map((l) => (
             <tr key={l.chave} className="border-t border-border">
-              <th scope="row" className="py-2 pr-2 text-left font-medium text-foreground">
+              <th scope="row" className="py-2 pr-2 text-left align-top font-medium text-foreground">
                 {l.rotulo}
                 <span className="block text-xs font-normal text-muted-foreground">{l.detalhe}</span>
               </th>
-              <td className="py-2 text-right break-words text-foreground">{formatUsd(props.gastos[l.chave].dia)}</td>
-              <td className="py-2 pl-2 text-right break-words text-foreground">{formatUsd(props.gastos[l.chave].mes)}</td>
+              <td className={celula}><Valor usd={l.valores.dia} cotacao={props.cotacao} /></td>
+              <td className={`${celula} pl-2`}><Valor usd={l.valores.mes} cotacao={props.cotacao} /></td>
             </tr>
           ))}
+          <tr className="border-t border-border">
+            <th scope="row" className="py-2 pr-2 text-left align-top font-display font-semibold text-foreground">Total</th>
+            <td className={celula}><Valor usd={somar(ia.dia, whatsapp.dia)} cotacao={props.cotacao} forte /></td>
+            <td className={`${celula} pl-2`}><Valor usd={somar(ia.mes, whatsapp.mes)} cotacao={props.cotacao} forte /></td>
+          </tr>
         </tbody>
         <tfoot>
-          <tr className="border-t border-border">
-            <th scope="row" className="pt-2 pr-2 text-left font-display font-semibold text-foreground">Total</th>
-            <td className="pt-2 text-right font-display font-semibold break-words text-foreground">{formatUsd(somar(ia.dia, whatsapp.dia))}</td>
-            <td className="pt-2 pl-2 text-right font-display font-semibold break-words text-foreground">{formatUsd(somar(ia.mes, whatsapp.mes))}</td>
+          <tr className="border-t border-dashed border-border">
+            <th scope="row" className="pt-2 pr-2 text-left align-top font-medium text-foreground">
+              Simulação
+              <span className="block text-xs font-normal text-muted-foreground">Testes no simulador, fora do total</span>
+            </th>
+            <td className={`${celula} pb-0`}><Valor usd={simulacao.dia} cotacao={props.cotacao} /></td>
+            <td className={`${celula} pb-0 pl-2`}><Valor usd={simulacao.mes} cotacao={props.cotacao} /></td>
           </tr>
         </tfoot>
       </table>
+      <p className="mt-3 text-xs text-muted-foreground">Cotação usada: US$ 1 = R$ {usdParaCampo(props.cotacao)}</p>
+      <Link href="/mais/gastos" className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 [@media(hover:hover)]:hover:underline">
+        Ver gastos e limites
+      </Link>
     </section>
   )
 }
