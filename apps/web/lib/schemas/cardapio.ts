@@ -1,9 +1,9 @@
 import { z } from 'zod'
+import { TAGS_CARDAPIO, type TagCardapio } from '@atd/core/s4'
 import { reaisParaCentavos } from '@/lib/dinheiro'
 
-/** Etiquetas do cardápio (chips). Os limites repetem os checks do banco (0026) e do rascunho de importação. */
-export const TAGS_CARDAPIO = ['vegano', 'vegetariano', 'sem_gluten', 'sem_lactose', 'infantil', 'bebida', 'sobremesa'] as const
-export type TagCardapio = (typeof TAGS_CARDAPIO)[number]
+/** Etiquetas do cardápio (chips) vêm do domínio. Os limites repetem os checks do banco (0026) e do rascunho de importação. */
+export { TAGS_CARDAPIO, type TagCardapio }
 export const ROTULO_TAG: Record<TagCardapio, string> = {
   vegano: 'Vegano',
   vegetariano: 'Vegetariano',
@@ -64,3 +64,10 @@ export const arquivoMetaSchema = z.object({
   unitId: z.union([z.literal(''), z.uuid('Escolha uma unidade da lista')]).transform((v) => (v === '' ? null : v)),
 })
 export type ArquivoMetaForm = z.input<typeof arquivoMetaSchema>
+
+/** Opções da confirmação da importação: usar o PDF/foto importado como arquivo de envio (geral ou de uma unidade). */
+export const opcoesImportacaoSchema = z.object({
+  usarComoArquivoDeEnvio: z.boolean(),
+  unitIdArquivo: z.uuid('Escolha uma unidade da lista').nullable(),
+})
+export type OpcoesImportacao = z.input<typeof opcoesImportacaoSchema>

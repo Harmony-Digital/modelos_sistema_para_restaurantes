@@ -1,10 +1,8 @@
 'use server'
-import { createHash } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { ativarArquivo, listarCardapio, registrarArquivoCardapio, salvarCategoria, salvarExcecaoItem, salvarItem, type ErroPainel, type ResultadoPainel } from '@atd/db'
 import { actionErrorFromZod, type ActionResult } from '@/lib/action-result'
-import { LIMITE_ARQUIVO_BYTES, validarArquivoCardapio } from '@/lib/arquivo-cardapio'
 import { requireStaff } from '@/lib/dal'
 import { MENSAGEM_ERRO_PAINEL } from '@/lib/painel-erros'
 import {
@@ -12,6 +10,7 @@ import {
   type CategoriaForm, type ExcecaoForm, type ItemForm,
 } from '@/lib/schemas/cardapio'
 import { getDb } from '@/lib/server/db'
+import { arquivoDoForm, ERRO_SEM_ARQUIVO, ERRO_STORAGE, lerArquivoCardapio, subirArquivo } from '@/lib/server/upload-arquivo'
 import { createClient } from '@/lib/supabase/server'
 
 const GESTAO: ['dono', 'gerente'] = ['dono', 'gerente']
@@ -69,36 +68,21 @@ export async function salvarExcecaoAction(input: ExcecaoForm): Promise<ActionRes
   return resultado(r, { semPermissao: SEM_PERMISSAO_UNIDADE })
 }
 
-const sha256 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
-const jaExiste = (e: { statusCode?: string | number; message?: string }) => String(e.statusCode) === '409' || /already exists/i.test(e.message ?? '')
-
-/**
- * Upload do cardápio: tipo, tamanho e sha256 são conferidos aqui (nunca confiar no navegador) e o objeto vai ao
- * Storage com a sessão do próprio usuário (policies por papel). O nome é o sha256: mesmo conteúdo, mesmo objeto.
- */
+/** Upload do cardápio (validação e Storage em `lib/server/upload-arquivo`). */
 export async function enviarArquivoAction(fd: FormData): Promise<ActionResult<{ id: string }>> {
   const s = await requireStaff(GESTAO)
   const meta = arquivoMetaSchema.safeParse({ titulo: fd.get('titulo') ?? '', unitId: fd.get('unitId') ?? '' })
-  const arquivo = fd.get('arquivo')
+  const arquivo = arquivoDoForm(fd.get('arquivo'))
   const erros: Record<string, string> = meta.success ? {} : actionErrorFromZod(meta.error).fieldErrors
-  const semArquivo = !(arquivo instanceof File) || (arquivo.size === 0 && arquivo.name === '')
-  if (semArquivo) erros.arquivo = 'Escolha o arquivo do cardápio.'
-  if (!meta.success || semArquivo) return { ok: false, fieldErrors: erros }
-  if (arquivo.size > LIMITE_ARQUIVO_BYTES) return { ok: false, fieldErrors: { arquivo: 'O arquivo passa de 20 MB. Envie um menor.' } }
+  if (!arquivo) erros.arquivo = ERRO_SEM_ARQUIVO
+  if (!meta.success || !arquivo) return { ok: false, fieldErrors: erros }
 
-  const bytes = new Uint8Array(await arquivo.arrayBuffer())
-  const v = validarArquivoCardapio(bytes)
-  if (!v.ok) return { ok: false, fieldErrors: { arquivo: v.erro } }
-
-  const hash = sha256(bytes)
-  const objeto = `${s.restaurantId}/${hash}.${v.ext}`
-  const supabase = await createClient()
-  const { error } = await supabase.storage.from('cardapio').upload(objeto, bytes, { contentType: v.mime, upsert: false })
-  if (error && !jaExiste(error as { statusCode?: string; message?: string })) {
-    return { ok: false, formError: 'Não foi possível enviar o arquivo agora. Tente de novo.' }
-  }
+  const a = await lerArquivoCardapio(arquivo)
+  if (!a.ok) return { ok: false, fieldErrors: { arquivo: a.erro } }
+  const enviado = await subirArquivo('cardapio', s.restaurantId, a)
+  if (!enviado.ok) return { ok: false, formError: ERRO_STORAGE }
   const r = await registrarArquivoCardapio(getDb(), s.claims, {
-    unitId: meta.data.unitId, titulo: meta.data.titulo, storagePath: `cardapio/${objeto}`, mime: v.mime, tamanho: bytes.length, sha256: hash,
+    unitId: meta.data.unitId, titulo: meta.data.titulo, storagePath: enviado.storagePath, mime: a.mime, tamanho: a.bytes.length, sha256: a.sha256,
   })
   return resultado(r, { semPermissao: SEM_PERMISSAO_UNIDADE })
 }
