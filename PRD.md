@@ -136,7 +136,7 @@ Convenções:
 
 | Tabela | Campos | Índices / restrições |
 |---|---|---|
-| `attendance_notices` | id, unit_id, customer_id (nullable, `ON DELETE SET NULL`), nome (opcional, só no painel), data, pessoas (1–60), horario_aprox (texto curto, ≤ 40), status (`ativo`/`cancelado`), origem (`ia`/`painel`), simulado bool, criado_por (nullable), anonimizado bool | **único parcial** `(customer_id, unit_id, data) WHERE status='ativo'` (novo aviso do mesmo cliente/unidade/dia **atualiza**); `(unit_id, data)` |
+| `attendance_notices` | id, unit_id, customer_id (nullable, `ON DELETE SET NULL`), nome (opcional: nome de perfil do WhatsApp ou digitado no painel), data, pessoas (1–60), horario_aprox (texto curto, ≤ 40), status (`ativo`/`cancelado`), origem (`ia`/`painel`), simulado bool, criado_por (nullable), anonimizado bool | **único parcial** `(customer_id, unit_id, data) WHERE status='ativo'` (novo aviso do mesmo cliente/unidade/dia **atualiza**); `(unit_id, data)` |
 
 ### 3.3 Eventos (S3)
 
@@ -315,7 +315,7 @@ Primeira interação de cada cliente (e novamente após 12 meses — `privacy_no
 | Dado | Prazo | Ação |
 |---|---|---|
 | `messages` (conteúdo) | 90 dias | apagar |
-| `attendance_notices` | 30 dias após a data | anonimizar (mantém unidade, dia, pessoas) |
+| `attendance_notices` | 30 dias após a data | anonimizar (mantém unidade, dia, pessoas; limpa `nome` e `customer_id`) |
 | `event_requests` | 2 anos | anonimizar |
 | `ai_runs` | 13 meses | apagar (não contém conteúdo) |
 | `customers` sem interação | 12 meses | apagar em cascata |
@@ -325,7 +325,7 @@ Primeira interação de cada cliente (e novamente após 12 meses — `privacy_no
 **Pendente:** confirmar prazos com o restaurante/jurídico.
 
 ### 6.7 Direitos do titular (art. 18)
-Detectados pela triagem/pré-filtro ⇒ `data_subject_requests`. Identidade = o próprio número do WhatsApp. **Acesso:** resumo gerado automaticamente e enviado. **Exclusão:** confirmada pela equipe no painel ⇒ função de exclusão/anonimização em cascata. Prazo de 15 dias com alerta.
+Detectados pela triagem/pré-filtro ⇒ `data_subject_requests`. Identidade = o próprio número do WhatsApp. **Acesso:** resumo gerado automaticamente e enviado. **Exclusão:** confirmada pela equipe no painel ⇒ função de exclusão/anonimização em cascata (inclui limpar `attendance_notices.nome` dos avisos do titular, além do `customer_id`). Prazo de 15 dias com alerta.
 
 ### 6.8 Incidentes
 Runbook em `docs/runbooks/incidente-lgpd.md`: contenção, avaliação, comunicação à ANPD e aos titulares em **3 dias úteis** (Res. CD/ANPD nº 15/2024), registro.
@@ -436,6 +436,6 @@ Aprovado em [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-05-
 ## Adendo — Etapa 03 (05/10/2026)
 
 Aprovado em [docs/specs/2026-10-05-etapa-03-s2-design.md](docs/specs/2026-10-05-etapa-03-s2-design.md) (§9); prevalece sobre as seções citadas abaixo.
-- **§3.2 `attendance_notices`:** ganha `nome` (opcional, para avisos do painel), `simulado` (aviso de conversa simulada; nunca entra na previsão nem em contagens), `criado_por` (quem criou pelo painel) e `horario_aprox` como texto curto (≤ 40). Um aviso ativo por cliente/unidade/dia (índice único parcial); RLS por unidade, `mfa_required` restritiva, `update` só das colunas `status`/`updated_at` e sem reativar cancelado (migrations 0018–0021).
+- **§3.2 `attendance_notices`:** ganha `nome` (opcional: nome de perfil do WhatsApp, nos avisos da IA, ou digitado no painel; é dado pessoal — a exclusão por direito do titular e a anonimização da retenção devem limpá-lo), `simulado` (aviso de conversa simulada; nunca entra na previsão nem em contagens), `criado_por` (quem criou pelo painel) e `horario_aprox` como texto curto (≤ 40). Um aviso ativo por cliente/unidade/dia (índice único parcial); RLS por unidade, `mfa_required` restritiva, `update` só das colunas `status`/`updated_at` e sem reativar cancelado (migrations 0018–0021).
 - **§4.3 (S2):** resolvido como o S1 — a triagem (`triage-v3`, com `pessoas` e `horario` por item) extrai e o código resolve. `registrar_aviso_presenca`/`cancelar_aviso_presenca` viram **funções do domínio** chamadas pelo worker, não tools de LLM; o laço de tools do modelo principal fica para o primeiro serviço que precisar. Sem confirmação: registra direto e responde com resumo ("Anotado"/"Atualizei"). Data ausente = hoje; pessoas ausente ⇒ pergunta pendente ("Para quantas pessoas?", respondida sem nova chamada à IA); unidade ausente ⇒ lista do S1 (ou assume a única ativa). Acima de 60 pessoas ⇒ mensagem de grupo grande.
 - **Painel:** tela **Previsão** (barra inferior) com avisos por unidade e dia (hoje até +30), "Novo aviso" e "Cancelar" para dono/gerente (com auditoria na mesma transação, sem PII no diff), leitura para atendente; cartão **Previstos hoje** no Início. Textos dos avisos editáveis em Mensagens.

@@ -119,6 +119,7 @@ Spec aprovada: [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-
 - [ ] Refinamento · Plano detalhado
 - [ ] Telas de limites (IA e WhatsApp), alertas, relatórios de custo; custo de simulação mostrado à parte (ai_runs.simulado)
 - [ ] Direitos do titular (acesso/exclusão), configuração de retenção, cron de retenção; apagar simulações com mais de 7 dias (spec 02 §5.3)
+- [ ] Exclusão por direito do titular e anonimização da retenção limpam `attendance_notices.nome` (nome de perfil do WhatsApp ou digitado no painel) — achado da revisão final da Etapa 03
 - [ ] Teste de estresse do teto · Homologação
 
 ## Etapa 09 — Go-live
