@@ -1,9 +1,10 @@
 import { z } from 'zod'
-import { redactPii, SERVICOS, TIPOS_S1, TIPOS_S2 } from '@atd/core'
+import { redactPii, SERVICOS, TIPOS_S1, TIPOS_S2, TIPOS_S3 } from '@atd/core'
 import type { JsonCallResult, LlmClient } from './openrouter.ts'
 import { TRIAGE_PROMPT_VERSION, triageJsonSchema, triageSystemPrompt } from './prompts/triage-v1.ts'
 import { TRIAGE_V2_PROMPT_VERSION, triageV2JsonSchema, triageV2SystemPrompt } from './prompts/triage-v2.ts'
 import { TRIAGE_V3_PROMPT_VERSION, triageV3JsonSchema, triageV3SystemPrompt } from './prompts/triage-v3.ts'
+import { TRIAGE_V4_PROMPT_VERSION, triageV4JsonSchema, triageV4SystemPrompt } from './prompts/triage-v4.ts'
 
 export const INTENTS = ['horario_unidades', 'aviso_presenca', 'evento', 'cardapio', 'humano', 'lgpd', 'multiplo', 'fora_escopo'] as const
 export type Intent = (typeof INTENTS)[number]
@@ -102,5 +103,50 @@ export function triageV3(
     jsonSchema: triageV3JsonSchema,
     parse: parseTriageV3,
     maxTokens: 400,
+  })
+}
+
+// ------------------------------------------------------------- v4: + eventos e pergunta pendente (Etapa 04)
+
+const itemV4Schema = z.object({
+  servico: z.enum(SERVICOS),
+  tipo: z.enum([...TIPOS_S1, ...TIPOS_S2, ...TIPOS_S3]).nullable(),
+  unidade: cortar(120),
+  data: cortar(60),
+  tema: cortar(120),
+  pessoas: z.number().int().min(1).max(1000).nullable(),
+  horario: cortar(40),
+  // acima de 1000 passa: o core responde o limite (evento_convidados_invalido)
+  convidados: z.number().int().min(1).max(10000).nullable(),
+  tipoEvento: cortar(60),
+  espaco: cortar(60), // "*" = o cliente disse que tanto faz
+})
+const triageV4Schema = z.object({
+  itens: z.array(itemV4Schema).transform((a) => a.slice(0, 5)),
+  fora_escopo: z.boolean(),
+})
+export type TriageV4 = z.infer<typeof triageV4Schema>
+export { TRIAGE_V4_PROMPT_VERSION }
+
+export const parseTriageV4 = (raw: unknown): TriageV4 => triageV4Schema.parse(raw)
+
+/** Pergunta que fizemos ao cliente (texto nosso) e o que já foi validado do pedido (sem texto livre do cliente). */
+export type PendenteTriagem = { pergunta: string; conhecido: Record<string, string | number> }
+
+export function triageV4(
+  llm: LlmClient,
+  p: { models: string[]; restaurante: string; text: string; pendente?: PendenteTriagem },
+): Promise<JsonCallResult<TriageV4>> {
+  const blocoPendente = p.pendente
+    ? `<pergunta_pendente>\n${neutralize(p.pendente.pergunta)}\n</pergunta_pendente>\n<pedido_em_andamento>\n${neutralize(JSON.stringify(p.pendente.conhecido))}\n</pedido_em_andamento>\n`
+    : ''
+  return llm.completeJson({
+    models: p.models,
+    system: triageV4SystemPrompt(p.restaurante),
+    user: `${blocoPendente}<mensagem_cliente>\n${neutralize(redactPii(p.text))}\n</mensagem_cliente>`,
+    schemaName: 'triagem_v4',
+    jsonSchema: triageV4JsonSchema,
+    parse: parseTriageV4,
+    maxTokens: 450,
   })
 }

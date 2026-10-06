@@ -1,25 +1,22 @@
 /**
- * Evals S2 — camada 1: extração de avisos de presença (triage-v3) com modelo real via OpenRouter.
- * Uso: pnpm --filter @atd/ai eval:s2 [--modelos a,b,c] [--teto 0.50] [--triagem v3|v4]
- * Custo real, com teto por execução. Grava o relatório em evals/s2/resultados/AAAA-MM-DD-extracao.md.
+ * Evals S3 — camada 1: extração de pedidos de evento e respostas a pergunta pendente (triage-v4) com modelo real via OpenRouter.
+ * Uso: pnpm --filter @atd/ai eval:s3 [--modelos a,b,c] [--teto 0.50]
+ * Custo real, com teto por execução. Grava o relatório em evals/s3/resultados/AAAA-MM-DD-extracao.md.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import { createOpenRouterClient } from '../../src/openrouter.ts'
-import { triageV3, triageV4 } from '../../src/triage.ts'
+import { triageV4 } from '../../src/triage.ts'
 import { custoDaChamada } from '../s1/custo.ts'
 import { FRASES } from './casos.ts'
-import { extracaoCorretaS2 } from './comparar.ts'
-import { CONTEXTO, CONTEXTO_PEQUENO } from './fixture.ts'
+import { extracaoCorretaS3 } from './comparar.ts'
+import { CONTEXTO, ESPACOS } from './fixture.ts'
 
-const { values } = parseArgs({ options: { modelos: { type: 'string' }, triagem: { type: 'string', default: 'v3' }, teto: { type: 'string', default: '0.50' }, 'max-chamadas': { type: 'string', default: '500' } } })
+const { values } = parseArgs({ options: { modelos: { type: 'string' }, teto: { type: 'string', default: '0.50' }, 'max-chamadas': { type: 'string', default: '500' } } })
 const apiKey = process.env.OPENROUTER_API_KEY
 if (!apiKey) throw new Error('Defina OPENROUTER_API_KEY (no .env da raiz ou no ambiente)')
 const modelos = (values.modelos ?? process.env.AI_TRIAGE_MODELS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
 if (modelos.length === 0) throw new Error('Informe --modelos ou AI_TRIAGE_MODELS')
-const triagem = values.triagem
-if (triagem !== 'v3' && triagem !== 'v4') throw new Error('--triagem deve ser v3 ou v4')
-const extrair = triagem === 'v4' ? triageV4 : triageV3
 const teto = Number(values.teto)
 if (!(teto > 0)) throw new Error('--teto deve ser um valor em dólares maior que zero')
 
@@ -51,7 +48,7 @@ for (const modelo of modelos) {
       break
     }
     chamadas++
-    const r = await extrair(llm, { models: [modelo], restaurante: CONTEXTO.restaurante, text: caso.mensagem })
+    const r = await triageV4(llm, { models: [modelo], restaurante: CONTEXTO.restaurante, text: caso.mensagem, ...(caso.pendente ? { pendente: caso.pendente } : {}) })
     feitos++
     const usd = custoDaChamada(r.usage)
     custo += usd
@@ -61,8 +58,7 @@ for (const modelo of modelos) {
       erros.push(`- ${caso.id}: falha da chamada (${r.error})`)
       continue
     }
-    const ctx = caso.contexto === 'pequeno' ? CONTEXTO_PEQUENO : CONTEXTO
-    if (extracaoCorretaS2(caso.itens, r.data.itens, ctx, new Date(caso.agora))) acertos++
+    if (extracaoCorretaS3(caso.itens, r.data.itens, CONTEXTO, new Date(caso.agora), ESPACOS)) acertos++
     else erros.push(`- ${caso.id} "${caso.mensagem}": ${JSON.stringify(r.data.itens)}`)
   }
   if (feitos < FRASES.length || (100 * acertos) / Math.max(feitos, 1) < META) {
@@ -75,7 +71,7 @@ for (const modelo of modelos) {
 
 const hoje = new Date().toISOString().slice(0, 10)
 const relatorio = [
-  `# Evals S2 — extração de avisos, triagem ${triagem} (${hoje})`,
+  `# Evals S3 — extração de eventos (${hoje})`,
   '',
   `Frases: ${FRASES.length} · teto: US$ ${teto.toFixed(2)} · gasto: US$ ${gastoTotal.toFixed(4)}${motivos.length ? ' (REPROVADO/PARCIAL)' : ''}`,
   ...(motivos.length ? ['', ...motivos.map((m) => `**Falha do gate:** ${m}`)] : []),
