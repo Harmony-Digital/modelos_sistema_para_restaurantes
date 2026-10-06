@@ -141,6 +141,8 @@ export const espacoRascunhoSchema = z
     capacidadeMax: capacidade,
     descricao: z.string().trim().max(L.descricaoEspaco).nullable(),
     condicoes: z.string().trim().max(L.condicoes).nullable(),
+    /** só uma capacidade foi lida ("até N" ⇒ 1–N; "mínimo N" ⇒ N–N): a revisão pede conferência */
+    capacidadeIncompleta: z.boolean().optional(),
     incluir,
   })
   .refine((e) => e.capacidadeMin <= e.capacidadeMax, { message: 'mínimo maior que o máximo', path: ['capacidadeMin'] })

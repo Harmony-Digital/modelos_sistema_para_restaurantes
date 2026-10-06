@@ -60,8 +60,9 @@ function juntarItemCardapio(x: ItemCardapioImportacao, y: ItemCardapioImportacao
 }
 
 /**
- * Categorias por nome; itens por nome + unidade em todo o cardápio (o mesmo prato lido sob
- * outra categoria noutra foto não duplica). Preços diferentes viram `precoConflito`.
+ * Categorias por nome; itens por categoria + nome + unidade (como a aplicação, que chaveia por
+ * `categoria|nome`): homônimos em categorias diferentes ("Picanha" em Grelhados e em Executivos)
+ * continuam separados. O mesmo item na mesma categoria com preços diferentes vira `precoConflito`.
  * Categorias sem itens não são criadas.
  */
 export function juntarCardapio(
@@ -74,8 +75,9 @@ export function juntarCardapio(
   let total = 0
 
   for (const cat of [...(acumulado?.categorias ?? []), ...lote.categorias]) {
+    const kc = chave(cat.nome)
     for (const item of cat.itens) {
-      const ki = `${chave(item.nome)}|${chave(item.unidade)}`
+      const ki = `${kc}|${chave(item.nome)}|${chave(item.unidade)}`
       const pos = porItem.get(ki)
       if (pos) {
         const lista = categorias[pos[0]]!.itens
@@ -83,7 +85,6 @@ export function juntarCardapio(
         continue
       }
       if (total >= L.itens) continue
-      const kc = chave(cat.nome)
       let ci = porCategoria.get(kc)
       if (ci === undefined) {
         if (categorias.length >= L.categorias) continue
@@ -165,9 +166,14 @@ function juntarExcecao(x: ExcecaoHorarioRascunho, y: ExcecaoHorarioRascunho): Ex
 function juntarUnidadeHorario(x: UnidadeHorarioRascunho, y: UnidadeHorarioRascunho): UnidadeHorarioRascunho {
   const dias = new Map<number, DiaHorarioRascunho>()
   for (const d of [...x.semana, ...y.semana]) {
-    const atual = dias.get(d.dia) ?? { dia: d.dia, turnos: [], conflito: false }
-    const t = juntarTurnos(atual.turnos, d.turnos)
-    dias.set(d.dia, { dia: d.dia, turnos: t.turnos, conflito: atual.conflito || d.conflito || t.conflito })
+    const atual = dias.get(d.dia)
+    if (atual && (atual.turnos.length === 0) !== (d.turnos.length === 0)) {
+      // fechado (turnos []) × aberto: mantém o acumulado e pede conferência, como nas exceções
+      dias.set(d.dia, { ...atual, conflito: true })
+      continue
+    }
+    const t = juntarTurnos(atual?.turnos ?? [], d.turnos)
+    dias.set(d.dia, { dia: d.dia, turnos: t.turnos, conflito: (atual?.conflito ?? false) || d.conflito || t.conflito })
   }
   const excecoes = new Map<string, ExcecaoHorarioRascunho>()
   for (const e of [...x.excecoes, ...y.excecoes]) {
@@ -202,7 +208,10 @@ export function juntarHorarios(acumulado: RascunhoHorarios | null, lote: Rascunh
 
 // ── Espaços ──
 
-/** Espaços por nome + unidade; o primeiro prevalece e o lote só completa descrição e condições. */
+/**
+ * Espaços por nome + unidade; o primeiro prevalece e o lote só completa descrição e condições.
+ * Exceção: capacidade incompleta no acumulado é trocada pela capacidade completa do lote.
+ */
 export function juntarEspacos(acumulado: RascunhoEspacos | null, lote: RascunhoEspacos): RascunhoEspacos {
   const espacos: EspacoRascunho[] = []
   const pos = new Map<string, number>()
@@ -211,7 +220,10 @@ export function juntarEspacos(acumulado: RascunhoEspacos | null, lote: RascunhoE
     const i = pos.get(k)
     if (i !== undefined) {
       const x = espacos[i]!
-      espacos[i] = { ...x, descricao: x.descricao ?? e.descricao, condicoes: x.condicoes ?? e.condicoes }
+      const base = x.capacidadeIncompleta && !e.capacidadeIncompleta
+        ? (({ capacidadeIncompleta: _, ...resto }) => ({ ...resto, capacidadeMin: e.capacidadeMin, capacidadeMax: e.capacidadeMax }))(x)
+        : x
+      espacos[i] = { ...base, descricao: x.descricao ?? e.descricao, condicoes: x.condicoes ?? e.condicoes }
     } else if (espacos.length < L.espacos) pos.set(k, espacos.push({ ...e }) - 1)
   }
   return { espacos }

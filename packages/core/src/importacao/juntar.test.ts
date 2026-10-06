@@ -6,6 +6,7 @@ import {
   juntarInformacoes,
   juntarSoPrecos,
   rascunhoCardapioImportacaoSchema,
+  rascunhoEspacosSchema,
   rascunhoHorariosSchema,
   rascunhoInformacoesSchema,
   type RascunhoCardapioImportacao,
@@ -50,10 +51,25 @@ describe('juntarCardapio', () => {
     expect(rascunhoCardapioImportacaoSchema.safeParse(r).success).toBe(true)
   })
 
-  it('o mesmo item em outra categoria na segunda foto não duplica', () => {
-    const r = juntarCardapio(cardapio(['Carnes', [itemC()]]), cardapio(['Pratos', [itemC({ precoCentavos: 6490 })]]))
-    expect(r.categorias.flatMap((c) => c.itens)).toHaveLength(1)
-    expect(r.categorias.map((c) => c.nome)).toEqual(['Carnes'])
+  it('I1: itens homônimos em categorias diferentes continuam separados e sem conflito de preço', () => {
+    const r = juntarCardapio(cardapio(['Grelhados', [itemC({ precoCentavos: 8900 })]]), cardapio(['Executivos', [itemC({ precoCentavos: 4900 })]]))
+    expect(r.categorias.map((c) => [c.nome, c.itens.map((i) => [i.nome, i.precoCentavos, i.precoConflito])])).toEqual([
+      ['Grelhados', [['Picanha', 8900, undefined]]],
+      ['Executivos', [['Picanha', 4900, undefined]]],
+    ])
+  })
+
+  it('I1: o mesmo vale dentro de um único lote (primeira leitura)', () => {
+    const r = juntarCardapio(null, cardapio(['Grelhados', [itemC({ precoCentavos: 8900 })]], ['Executivos', [itemC({ precoCentavos: 4900 })]]))
+    expect(r.categorias.flatMap((c) => c.itens)).toHaveLength(2)
+    expect(r.categorias.flatMap((c) => c.itens).every((i) => i.precoConflito === undefined)).toBe(true)
+  })
+
+  it('I1: mesmo item na mesma categoria (nome normalizado) em lotes diferentes junta com conflito', () => {
+    const r = juntarCardapio(cardapio(['Grelhados', [itemC({ precoCentavos: 8900 })]]), cardapio([' grelhados', [itemC({ nome: 'PICANHA', precoCentavos: 9900 })]]))
+    expect(r.categorias).toHaveLength(1)
+    expect(r.categorias[0]!.itens).toHaveLength(1)
+    expect(r.categorias[0]!.itens[0]!.precoConflito).toEqual([8900, 9900])
   })
 
   it('itens com o mesmo nome em unidades diferentes continuam separados', () => {
@@ -203,6 +219,20 @@ describe('juntarHorarios', () => {
     expect(r.unidades.map((x) => x.unidade)).toEqual([null, 'Centro'])
   })
 
+  it('I3: dia fechado num lote e aberto noutro marca conflito e mantém o acumulado', () => {
+    const fechadoPrimeiro = juntarHorarios({ unidades: [u({ semana: [dia(1, [])] })] }, { unidades: [u({ semana: [dia(1, [t('11:00', '15:00')])] })] })
+    expect(fechadoPrimeiro.unidades[0]!.semana).toEqual([dia(1, [], true)])
+    const abertoPrimeiro = juntarHorarios({ unidades: [u({ semana: [dia(1, [t('11:00', '15:00')])] })] }, { unidades: [u({ semana: [dia(1, [])] })] })
+    expect(abertoPrimeiro.unidades[0]!.semana).toEqual([dia(1, [t('11:00', '15:00')], true)])
+    expect(rascunhoHorariosSchema.safeParse(fechadoPrimeiro).success).toBe(true)
+    expect(juntarHorarios(fechadoPrimeiro, fechadoPrimeiro)).toEqual(fechadoPrimeiro)
+  })
+
+  it('dia fechado nos dois lotes continua fechado e sem conflito', () => {
+    const r = juntarHorarios({ unidades: [u({ semana: [dia(0, [])] })] }, { unidades: [u({ semana: [dia(0, [])] })] })
+    expect(r.unidades[0]!.semana).toEqual([dia(0, [])])
+  })
+
   it('é idempotente, inclusive com conflito', () => {
     const a = juntarHorarios(
       { unidades: [u({ semana: [dia(5, [t('18:00', '02:00')])] })] },
@@ -220,6 +250,16 @@ describe('juntarEspacos', () => {
   it('dedupe por nome e unidade; campos vazios completados pela outra leitura', () => {
     const r = juntarEspacos({ espacos: [e()] }, { espacos: [e({ nome: 'salao vip', descricao: 'Com ar', capacidadeMax: 50 }), e({ unidade: 'Praia' })] })
     expect(r.espacos).toEqual([e({ descricao: 'Com ar' }), e({ unidade: 'Praia' })])
+  })
+  it('I2: capacidade incompleta é aceita no schema e uma leitura completa posterior a substitui', () => {
+    const incompleto = e({ capacidadeMin: 1, capacidadeMax: 40, capacidadeIncompleta: true })
+    expect(rascunhoEspacosSchema.parse({ espacos: [incompleto] }).espacos[0]!.capacidadeIncompleta).toBe(true)
+    const r = juntarEspacos({ espacos: [incompleto] }, { espacos: [e({ capacidadeMin: 20, capacidadeMax: 40 })] })
+    expect(r.espacos).toEqual([e({ capacidadeMin: 20, capacidadeMax: 40 })])
+    // completo primeiro: a incompleta não o rebaixa
+    expect(juntarEspacos({ espacos: [e()] }, { espacos: [incompleto] }).espacos).toEqual([e()])
+    // duas incompletas: fica a primeira, ainda marcada
+    expect(juntarEspacos({ espacos: [incompleto] }, { espacos: [e({ capacidadeMin: 12, capacidadeMax: 12, capacidadeIncompleta: true })] }).espacos).toEqual([incompleto])
   })
   it('é idempotente', () => {
     const a = juntarEspacos({ espacos: [e()] }, { espacos: [e({ nome: 'Varanda', condicoes: 'Sinal de 30%' })] })
