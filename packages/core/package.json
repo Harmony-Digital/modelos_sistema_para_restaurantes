@@ -11,7 +11,8 @@
     "./s3": "./src/s3/index.ts",
     "./s4": "./src/s4/index.ts",
     "./conversa": "./src/conversa/index.ts",
-    "./gastos": "./src/gastos/index.ts"
+    "./gastos": "./src/gastos/index.ts",
+    "./importacao": "./src/importacao/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"
