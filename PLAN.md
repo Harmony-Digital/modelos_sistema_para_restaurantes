@@ -111,7 +111,7 @@ Spec aprovada: [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-
 - [ ] Pendências de produção da Etapa 05 (não bloqueiam a homologação local): upload acima de ~4,5 MB na Vercel precisa ir por URL assinada direta ao Storage (validação depois do envio); conferir buckets privados e policies de Storage no Supabase hospedado; escolher `AI_INGEST_MODELS` pelo `eval:ingestao` e calibrar a estimativa de reserva da leitura
 
 ## Etapa 06 — Atendimento humano + áudio
-- [ ] Refinamento · Plano detalhado
+- [x] Refinamento · Plano detalhado (06/10/2026) — spec [docs/specs/2026-10-06-etapa-06-inbox-audio-design.md](docs/specs/2026-10-06-etapa-06-inbox-audio-design.md); plano enxuto [docs/plans/etapa-06-inbox-audio.md](docs/plans/etapa-06-inbox-audio.md) (7 tarefas, 4 blocos; e-mail/push e templates fora; commit 09e0853)
 - [ ] Inbox em tempo real (Broadcast privado + RLS), assumir/devolver, notificações
 - [ ] Handoff por frustração/falhas; horário de atendimento humano
 - [ ] Áudio: download Meta, limite de duração, STT, descarte do arquivo
