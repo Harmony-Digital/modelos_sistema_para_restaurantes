@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { chamarAcao } from '@/lib/action-result'
 import { URL_IMPORTAR, urlImportacao } from '@/lib/importacao'
-import { LIMITE_ARQUIVO_BYTES } from '@/lib/arquivo-cardapio'
+import { LIMITE_ARQUIVO_BYTES, LIMITE_ARQUIVO_MB, MENSAGEM_LIMITE } from '@/lib/arquivo-cardapio'
 
 export type StatusImportacaoTela = 'enviado' | 'processando' | 'rascunho' | 'aprovado' | 'rejeitado' | 'erro'
 export type ImportacaoTela = { id: string; origem: 'csv' | 'arquivo'; mime: string; status: StatusImportacaoTela; criadoEm: string }
@@ -154,7 +154,7 @@ function ImportarArquivo() {
     const arquivo = entrada.current?.files?.[0]
     setErroGeral(undefined)
     if (!arquivo) return setErro('Escolha o arquivo do cardápio.')
-    if (arquivo.size > LIMITE_ARQUIVO_BYTES) return setErro('O arquivo passa de 20 MB. Envie um menor.')
+    if (arquivo.size > LIMITE_ARQUIVO_BYTES) return setErro(MENSAGEM_LIMITE)
     emAndamento.current = true
     setEnviando(true)
     setErro(undefined)
@@ -183,7 +183,7 @@ function ImportarArquivo() {
       </h2>
       <p className="text-sm text-muted-foreground">A IA lê o arquivo e monta uma lista de itens para você revisar.</p>
       {erroGeral && <p role="alert" className="text-sm text-destructive">{erroGeral}</p>}
-      <Field id="importar-arquivo" label="PDF ou foto" hint="PDF, JPEG, PNG ou WebP, até 20 MB." error={erro} required>
+      <Field id="importar-arquivo" label="PDF ou foto" hint={`PDF, JPEG, PNG ou WebP, até ${LIMITE_ARQUIVO_MB} MB.`} error={erro} required>
         {(a) => <input {...a} ref={entrada} type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className={classeArquivo} />}
       </Field>
       <SubmitButton pending={enviando} pendingText="Enviando…">Enviar para leitura</SubmitButton>
