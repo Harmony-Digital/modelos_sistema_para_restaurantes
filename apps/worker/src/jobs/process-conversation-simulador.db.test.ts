@@ -1,7 +1,9 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import { keyFromBase64, periodStarts } from '@atd/core'
-import { abrirSimulacao, enviarMensagemSimulada, schema, type Enqueue } from '@atd/db'
+import { randomUUID } from 'node:crypto'
+import { encryptPhone } from '@atd/core'
+import { abrirSimulacao, enviarMensagemSimulada, ingestInbound, schema, type Enqueue } from '@atd/db'
 import { getTestDb, resetDb, seedRestaurant, seedStaff } from '@atd/db/test-utils'
 import type { LlmClient, TriageV5 } from '@atd/ai'
 import { createLogger } from '../logger.ts'
@@ -44,13 +46,16 @@ const waProibido = {
 const deps = (llm: LlmClient): ProcessDeps =>
   ({ db, llm, wa: comMidiaProibida(waProibido), storage: storageProibido, phoneKey, triageModels: ['fake/m'], log, requeue: async () => undefined, now: () => SEG_14H })
 
-async function setup() {
+async function setup(o: { simulacaoDia?: string } = {}) {
   const { restaurantId, unitId } = await seedRestaurant(db)
   await db.update(schema.units).set({ endereco: 'SCLS 404', cidade: 'Brasília', uf: 'DF', lat: -15.81, lng: -47.89 }).where(eq(schema.units.id, unitId))
   await db.insert(schema.unitHours).values({ restaurantId, unitId, weekday: 0, turno: 1, abre: '11:30', fecha: '16:00' })
   await db.insert(schema.budgetLimits).values([
     { restaurantId, escopo: 'ia', periodo: 'dia', limiteUsd: '1' },
     { restaurantId, escopo: 'ia', periodo: 'mes', limiteUsd: '10' },
+    // a simulação tem limite próprio (Etapa 08): nunca consome o dos clientes reais
+    { restaurantId, escopo: 'simulacao', periodo: 'dia', limiteUsd: o.simulacaoDia ?? '1' },
+    { restaurantId, escopo: 'simulacao', periodo: 'mes', limiteUsd: '10' },
   ])
   const dono = await seedStaff(db, sql, { restaurantId, papel: 'dono' })
   const p = { restaurantId, userId: dono }
@@ -113,6 +118,67 @@ describe('canal simulador no worker', () => {
     await enviar('tem estacionamento?')
     await processConversation(deps(fakeLlm([{ itens: [{ ...item('info'), tema: 'estacionamento' }], fora_escopo: false }])), conversationId)
     expect(await db.select().from(schema.knowledgeGaps)).toEqual([])
+  })
+})
+
+const okSend = () => ({ ok: true as const, wamid: `wamid.${randomUUID()}` })
+const waReal = { async sendText() { return okSend() }, async sendLocation() { return okSend() }, async sendList() { return okSend() } }
+
+async function conversaReal(restaurantId: string, texto: string) {
+  const r = await ingestInbound(db, {
+    restaurantId, waIdHash: 'hash-real', telefoneCifrado: encryptPhone('5561999998888', phoneKey), profileName: 'Maria',
+    timestamp: new Date(), wamid: `wamid.${randomUUID()}`, tipo: 'texto', texto, mediaId: null,
+  }, noopEnqueue)
+  return r.conversationId
+}
+
+const ledger = () => db.select().from(schema.spendLedger).orderBy(asc(schema.spendLedger.id))
+
+describe('orçamento próprio da simulação', () => {
+  it('conversa simulada reserva e liquida no escopo simulacao; a real, no ia', async () => {
+    const { restaurantId, conversationId, enviar } = await setup()
+    await enviar('estão abertos agora?')
+    await processConversation(deps(fakeLlm([{ itens: [item('aberto_agora')], fora_escopo: false }])), conversationId)
+    expect((await ledger()).map((l) => [l.escopo, l.tipo])).toEqual([['simulacao', 'reserva'], ['simulacao', 'liquidacao']])
+
+    const real = await conversaReal(restaurantId, 'estão abertos agora?')
+    const d = { ...deps(fakeLlm([{ itens: [item('aberto_agora')], fora_escopo: false }])), wa: comMidiaProibida(waReal) }
+    expect(await processConversation(d, real)).toBe('replied')
+    expect((await ledger()).slice(2).map((l) => [l.escopo, l.tipo])).toEqual([['ia', 'reserva'], ['ia', 'liquidacao']])
+  })
+
+  it('simulação sem saldo: só ela vai para o modo econômico (audita sem_saldo_simulacao); a real no mesmo minuto responde', async () => {
+    const { restaurantId, conversationId, enviar } = await setup({ simulacaoDia: '0.000001' })
+    await enviar('estão abertos agora?')
+    const llm = fakeLlm([{ itens: [item('aberto_agora')], fora_escopo: false }])
+    await processConversation(deps(llm), conversationId)
+    const [conv] = await db.select().from(schema.conversations).where(eq(schema.conversations.id, conversationId))
+    expect(conv!.estado).toBe('aguardando_humano')
+    const audit = await db.select().from(schema.auditLog)
+    expect(audit.map((a) => a.acao)).not.toContain('orcamento.sem_saldo')
+    // contrato com o painel do simulador (Task 6): uma linha por conversa, gravada no commit da resposta
+    const aviso = audit.filter((a) => a.acao === 'orcamento.sem_saldo_simulacao')
+    expect(aviso.map((a) => [a.entidade, a.entidadeId, a.restaurantId])).toEqual([['conversation', conversationId, restaurantId]])
+    const [entrada] = await db.select().from(schema.messages)
+      .where(and(eq(schema.messages.conversationId, conversationId), eq(schema.messages.direcao, 'in')))
+    expect(aviso[0]!.createdAt.getTime()).toBeGreaterThanOrEqual(entrada!.createdAt.getTime())
+    expect(conv!.processedUpToId).toBe(entrada!.id)
+    expect(await db.select().from(schema.aiRuns)).toEqual([]) // nenhuma chamada paga sem reserva
+
+    const real = await conversaReal(restaurantId, 'estão abertos agora?')
+    const d = { ...deps(fakeLlm([{ itens: [item('aberto_agora')], fora_escopo: false }])), wa: comMidiaProibida(waReal) }
+    expect(await processConversation(d, real)).toBe('replied')
+    const [cReal] = await db.select().from(schema.conversations).where(eq(schema.conversations.id, real))
+    expect(cReal!.estado).toBe('ia')
+  })
+
+  it('simulação que cruza o alerta grava budget_alerts do escopo simulacao (não do ia)', async () => {
+    const { conversationId, enviar } = await setup({ simulacaoDia: '0.0125' }) // a reserva (0,01) já é 80%
+    await enviar('estão abertos agora?')
+    await processConversation(deps(fakeLlm([{ itens: [item('aberto_agora')], fora_escopo: false }])), conversationId)
+    const alertas = await db.select().from(schema.budgetAlerts)
+    expect(alertas.length).toBeGreaterThan(0)
+    expect(alertas.every((a) => a.escopo === 'simulacao')).toBe(true)
   })
 })
 

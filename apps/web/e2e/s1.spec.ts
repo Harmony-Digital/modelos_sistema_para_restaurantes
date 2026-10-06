@@ -28,6 +28,8 @@ test.beforeAll(async () => {
   for (const periodo of ['dia', 'mes']) {
     await getSql()`insert into budget_limits (restaurant_id, escopo, periodo, limite_usd)
       values (${r!.id}, 'ia', ${periodo}, 5) on conflict do nothing`
+    await getSql()`insert into budget_limits (restaurant_id, escopo, periodo, limite_usd)
+      values (${r!.id}, 'simulacao', ${periodo}, 5) on conflict do nothing`
   }
   falso = await iniciarOpenRouterFalso(triagem)
   worker = await iniciarWorkerE2e(falso.url)

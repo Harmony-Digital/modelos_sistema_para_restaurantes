@@ -214,3 +214,55 @@ describe('alertas de gasto (registrarAlertas)', () => {
     expect(await db.select().from(auditLog).where(eq(auditLog.acao, 'orcamento.alerta'))).toHaveLength(1)
   })
 })
+
+describe('alertas na reserva e na liquidação', () => {
+  async function comLimites(escopo: 'ia' | 'simulacao', dia: string, mes = '100') {
+    const { restaurantId } = await seedRestaurant(db)
+    await db.insert(budgetLimits).values([
+      { restaurantId, escopo, periodo: 'dia', limiteUsd: dia, alertaPct: 80 },
+      { restaurantId, escopo, periodo: 'mes', limiteUsd: mes, alertaPct: 80 },
+    ])
+    return restaurantId
+  }
+  const niveis = async () =>
+    (await db.select().from(budgetAlerts).orderBy(budgetAlerts.periodo, budgetAlerts.nivel)).map((a) => [a.escopo, a.periodo, a.nivel])
+
+  it('reserva que cruza 80% grava o alerta junto (gasto + reservado)', async () => {
+    const rid = await comLimites('ia', '1')
+    await reserveBudget(db, { restaurantId: rid, scope: 'ia', amountUsd: '0.5', timeZone: TZ, now })
+    expect(await niveis()).toEqual([])
+    await reserveBudget(db, { restaurantId: rid, scope: 'ia', amountUsd: '0.3', timeZone: TZ, now })
+    expect(await niveis()).toEqual([['ia', 'dia', 80]])
+    expect(await db.select().from(auditLog).where(eq(auditLog.acao, 'orcamento.alerta'))).toHaveLength(1)
+  })
+
+  it('liquidação que leva o gasto ao limite grava 100 (no período da reserva)', async () => {
+    const rid = await comLimites('simulacao', '1')
+    const r = await reserveBudget(db, { restaurantId: rid, scope: 'simulacao', amountUsd: '0.5', timeZone: TZ, now })
+    expect(await niveis()).toEqual([])
+    await settleBudget(db, r!, '1')
+    expect(await niveis()).toEqual([['simulacao', 'dia', 80], ['simulacao', 'dia', 100]])
+  })
+
+  it('dono baixa o limite abaixo do já gasto: a reserva é recusada e o alerta de 100% aparece', async () => {
+    const rid = await comLimites('ia', '1')
+    const r = await reserveBudget(db, { restaurantId: rid, scope: 'ia', amountUsd: '0.4', timeZone: TZ, now })
+    await settleBudget(db, r!, '0.4')
+    await db.update(budgetLimits).set({ limiteUsd: '0.3' }).where(eq(budgetLimits.periodo, 'dia'))
+    expect(await reserveBudget(db, { restaurantId: rid, scope: 'ia', amountUsd: '0.01', timeZone: TZ, now })).toBeNull()
+    expect(await niveis()).toEqual([['ia', 'dia', 80], ['ia', 'dia', 100]])
+    // a recusa não deixa reserva pendurada
+    expect((await counters(rid)).map((c) => c.reservado)).toEqual(['0.000000', '0.000000'])
+  })
+
+  it('estresse do teto com alertas: 20 reservas concorrentes da simulação nunca passam do limite', async () => {
+    const rid = await comLimites('simulacao', '0.1')
+    const rs = await Promise.all(Array.from({ length: 20 }, () =>
+      reserveBudget(db, { restaurantId: rid, scope: 'simulacao', amountUsd: '0.01', timeZone: TZ, now })))
+    expect(rs.filter(Boolean)).toHaveLength(10)
+    const [dia] = await counters(rid)
+    expect(dia!.reservado).toBe('0.100000')
+    expect(await niveis()).toEqual([['simulacao', 'dia', 80], ['simulacao', 'dia', 100]])
+    expect(await db.select().from(auditLog).where(eq(auditLog.acao, 'orcamento.alerta'))).toHaveLength(2)
+  })
+})

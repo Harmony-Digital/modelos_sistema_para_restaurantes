@@ -9,7 +9,10 @@ export type BudgetScope = 'ia' | 'simulacao' | 'whatsapp'
 export type Escopo = BudgetScope
 export const ESCOPOS: readonly Escopo[] = ['ia', 'simulacao', 'whatsapp']
 export type NivelAlerta = 80 | 100
-export type Reservation = { restaurantId: string; scope: BudgetScope; amountUsd: string; counterIds: string[]; reservationId: number }
+/** `agora`: instante da reserva (os contadores são os desse período; a liquidação confere os alertas nele). */
+export type Reservation = {
+  restaurantId: string; scope: BudgetScope; amountUsd: string; counterIds: string[]; reservationId: number; agora?: Date
+}
 
 class NoBudget extends Error {}
 
@@ -20,13 +23,17 @@ export function assertUsd(v: string, positive: boolean): void {
   if (!USD_RE.test(v) || (positive && !/[1-9]/.test(v))) throw new Error('Valor em USD inválido')
 }
 
-/** Reserva atômica (invariante I6). Retorna null se não houver saldo ou limite configurado. */
+/**
+ * Reserva atômica (invariante I6). Retorna null se não houver saldo ou limite configurado. Grava os alertas de gasto
+ * (`registrarAlertas`) na mesma transação; na recusa, grava-os à parte (limite baixado abaixo do já gasto ⇒ 100%).
+ */
 export async function reserveBudget(
   db: Db,
   p: { restaurantId: string; scope: BudgetScope; amountUsd: string; timeZone: string; now?: Date; ref?: string },
 ): Promise<Reservation | null> {
   assertUsd(p.amountUsd, true)
-  const starts = periodStarts(p.now ?? new Date(), p.timeZone)
+  const agora = p.now ?? new Date()
+  const starts = periodStarts(agora, p.timeZone)
   try {
     return await db.transaction(async (tx) => {
       const limits = await tx
@@ -70,17 +77,21 @@ export async function reserveBudget(
           ref: p.ref ?? null,
         })
         .returning({ id: spendLedger.id })
+      await registrarAlertas(tx, { restaurantId: p.restaurantId, escopo: p.scope, agora })
       return {
         restaurantId: p.restaurantId,
         scope: p.scope,
         amountUsd: p.amountUsd,
         counterIds,
         reservationId: entry!.id,
+        agora,
       }
     })
   } catch (e) {
-    if (e instanceof NoBudget) return null
-    throw e
+    if (!(e instanceof NoBudget)) throw e
+    // a transação da reserva foi desfeita: o alerta (ex.: 100% depois de o dono baixar o limite) vai numa só dele
+    await db.transaction((tx) => registrarAlertas(tx, { restaurantId: p.restaurantId, escopo: p.scope, agora }))
+    return null
   }
 }
 
@@ -115,6 +126,8 @@ async function adjust(db: Db | Tx, r: Reservation, gastoUsd: string, tipo: 'liqu
         })
         .where(eq(budgetCounters.id, id))
     }
+    // o gasto entrou nos contadores do período da reserva: confere os alertas nele, na mesma transação
+    await registrarAlertas(tx, { restaurantId: r.restaurantId, escopo: r.scope, agora: r.agora ?? new Date() })
   })
 }
 
@@ -161,7 +174,7 @@ export async function liberarReservasPendentes(
       .orderBy(asc(budgetCounters.periodo)) // mesma ordem de lock da reserva (dia → mes)
     await releaseBudget(db, {
       restaurantId: p.restaurantId, scope: r.escopo, amountUsd: String(r.valorUsd), counterIds: contadores.map((c) => c.id),
-      reservationId: r.id,
+      reservationId: r.id, agora: r.createdAt,
     }, p.ref)
     liberadas++
   }

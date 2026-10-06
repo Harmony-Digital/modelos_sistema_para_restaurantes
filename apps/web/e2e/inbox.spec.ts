@@ -40,6 +40,8 @@ test.beforeAll(async () => {
   for (const periodo of ['dia', 'mes']) {
     await sql`insert into budget_limits (restaurant_id, escopo, periodo, limite_usd)
       values (${restaurantId}, 'ia', ${periodo}, 5) on conflict do nothing`
+    await sql`insert into budget_limits (restaurant_id, escopo, periodo, limite_usd)
+      values (${restaurantId}, 'simulacao', ${periodo}, 5) on conflict do nothing`
   }
   const [u] = await sql`insert into units (restaurant_id, nome, slug, endereco)
     values (${restaurantId}, ${UNIDADE}, ${'e2e-inbox-' + SUFIXO}, 'Rua da Inbox, 1') returning id`
