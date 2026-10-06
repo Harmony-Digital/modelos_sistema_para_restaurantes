@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { getPanelStatus, listAwaitingHuman, resumoInicio, totalPrevistoHoje } from '@atd/db'
+import { contarPedidosNovos, getPanelStatus, listAwaitingHuman, resumoInicio, totalPrevistoHoje } from '@atd/db'
 import { AwaitingHuman } from '@/components/conversations/awaiting-human'
 import { PerguntasSemResposta } from '@/components/home/perguntas-sem-resposta'
 import { SpendCard } from '@/components/home/spend-card'
@@ -19,6 +19,7 @@ export default async function InicioPage() {
   const s = await getPanelStatus(getDb(), session.claims)
   const gestao = session.role !== 'atendente'
   const previstos = await totalPrevistoHoje(getDb(), session.claims)
+  const pedidosNovos = await contarPedidosNovos(getDb(), session.claims)
   const resumo = gestao ? await resumoInicio(getDb(), session.claims) : null
   const online = s.workerLastSeen !== null && Date.now() - s.workerLastSeen.getTime() < ONLINE_MS
   return (
@@ -35,6 +36,16 @@ export default async function InicioPage() {
             action={
               <Link href="/agenda?aba=previsao" className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 [@media(hover:hover)]:hover:underline">
                 Ver previsão
+              </Link>
+            }
+          />
+          <StatCard
+            label="Pedidos de evento novos"
+            value={String(pedidosNovos)}
+            hint={pedidosNovos === 1 ? 'pedido esperando a equipe' : 'pedidos esperando a equipe'}
+            action={
+              <Link href="/agenda?aba=eventos" className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 [@media(hover:hover)]:hover:underline">
+                Ver pedidos
               </Link>
             }
           />

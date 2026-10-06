@@ -9,12 +9,14 @@ const enqueue = vi.fn()
 const m = {
   abrirSimulacao: vi.fn(), novoClienteSimulado: vi.fn(), enviarMensagemSimulada: vi.fn(),
   definirRelogioSimulado: vi.fn(), mensagensSimuladas: vi.fn(), detalhesSimulacao: vi.fn(),
+  registrarAuditoria: vi.fn(),
 }
 vi.mock('@/lib/dal', () => ({ requireStaff }))
 vi.mock('@/lib/server/db', () => ({ getDb: () => db }))
 vi.mock('@/lib/server/boss', () => ({ getBoss: async () => 'boss' }))
 vi.mock('@atd/db', async (orig) => ({
   ...m,
+  withUserContext: async (_db: unknown, _c: unknown, fn: (tx: string) => unknown) => fn('tx'),
   enqueueProcess: () => enqueue,
   schema: (await orig<typeof Db>()).schema,
 }))
@@ -25,6 +27,26 @@ const sessao = { userId: 'u1', role: 'dono', restaurantId: 'r1', claims: { sub: 
 const vazio = { mensagens: [], cursor: 0, digitando: false, estado: 'ia', relogioOffsetSegundos: null }
 
 describe('Server Actions do simulador', () => {
+  it('audita abrir, novo cliente e relógio (sem texto de cliente no diff)', async () => {
+    m.abrirSimulacao.mockResolvedValue({ conversationId: CONV })
+    m.novoClienteSimulado.mockResolvedValue({ conversationId: CONV })
+    m.definirRelogioSimulado.mockResolvedValue('ok')
+    await a.abrirSimuladorAction()
+    await a.novoClienteSimuladorAction()
+    await a.relogioSimuladorAction(CONV, null)
+    expect(m.registrarAuditoria.mock.calls.map((c) => [c[0], c[1], c[2].restaurantId, c[2].acao, c[2].entidade, c[2].entidadeId])).toEqual([
+      ['tx', sessao.claims, 'r1', 'simulador.aberto', 'conversation', CONV],
+      ['tx', sessao.claims, 'r1', 'simulador.novo_cliente', 'conversation', CONV],
+      ['tx', sessao.claims, 'r1', 'simulador.relogio', 'conversation', CONV],
+    ])
+  })
+
+  it('relógio recusado não audita', async () => {
+    m.definirRelogioSimulado.mockResolvedValue('nao_encontrada')
+    await a.relogioSimuladorAction(CONV, null)
+    expect(m.registrarAuditoria).not.toHaveBeenCalled()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     requireStaff.mockResolvedValue(sessao)

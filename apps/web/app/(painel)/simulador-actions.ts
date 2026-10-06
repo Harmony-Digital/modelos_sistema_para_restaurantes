@@ -1,6 +1,7 @@
 'use server'
 import { eq } from 'drizzle-orm'
 import {
+  registrarAuditoria, withUserContext,
   abrirSimulacao, definirRelogioSimulado, detalhesSimulacao, enqueueProcess, enviarMensagemSimulada, mensagensSimuladas,
   novoClienteSimulado, schema, type EstadoSimulacao,
 } from '@atd/db'
@@ -21,6 +22,12 @@ type Sessao = Awaited<ReturnType<typeof requireStaff>>
 // simulador gasta IA real: só quem responde pelos custos
 const sessao = () => requireStaff(['dono', 'gerente'])
 const dono = (s: Sessao) => ({ restaurantId: s.restaurantId, userId: s.userId })
+
+/** O simulador gasta IA real: toda ação fica em `audit_log` (sem texto de cliente nem telefone). */
+const auditar = (s: Sessao, acao: string, conversationId: string, diff?: unknown) =>
+  withUserContext(getDb(), s.claims, (tx) =>
+    registrarAuditoria(tx, s.claims, { restaurantId: s.restaurantId, acao, entidade: 'conversation', entidadeId: conversationId, diff }),
+  )
 
 function paraTela(conversationId: string, e: EstadoSimulacao): RespostaSimulador {
   return {
@@ -43,6 +50,7 @@ async function estado(s: Sessao, conversationId: string, desdeId: number): Promi
 export async function abrirSimuladorAction(): Promise<ActionResult<RespostaSimulador>> {
   const s = await sessao()
   const { conversationId } = await abrirSimulacao(getDb(), dono(s))
+  await auditar(s, 'simulador.aberto', conversationId)
   return estado(s, conversationId, 0)
 }
 
@@ -67,6 +75,7 @@ export async function enviarSimuladorAction(conversationId: string, texto: strin
 export async function novoClienteSimuladorAction(): Promise<ActionResult<RespostaSimulador>> {
   const s = await sessao()
   const { conversationId } = await novoClienteSimulado(getDb(), dono(s))
+  await auditar(s, 'simulador.novo_cliente', conversationId)
   return estado(s, conversationId, 0)
 }
 
@@ -89,7 +98,9 @@ export async function relogioSimuladorAction(
     }
   }
   const r = await definirRelogioSimulado(db, { ...dono(s), conversationId: p.data.conversationId, offsetSegundos: offset })
-  return r === 'ok' ? { ok: true, data: { relogioOffsetSegundos: offset } } : { ok: false, formError: SUMIU }
+  if (r !== 'ok') return { ok: false, formError: SUMIU }
+  await auditar(s, 'simulador.relogio', p.data.conversationId, { relogioOffsetSegundos: offset })
+  return { ok: true, data: { relogioOffsetSegundos: offset } }
 }
 
 export async function detalhesSimuladorAction(conversationId: string): Promise<ActionResult<DetalheTela[]>> {

@@ -32,7 +32,7 @@ export const ROTULOS_MODELO: Record<ChaveModelo, { titulo: string; quando: strin
   aviso_cancelado: { titulo: 'Aviso cancelado', quando: 'O cliente pede para cancelar o aviso.' },
   aviso_nao_encontrado: { titulo: 'Nenhum aviso para cancelar', quando: 'O cliente pede para cancelar, mas não tem aviso ativo.' },
   aviso_qual_cancelar: { titulo: 'Qual aviso cancelar', quando: 'O cliente tem vários avisos e não disse qual cancelar. {exemplo} é uma frase de cancelamento com o primeiro aviso da lista.' },
-  // eventos (Etapa 04): títulos simples; a aba Mensagens ganha o acabamento na Task 6
+  // eventos (Etapa 04)
   evento_registrado: { titulo: 'Pedido de evento recebido', quando: 'O cliente pede um evento e o pedido é registrado para a equipe.' },
   evento_pergunta_unidade: { titulo: 'Pedir a unidade do evento', quando: 'Texto da lista enviada quando o cliente pede um evento e não diz a unidade.' },
   evento_pergunta_data: { titulo: 'Perguntar a data do evento', quando: 'Falta a data do evento.' },
@@ -44,7 +44,7 @@ export const ROTULOS_MODELO: Record<ChaveModelo, { titulo: string; quando: strin
   evento_espacos: { titulo: 'Espaços para eventos', quando: 'O cliente pergunta quais espaços existem.' },
   evento_cancelado: { titulo: 'Pedido de evento cancelado', quando: 'O cliente pede para cancelar o pedido de evento.' },
   evento_nao_encontrado: { titulo: 'Nenhum pedido de evento para cancelar', quando: 'O cliente pede para cancelar, mas não tem pedido em andamento.' },
-  evento_qual_cancelar: { titulo: 'Qual pedido de evento cancelar', quando: 'O cliente tem vários pedidos e não disse qual cancelar.' },
+  evento_qual_cancelar: { titulo: 'Qual pedido de evento cancelar', quando: 'O cliente tem vários pedidos e não disse qual cancelar. {exemplo} é uma frase de cancelamento com o primeiro pedido da lista.' },
   evento_confirmado_humano: { titulo: 'Evento já confirmado', quando: 'O cliente quer cancelar um evento confirmado: um atendente assume.' },
 }
 

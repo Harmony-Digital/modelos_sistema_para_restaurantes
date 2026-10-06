@@ -1,10 +1,11 @@
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { carregarUnidadesPainel } from '@atd/db'
+import { carregarUnidadesPainel, listarEspacos } from '@atd/db'
 import { salvarDadosUnidadeAction, salvarHorariosAction } from '@/app/(painel)/unidades/actions'
 import { Abas } from '@/components/painel/abas'
 import { DadosUnidadeForm } from '@/components/painel/dados-unidade-form'
+import { Espacos } from '@/components/painel/espacos'
 import { ExcecoesUnidade } from '@/components/painel/excecoes-unidade'
 import { HorariosForm } from '@/components/painel/horarios-form'
 import { SeloUnidade } from '@/components/painel/selo-unidade'
@@ -21,6 +22,7 @@ const ABAS = [
   { chave: 'dados', rotulo: 'Dados' },
   { chave: 'horarios', rotulo: 'Horários' },
   { chave: 'excecoes', rotulo: 'Exceções' },
+  { chave: 'espacos', rotulo: 'Espaços' },
 ] as const
 type Aba = (typeof ABAS)[number]['chave']
 
@@ -37,7 +39,7 @@ export default async function UnidadePage(props: { params: Promise<{ id: string 
     <>
       <TopBar
         title={u.nome}
-        subtitle="Dados, horários e exceções"
+        subtitle="Dados, horários, exceções e espaços"
         action={
           <Link href="/unidades" aria-label="Voltar para unidades" className="flex size-11 items-center justify-center rounded-full text-foreground">
             <ArrowLeft aria-hidden="true" className="size-5" />
@@ -64,6 +66,7 @@ export default async function UnidadePage(props: { params: Promise<{ id: string 
             })}
           />
         )}
+        {aba === 'espacos' && <Espacos unitId={u.id} somenteLeitura={somenteLeitura} espacos={await listarEspacos(getDb(), s.claims, u.id)} />}
       </main>
     </>
   )

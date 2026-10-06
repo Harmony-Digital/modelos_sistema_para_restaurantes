@@ -9,6 +9,8 @@ describe('respostas', () => {
     expect(acaoDaLacuna('horario')).toBe('horarios')
     expect(acaoDaLacuna('endereco')).toBe('endereco')
     expect(acaoDaLacuna('unidades')).toBe('unidades')
+    expect(acaoDaLacuna('eventos:espacos')).toBe('espacos')
+    expect(tituloDaLacuna('eventos:espacos')).toBe('Espaços de evento não cadastrados')
     expect(tituloDaLacuna('info:wifi')).toBe('Wifi')
     expect(tituloDaLacuna('horario')).toBe('Horário não cadastrado')
     expect(tituloDaLacuna('unidades')).toBe('Nenhuma unidade cadastrada')

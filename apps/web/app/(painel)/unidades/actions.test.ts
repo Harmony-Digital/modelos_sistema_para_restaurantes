@@ -3,15 +3,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const requireStaff = vi.fn()
 const salvarUnidade = vi.fn()
 const carregarUnidadesPainel = vi.fn()
+const salvarEspaco = vi.fn()
 const coordenadasDoLink = vi.fn()
 const revalidatePath = vi.fn()
 vi.mock('@/lib/dal', () => ({ requireStaff }))
 vi.mock('@/lib/server/db', () => ({ getDb: () => 'db' }))
 vi.mock('@/lib/maps-link', () => ({ coordenadasDoLink }))
 vi.mock('next/cache', () => ({ revalidatePath }))
-vi.mock('@atd/db', () => ({ salvarUnidade, carregarUnidadesPainel, salvarHorarios: vi.fn(), salvarExcecao: vi.fn(), removerExcecao: vi.fn() }))
+vi.mock('@atd/db', () => ({ salvarUnidade, carregarUnidadesPainel, salvarHorarios: vi.fn(), salvarExcecao: vi.fn(), removerExcecao: vi.fn(), salvarEspaco }))
 
-const { salvarDadosUnidadeAction } = await import('./actions')
+const { salvarDadosUnidadeAction, salvarEspacoAction } = await import('./actions')
 const ID = '00000000-0000-4000-8000-000000000001'
 const form = { nome: 'Asa Sul', endereco: 'SCLS 404', bairro: '', cidade: '', uf: 'df', cep: '', telefone: '', apelidos: [], mapsUrl: '', ativo: true }
 
@@ -70,5 +71,36 @@ describe('salvarDadosUnidadeAction', () => {
     expect(revalidatePath).toHaveBeenCalledWith('/unidades')
     salvarUnidade.mockResolvedValue({ ok: false, erro: 'nome_duplicado' })
     expect(await salvarDadosUnidadeAction(null, form)).toEqual({ ok: false, fieldErrors: { nome: 'Já existe uma unidade com esse nome.' } })
+  })
+})
+
+describe('salvarEspacoAction', () => {
+  const espaco = { nome: 'Salão', capacidadeMin: '20', capacidadeMax: '80', descricao: '', condicoes: ' sinal de 30% ', ativo: true }
+  beforeEach(() => {
+    vi.clearAllMocks()
+    requireStaff.mockResolvedValue({ claims: { sub: 'u' }, restaurantId: 'r' })
+  })
+  it('exige dono ou gerente e grava com números e textos vazios como nulo', async () => {
+    salvarEspaco.mockResolvedValue({ ok: true, valor: { id: ID } })
+    expect(await salvarEspacoAction(ID, null, espaco)).toEqual({ ok: true, data: { id: ID } })
+    expect(requireStaff).toHaveBeenCalledWith(['dono', 'gerente'])
+    expect(salvarEspaco).toHaveBeenCalledWith('db', { sub: 'u' }, null, {
+      unitId: ID, nome: 'Salão', capacidadeMin: 20, capacidadeMax: 80, descricao: null, condicoes: 'sinal de 30%', ativo: true,
+    })
+    expect(revalidatePath).toHaveBeenCalledWith(`/unidades/${ID}`)
+  })
+  it('entrada inválida e ids ruins não chegam ao banco', async () => {
+    expect(await salvarEspacoAction(ID, null, { ...espaco, capacidadeMin: '90' })).toMatchObject({ ok: false })
+    expect(await salvarEspacoAction('x', null, espaco)).toEqual({ ok: false, formError: 'Não encontramos essa unidade.' })
+    expect(await salvarEspacoAction(ID, 'x', espaco)).toMatchObject({ ok: false })
+    expect(salvarEspaco).not.toHaveBeenCalled()
+  })
+  it('nome repetido vai para o campo; sem permissão e capacidade viram erro geral', async () => {
+    salvarEspaco.mockResolvedValueOnce({ ok: false, erro: 'nome_duplicado' })
+    expect(await salvarEspacoAction(ID, null, espaco)).toEqual({ ok: false, fieldErrors: { nome: 'Já existe um espaço com esse nome nesta unidade.' } })
+    salvarEspaco.mockResolvedValueOnce({ ok: false, erro: 'sem_permissao' })
+    expect(await salvarEspacoAction(ID, ID, espaco)).toMatchObject({ ok: false, formError: expect.stringContaining('permissão') })
+    salvarEspaco.mockResolvedValueOnce({ ok: false, erro: 'capacidade_invalida' })
+    expect(await salvarEspacoAction(ID, null, espaco)).toMatchObject({ ok: false, formError: expect.any(String) })
   })
 })

@@ -10,14 +10,15 @@ export function temaDaChave(chave: string): string {
   return t.charAt(0).toUpperCase() + t.slice(1)
 }
 
-export function acaoDaLacuna(chave: string): 'fato' | 'horarios' | 'endereco' | 'unidades' {
+export function acaoDaLacuna(chave: string): 'fato' | 'horarios' | 'endereco' | 'unidades' | 'espacos' {
   if (chave === 'horario') return 'horarios'
   if (chave === 'endereco') return 'endereco'
   if (chave === 'unidades') return 'unidades'
+  if (chave === 'eventos:espacos') return 'espacos'
   return 'fato'
 }
 
-const TITULO_ACAO = { horarios: 'Horário não cadastrado', endereco: 'Endereço não cadastrado', unidades: 'Nenhuma unidade cadastrada' } as const
+const TITULO_ACAO = { horarios: 'Horário não cadastrado', endereco: 'Endereço não cadastrado', unidades: 'Nenhuma unidade cadastrada', espacos: 'Espaços de evento não cadastrados' } as const
 
 export function tituloDaLacuna(chave: string): string {
   const acao = acaoDaLacuna(chave)
