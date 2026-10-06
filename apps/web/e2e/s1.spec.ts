@@ -65,7 +65,11 @@ async function perguntar(page: Page, texto: string) {
   await page.keyboard.press('Enter')
 }
 
-/** Próximo domingo (no fuso do restaurante) às 12:00, no formato do campo datetime-local. */
+/**
+ * Próximo domingo (no fuso do restaurante) às 12:00, no formato do campo datetime-local.
+ * Janela 23:59–00:00 (horário de Brasília): o dia é calculado aqui e o relógio simulado é aplicado depois; se a
+ * meia-noite passar entre os dois, o deslocamento muda e o teste pode falhar sem defeito no código. Rode de novo.
+ */
 function proximoDomingoAoMeioDia(): string {
   const fuso = 'America/Sao_Paulo'
   for (let i = 1; i <= 7; i++) {

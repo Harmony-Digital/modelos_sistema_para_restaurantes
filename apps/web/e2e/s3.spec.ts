@@ -105,6 +105,8 @@ async function semRolagemHorizontal(page: Page) {
   expect(largura).toBeLessThanOrEqual(visivel)
 }
 
+// janela 23:59–00:00 (horário de Brasília): "amanhã" é calculado aqui e de novo pelo worker; se a meia-noite passar
+// entre os dois, as datas divergem e o teste falha sem defeito no código. Rode de novo depois da meia-noite.
 const amanha = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date(Date.now() + 86_400_000))
 
 test('simulador registra o pedido de evento, mas a fila não mostra pedido simulado', async ({ page }) => {

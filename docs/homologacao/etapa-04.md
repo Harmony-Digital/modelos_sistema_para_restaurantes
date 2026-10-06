@@ -47,7 +47,9 @@ Para ver a fila com dados reais sem WhatsApp, insira um pedido de teste pelo SQL
 pnpm check                              # lint, tipos, testes (apaga o banco local de teste)
 pnpm --filter @atd/web e2e              # pare o worker local antes: o e2e sobe o próprio, com IA falsa
 ```
-Depois do `pnpm check`, prepare o banco de novo (seção 1): `pnpm db:migrate`, o **bootstrap** do restaurante e o `demo:s1`. O e2e precisa de `PHONE_ENC_KEY` no ambiente (a mesma do servidor web) para cifrar o telefone do pedido de teste: `set -a; source .env; set +a` antes. Se o e2e acusar "Há um worker rodando neste banco" logo depois do `pnpm check` sem nenhum worker de pé, é o batimento deixado pelos testes do worker: espere 90 s e rode de novo.
+Depois do `pnpm check`, prepare o banco de novo (seção 1): `pnpm db:migrate`, o **bootstrap** do restaurante e o `demo:s1`. O e2e precisa de `PHONE_ENC_KEY` no ambiente (a mesma do servidor web) para cifrar o telefone do pedido de teste: `set -a; source .env; set +a` antes. Se o e2e acusar "Há um worker rodando neste banco", pare o `pnpm --filter @atd/worker dev` (o batimento dos testes do worker não bloqueia mais: o teste o apaga e a guarda do e2e o ignora); um worker parado à força deixa o batimento por até 90 s.
+
+**Evite rodar o e2e entre 23:59 e 00:00 (horário de Brasília).** Os testes do S1 (relógio do simulador no próximo domingo) e do S3 ("amanhã") calculam a data no teste e de novo no worker; se a meia-noite passar entre os dois, as datas divergem e o teste falha sem defeito no código. Basta rodar de novo depois da meia-noite.
 
 Os evals de composição do S3 (sem custo) rodam no `pnpm test`; a extração com a IA de verdade (`pnpm --filter @atd/ai eval:s3`, e `eval:s1`/`eval:s2`, que medem a v4 por padrão, para conferir que ela não regrediu; `--triagem v2`/`--triagem v3` mede a versão anterior) só depois de comprar crédito no OpenRouter.
 
