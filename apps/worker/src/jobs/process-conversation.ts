@@ -269,7 +269,8 @@ async function classify(deps: ProcessDeps, ctx: Ctx, pending: Pending[], now: Da
     case 'lgpd':
       return { replies: ['lgpdRecebido'], autor: 'sistema', dsr: pre.tipo, audit: 'lgpd.pedido_recebido' }
     case 'canned':
-      return { replies: [pre.reply], autor: 'sistema' }
+      // saudação/agradecimento: conversa normal, zera as falhas seguidas
+      return { replies: [pre.reply], autor: 'sistema', falhas: 'zerar' }
     case 'unsupported_media':
       return { replies: ['midiaNaoSuportada'], autor: 'sistema' }
     case 'pass':
@@ -723,7 +724,7 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, now: Da
     return { replies: [], autor: 'sistema', handoff, falhas: 'incrementar', audit: 'ia.falha_triagem', runs, budget }
   }
 
-  const { itens, frustracao } = result.data
+  const { itens, frustracao, fora_escopo: foraEscopo } = result.data
   if (itens.some((i) => i.servico === 'humano' || i.servico === 'lgpd')) {
     // resposta do sistema: com `ia` a entrega a cancelaria (a conversa já está aguardando humano)
     const handoff: Handoff = { motivo: frustracao ? 'frustracao' : 'pedido', avisar: 'sempre' }
@@ -736,6 +737,10 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, now: Da
     handoff: { motivo: 'frustracao', avisar: d.handoff ? 'so_fora' : 'sempre' },
     audit: 'conversa.handoff_frustracao',
   })
+  if (itens.length === 0 && !foraEscopo && !frustracao) {
+    // cortesia/encerramento que o pré-filtro não pegou ("ok, até sábado então", "abraço!"): não é falha
+    return { replies: ['agradecimento'], autor: 'ia', runs, budget, pendente: null }
+  }
   if (itens.length === 0) {
     const d: Decision = { replies: ['foraEscopo'], autor: 'ia', falhas: 'incrementar', runs, budget, pendente: null }
     return frustracao ? frustrado(d) : d

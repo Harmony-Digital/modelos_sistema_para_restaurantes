@@ -199,6 +199,37 @@ describe('handoff por falhas seguidas', () => {
     expect(await conversa(conv)).toMatchObject({ estado: 'ia', falhasConsecutivas: 1 })
   })
 
+  it('cortesia sem item e sem fora de escopo ("ok, até sábado") não conta falha e responde com agradecimento', async () => {
+    const { restaurantId } = await setup()
+    const conv = await receive(restaurantId, 'qual a capital da França?')
+    const cortesia: TriageV6 = { itens: [], fora_escopo: false, frustracao: false }
+    const { llm } = fakeLlm([triagem([]), cortesia, cortesia])
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    expect((await conversa(conv)).falhasConsecutivas).toBe(1)
+    await receive(restaurantId, 'ok, até sábado então')
+    await processConversation(deps(llm, wa), conv)
+    await receive(restaurantId, 'abraço!')
+    await processConversation(deps(llm, wa), conv)
+    expect(await conversa(conv)).toMatchObject({ estado: 'ia', falhasConsecutivas: 1, handoffMotivo: null })
+    expect(wa.textos.at(-1)).toMatch(/^Por nada!/)
+    expect(await acoes()).toEqual([])
+  })
+
+  it('resposta pronta (agradecimento) zera a contagem', async () => {
+    const { restaurantId } = await setup()
+    const conv = await receive(restaurantId, 'qual a capital da França?')
+    const { llm } = fakeLlm([triagem([]), triagem([])])
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    await receive(restaurantId, 'obrigado')
+    await processConversation(deps(llm, wa), conv)
+    expect((await conversa(conv)).falhasConsecutivas).toBe(0)
+    await receive(restaurantId, 'e o jogo?')
+    await processConversation(deps(llm, wa), conv)
+    expect(await conversa(conv)).toMatchObject({ estado: 'ia', falhasConsecutivas: 1 })
+  })
+
   it('triagem falha (com a retentativa) ⇒ handoff motivo falhas com a mensagem de handoff', async () => {
     const { restaurantId } = await setup()
     const conv = await receive(restaurantId, 'qual o endereço?')
