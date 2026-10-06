@@ -26,7 +26,7 @@ try {
     const apiKey = process.env.OPENROUTER_API_KEY
     if (!apiKey) throw new Error('Sem OPENROUTER_API_KEY: use --itens para testar sem a IA')
     const modelos = (process.env.AI_TRIAGE_MODELS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
-    if (!modelos.length) throw new Error('Defina AI_TRIAGE_MODELS (ex.: mistralai/mistral-nemo,google/gemini-2.5-flash-lite)')
+    if (!modelos.length) throw new Error('Defina AI_TRIAGE_MODELS (ex.: mistralai/mistral-nemo,mistralai/mistral-small-3.2-24b-instruct)')
     const r = await triageV2(createOpenRouterClient({ apiKey, appTitle: 'ia-atendimento-cli', semZdrDev: process.env.OPENROUTER_DEV_SEM_ZDR === '1' && process.env.NODE_ENV !== 'production' }), { models: modelos, restaurante: ctx.restaurante, text: mensagem })
     if (!r.ok) throw new Error(`Triagem falhou: ${r.error}`)
     process.stdout.write(`Modelo: ${r.model} · custo: US$ ${r.usage.costUsd ?? '?'} · ${r.latencyMs} ms\n`)
