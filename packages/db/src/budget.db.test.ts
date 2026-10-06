@@ -255,6 +255,34 @@ describe('alertas na reserva e na liquidação', () => {
     expect((await counters(rid)).map((c) => c.reservado)).toEqual(['0.000000', '0.000000'])
   })
 
+  it('recusa entre o limiar e 100%: grava também o 100% (a IA parou), não só o 80%', async () => {
+    const rid = await comLimites('ia', '1')
+    const r = await reserveBudget(db, { restaurantId: rid, scope: 'ia', amountUsd: '0.995', timeZone: TZ, now })
+    await settleBudget(db, r!, '0.995')
+    expect(await niveis()).toEqual([['ia', 'dia', 80]])
+    expect(await reserveBudget(db, { restaurantId: rid, scope: 'ia', amountUsd: '0.01', timeZone: TZ, now })).toBeNull()
+    expect(await niveis()).toEqual([['ia', 'dia', 80], ['ia', 'dia', 100]])
+  })
+
+  it('falha ao gravar o alerta na recusa não vira erro da reserva: devolve null e avisa quem chamou', async () => {
+    const rid = await comLimites('ia', '0.001')
+    const erros: unknown[] = []
+    let n = 0
+    const falho = new Proxy(db, {
+      get(alvo, prop, rec) {
+        // a 1ª transação (reserva) segue; a 2ª (alerta da recusa) falha como um deadlock
+        if (prop === 'transaction') {
+          return (fn: (tx: unknown) => unknown) => (n++ === 0 ? alvo.transaction(fn as never) : Promise.reject(new Error('deadlock detected')))
+        }
+        return Reflect.get(alvo, prop, rec)
+      },
+    })
+    expect(await reserveBudget(falho, {
+      restaurantId: rid, scope: 'ia', amountUsd: '0.01', timeZone: TZ, now, aoFalharAlerta: (e) => erros.push(e),
+    })).toBeNull()
+    expect(erros).toHaveLength(1)
+  })
+
   it('estresse do teto com alertas: 20 reservas concorrentes da simulação nunca passam do limite', async () => {
     const rid = await comLimites('simulacao', '0.1')
     const rs = await Promise.all(Array.from({ length: 20 }, () =>

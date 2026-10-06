@@ -97,6 +97,7 @@ export async function ingestDocument(deps: IngestDeps, importacaoId: string): Pr
 
     reserva = await reserveBudget(db, {
       restaurantId: alvo.restaurantId, scope: 'ia', amountUsd: INGESTAO_RESERVA_USD, timeZone: r!.timezone, ref,
+      aoFalharAlerta: (err) => deps.log.error({ err, importacaoId }, 'falha ao gravar o alerta de gasto da recusa'),
       ...(deps.now ? { now: deps.now() } : {}),
     })
     if (!reserva) return await erro(ERRO_SEM_ORCAMENTO, 'orcamento.sem_saldo')

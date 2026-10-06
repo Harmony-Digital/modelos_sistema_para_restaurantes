@@ -690,6 +690,7 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, now: Da
     amountUsd: RESERVE_USD, // cobre a chamada e a retentativa
     timeZone: ctx.restaurant.timezone,
     ref: `conversa:${ctx.conv.id}`,
+    aoFalharAlerta: (err) => deps.log.error({ err, conversationId: ctx.conv.id }, 'falha ao gravar o alerta de gasto da recusa'),
   })
   if (!reservation) {
     const audit = ctx.conv.simulada ? 'orcamento.sem_saldo_simulacao' : 'orcamento.sem_saldo'
