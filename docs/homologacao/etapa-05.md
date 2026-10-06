@@ -10,14 +10,14 @@ pnpm dev                                # painel em http://127.0.0.1:3000
 ```
 Se o `demo:s1` disser "Esperado exatamente 1 restaurante; encontrado 0" (o banco foi apagado pelo `pnpm check`), crie o restaurante antes, com a chave de serviço só no shell (nunca no `.env`):
 ```bash
-eval "$(pnpm exec supabase status -o env | grep -E '^(SERVICE_ROLE_KEY|API_URL)=')"
+eval "$(pnpm exec supabase status -o env | grep -E '^SERVICE_ROLE_KEY=')"
 SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY pnpm --filter @atd/db bootstrap --restaurante "Restaurante Demo" --dono dono@restaurante.local --nome-dono "Dono"
 ```
 
 **Worker** (outro terminal; responde o simulador e lê as importações). Ele baixa os arquivos do Storage com a chave de serviço, que vem do `supabase status` na hora e **não fica gravada em arquivo**:
 ```bash
-eval "$(pnpm exec supabase status -o env | grep -E '^(SERVICE_ROLE_KEY|API_URL)=')"
-SUPABASE_URL=$API_URL SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY WHATSAPP_ACCESS_TOKEN=local-sem-meta \
+eval "$(pnpm exec supabase status -o env | grep -E '^SERVICE_ROLE_KEY=')"
+SUPABASE_URL=http://127.0.0.1:54321 SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY WHATSAPP_ACCESS_TOKEN=local-sem-meta \
   AI_INGEST_MODELS=<modelo com visão e PDF> pnpm --filter @atd/worker dev
 ```
 - O simulador usa a IA de verdade (triagem **v5**) e precisa de `OPENROUTER_API_KEY` **com crédito** e de `AI_TRIAGE_MODELS` no `.env` (ver `docs/homologacao/etapa-02b.md`, seção 5). Sem crédito, toda mensagem cai no aviso de falha da IA.
@@ -58,7 +58,7 @@ Use **Novo cliente** entre os blocos.
 pnpm check                              # lint, tipos, testes (apaga o banco local de teste)
 pnpm db:migrate && pnpm --filter @atd/db demo:s1   # prepare o banco de novo (com o bootstrap da seção 1, se pedir)
 set -a; source .env; set +a             # PHONE_ENC_KEY e NEXT_PUBLIC_SUPABASE_URL do e2e
-eval "$(pnpm exec supabase status -o env | grep -E '^(SERVICE_ROLE_KEY|API_URL)=')"
+eval "$(pnpm exec supabase status -o env | grep -E '^SERVICE_ROLE_KEY=')"
 SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY pnpm --filter @atd/web e2e
 ```
 Pare o worker local antes do e2e: ele sobe o próprio, com IA falsa (triagem e leitura de cardápio), e a guarda acusa "Há um worker rodando neste banco" se outro estiver vivo. O e2e do cardápio (`s4.spec.ts`) cria categoria e item, pergunta o preço no simulador, envia o arquivo e recebe o documento, importa um CSV e um PDF (a "IA" devolve um rascunho fixo) e confere o atendente sem edição. **Evite rodar o e2e entre 23:59 e 00:00 (horário de Brasília)** (ver `docs/homologacao/etapa-04.md`).
