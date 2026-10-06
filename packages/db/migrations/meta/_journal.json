@@ -204,6 +204,20 @@
       "when": 1791275021122,
       "tag": "0028_importacoes_dedup_mime",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1791286801625,
+      "tag": "0029_inbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1791286806456,
+      "tag": "0030_inbox_rls_realtime",
+      "breakpoints": true
     }
   ]
 }

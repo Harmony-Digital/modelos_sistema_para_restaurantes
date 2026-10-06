@@ -3,7 +3,7 @@ import {
   bigint, boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core'
 import { authUsers } from 'drizzle-orm/supabase'
-import { conversationState, messageAuthor, messageDirection, messageType } from './enums.ts'
+import { conversationState, handoffMotivo, messageAuthor, messageDirection, messageType } from './enums.ts'
 import { restaurants, timestamps, units } from './restaurant.ts'
 
 export const customers = pgTable(
@@ -48,6 +48,10 @@ export const conversations = pgTable(
     simulada: boolean('simulada').notNull().default(false),
     /** Só em conversa simulada: deslocamento do relógio (segundos) usado na resolução de S1. Nulo = relógio real. */
     relogioOffsetSegundos: integer('relogio_offset_segundos'),
+    /** Por que a conversa foi para humano (sem texto livre). */
+    handoffMotivo: handoffMotivo('handoff_motivo'),
+    /** Entrada em `aguardando_humano`; o trigger da 0030 preenche ao entrar e zera ao sair. */
+    aguardandoDesde: timestamp('aguardando_desde', { withTimezone: true }),
     ...timestamps,
   },
   (t) => [
@@ -55,6 +59,10 @@ export const conversations = pgTable(
     index('conversations_inbox_idx')
       .on(t.restaurantId, t.estado, t.lastMessageAt.desc())
       .where(sql`estado <> 'encerrada'`),
+    // inbox: aba Aguardando pela espera mais antiga
+    index('conversations_aguardando_idx').on(t.restaurantId, t.estado, t.aguardandoDesde),
+    // inbox: filtro por unidade, última mensagem primeiro
+    index('conversations_unidade_idx').on(t.restaurantId, t.unidadeContextoId, t.lastMessageAt.desc()),
   ],
 )
 
@@ -75,6 +83,8 @@ export const messages = pgTable(
     statusEnvio: text('status_envio'),
     replyKey: text('reply_key'),
     aiRunId: bigint('ai_run_id', { mode: 'number' }),
+    /** Quem escreveu a mensagem humana (autor `humano`). */
+    atendenteId: uuid('atendente_id').references(() => authUsers.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

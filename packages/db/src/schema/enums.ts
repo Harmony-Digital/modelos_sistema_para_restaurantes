@@ -3,6 +3,7 @@ import { pgEnum } from 'drizzle-orm/pg-core'
 export const staffRole = pgEnum('staff_role', ['dono', 'gerente', 'atendente'])
 export const conversationState = pgEnum('conversation_state', ['ia', 'aguardando_humano', 'humano', 'encerrada'])
 export const messageDirection = pgEnum('message_direction', ['in', 'out'])
+export const handoffMotivo = pgEnum('handoff_motivo', ['pedido', 'frustracao', 'falhas', 'economico', 'servico'])
 export const messageAuthor = pgEnum('message_author', ['cliente', 'ia', 'humano', 'sistema'])
 export const messageType = pgEnum('message_type', ['texto', 'audio', 'imagem', 'documento', 'outro', 'localizacao', 'lista'])
 export const budgetScope = pgEnum('budget_scope', ['ia', 'whatsapp'])
