@@ -15,7 +15,8 @@ const aviso = (extra: Partial<Item>): Item =>
 
 function triagem(mensagem: string): TriagemFalsa {
   const m = mensagem.toLowerCase()
-  if (m.startsWith('vou hoje')) return { itens: [aviso({ data: 'hoje', pessoas: 4, horario: '20h' })], fora_escopo: false }
+  // sem hora: um horário fixo de hoje pode já ter passado quando o teste roda (e o aviso seria recusado)
+  if (m.startsWith('vou hoje')) return { itens: [aviso({ data: 'hoje', pessoas: 4, horario: 'à noite' })], fora_escopo: false }
   if (m.startsWith('vou amanhã')) return { itens: [aviso({ data: 'amanhã' })], fora_escopo: false }
   return { itens: [], fora_escopo: true }
 }
@@ -78,7 +79,7 @@ const previsaoDaUnidade = (page: Page) => page.goto(`/previsao?unidade=${unitId}
 test('simulador anota o aviso, mas a previsão de hoje não mostra aviso simulado', async ({ page }) => {
   await entrarComoGestor(page)
   await abrirSimuladorLimpo(page)
-  await perguntar(page, `vou hoje na ${UNIDADE} com 4 pessoas às 20h`)
+  await perguntar(page, `vou hoje na ${UNIDADE} com 4 pessoas à noite`)
   await expect(simulador(page).getByText(/^Anotado:/)).toBeVisible({ timeout: 20_000 })
 
   const gravados = await getSql()`select pessoas, simulado, origem from attendance_notices where unit_id = ${unitId} and status = 'ativo'`
