@@ -7,11 +7,19 @@ import { getSql } from './helpers'
 const PASTA_WORKER = fileURLToPath(new URL('../../worker/', import.meta.url))
 const chave = () => randomBytes(32).toString('base64')
 
+/** Heartbeat gravado pelo teste de banco do worker (`heartbeat.db.test.ts`): não é worker rodando. */
+const WORKER_DO_TESTE_DE_BANCO = 'worker-teste'
+
+/** Workers vivos que impedem o e2e (um worker de verdade chamaria a IA paga). */
+export function workersQueBloqueiam(vivos: readonly { worker_id: string }[]): string[] {
+  return vivos.map((w) => w.worker_id).filter((id) => id !== WORKER_DO_TESTE_DE_BANCO)
+}
+
 /** Sobe o worker de verdade apontando para o OpenRouter falso. Para com erro se já houver outro worker no banco. */
 export async function iniciarWorkerE2e(openrouterUrl: string): Promise<ChildProcess> {
   if (!existsSync(`${PASTA_WORKER}src/main.ts`)) throw new Error(`worker não encontrado em ${PASTA_WORKER}`)
-  const outros = await getSql()`select worker_id from worker_heartbeats where last_seen_at > now() - interval '90 seconds'`
-  if (outros.length > 0) {
+  const vivos = await getSql()<{ worker_id: string }[]>`select worker_id from worker_heartbeats where last_seen_at > now() - interval '90 seconds'`
+  if (workersQueBloqueiam(vivos).length > 0) {
     throw new Error('Há um worker rodando neste banco. Pare o "pnpm --filter @atd/worker dev" antes do e2e: ele chamaria a IA de verdade.')
   }
   const env = process.env
