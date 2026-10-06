@@ -41,13 +41,19 @@ ler() {
   printf '%s' "$v"
 }
 
+urldecode() { local s="$1"; printf '%b' "${s//%/\\x}"; }
+
 psql_q() { # psql_q <url> <sql> — saída sem cabeçalho; erro do psql vai para /dev/null (pode conter a URL)
-  local url="$1" sql="$2"
+  # A senha sai da URL e vai por PGPASSWORD (ambiente), para não aparecer na linha de comando (ps).
+  local url="$1" sql="$2" semsenha senha
+  semsenha="$(printf '%s' "$url" | sed -E 's#^([a-z]+://[^:/@]+):[^@]*@#\1@#')"
+  senha="$(urldecode "$(printf '%s' "$url" | sed -nE 's#^[a-z]+://[^:/@]+:([^@]*)@.*#\1#p')")"
   if command -v psql >/dev/null 2>&1; then
-    PGCONNECT_TIMEOUT=15 psql "$url" -XAtq -v ON_ERROR_STOP=1 -c "$sql" 2>/dev/null
+    PGPASSWORD="$senha" PGCONNECT_TIMEOUT=15 psql "$semsenha" -XAtq -v ON_ERROR_STOP=1 -c "$sql" 2>/dev/null
   elif command -v docker >/dev/null 2>&1; then
-    docker run --rm --network host -e PGCONNECT_TIMEOUT=15 -e URL="$url" postgres:17-alpine \
-      sh -c 'psql "$URL" -XAtq -v ON_ERROR_STOP=1 -c "$0"' "$sql" 2>/dev/null
+    # -e NOME sem valor: o docker copia do ambiente, nada vai para a linha de comando
+    URL="$semsenha" PGPASSWORD="$senha" docker run --rm --network host -e PGCONNECT_TIMEOUT=15 -e URL -e PGPASSWORD \
+      postgres:17-alpine sh -c 'psql "$URL" -XAtq -v ON_ERROR_STOP=1 -c "$0"' "$sql" 2>/dev/null
   else
     return 127
   fi
@@ -220,9 +226,15 @@ else
   if printf '%s' "$cfg" | grep -q '"disable_signup": *true'; then ok 'Auth: cadastro público desligado'
   elif [ -z "$cfg" ]; then falha 'Auth: sem resposta de /auth/v1/settings' 'confira SUPABASE_URL e a chave publishable'
   else falha 'Auth: cadastro público LIGADO' 'Authentication → Sign In / Providers → "Allow new users to sign up" = off'; fi
-  st="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$SUPA_URL/rest/v1/restaurants?select=id&limit=1" -H "apikey: $PUB")"
-  [ "$st" != 200 ] && ok "Data API não expõe o schema public (HTTP $st)" \
-    || falha 'Data API expõe o schema public (HTTP 200)' 'Project Settings → Data API → Exposed schemas vazio'
+  # Sem grants para anon, um schema public EXPOSTO responde 401/403 com "permission denied" (42501), não 200.
+  # Conta como não exposto: PGRST106 (schema fora da lista) ou Data API desligada (404/503 do gateway).
+  resp="$(curl -s -w '\n%{http_code}' --max-time 15 "$SUPA_URL/rest/v1/restaurants?select=id&limit=1" -H "apikey: $PUB")"
+  st="${resp##*$'\n'}"; corpo="${resp%$'\n'*}"
+  conserto='Project Settings → Data API: desligar a Data API ou deixar Exposed schemas sem public e graphql_public'
+  if printf '%s' "$corpo" | grep -q 'PGRST106'; then ok "Data API não expõe o schema public (HTTP $st, PGRST106)"
+  elif [ "$st" = 404 ] || [ "$st" = 503 ]; then ok "Data API desligada (HTTP $st)"
+  elif [ "$st" = 200 ] || printf '%s' "$corpo" | grep -q '42501'; then falha "Data API expõe o schema public (HTTP $st)" "$conserto"
+  else aviso "Data API respondeu HTTP $st sem código conhecido" "confira no painel: $conserto"; fi
 fi
 SRV=''
 [ -f "$WORKER" ] && SRV="$(ler "$WORKER" SUPABASE_SERVICE_ROLE_KEY)"
