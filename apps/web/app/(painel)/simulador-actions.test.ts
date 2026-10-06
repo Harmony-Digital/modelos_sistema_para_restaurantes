@@ -30,23 +30,17 @@ const sessao = { userId: 'u1', role: 'dono', restaurantId: 'r1', claims: { sub: 
 const vazio = { mensagens: [], cursor: 0, digitando: false, estado: 'ia', relogioOffsetSegundos: null, limiteSimulacao: false }
 
 describe('Server Actions do simulador', () => {
-  it('audita abrir, novo cliente e relógio (sem texto de cliente no diff)', async () => {
+  it('audita abrir, novo cliente e relógio na transação da mudança (claims da sessão vão para a DAL)', async () => {
     m.abrirSimulacao.mockResolvedValue({ conversationId: CONV })
     m.novoClienteSimulado.mockResolvedValue({ conversationId: CONV })
     m.definirRelogioSimulado.mockResolvedValue('ok')
     await a.abrirSimuladorAction()
     await a.novoClienteSimuladorAction()
     await a.relogioSimuladorAction(CONV, null)
-    expect(m.registrarAuditoria.mock.calls.map((c) => [c[0], c[1], c[2].restaurantId, c[2].acao, c[2].entidade, c[2].entidadeId])).toEqual([
-      ['tx', sessao.claims, 'r1', 'simulador.aberto', 'conversation', CONV],
-      ['tx', sessao.claims, 'r1', 'simulador.novo_cliente', 'conversation', CONV],
-      ['tx', sessao.claims, 'r1', 'simulador.relogio', 'conversation', CONV],
-    ])
-  })
-
-  it('relógio recusado não audita', async () => {
-    m.definirRelogioSimulado.mockResolvedValue('nao_encontrada')
-    await a.relogioSimuladorAction(CONV, null)
+    expect(m.abrirSimulacao).toHaveBeenCalledWith(db, { restaurantId: 'r1', userId: 'u1' }, sessao.claims)
+    expect(m.novoClienteSimulado).toHaveBeenCalledWith(db, { restaurantId: 'r1', userId: 'u1' }, sessao.claims)
+    expect(m.definirRelogioSimulado).toHaveBeenCalledWith(db, { restaurantId: 'r1', userId: 'u1', conversationId: CONV, offsetSegundos: null }, sessao.claims)
+    // nenhuma auditoria à parte, fora da transação
     expect(m.registrarAuditoria).not.toHaveBeenCalled()
   })
 
@@ -85,7 +79,7 @@ describe('Server Actions do simulador', () => {
         mensagens: [{ id: 7, direcao: 'in', tipo: 'texto', texto: 'oi', payload: null, criadaEm: '2026-10-05T17:00:00.000Z' }],
       },
     })
-    expect(m.abrirSimulacao).toHaveBeenCalledWith(db, { restaurantId: 'r1', userId: 'u1' })
+    expect(m.abrirSimulacao).toHaveBeenCalledWith(db, { restaurantId: 'r1', userId: 'u1' }, sessao.claims)
   })
 
   it('enviar: valida, usa a fila do webhook e traduz conversa encerrada', async () => {
@@ -111,7 +105,7 @@ describe('Server Actions do simulador', () => {
     try {
       m.definirRelogioSimulado.mockResolvedValue('ok')
       expect(await a.relogioSimuladorAction(CONV, '2026-10-11T12:00')).toEqual({ ok: true, data: { relogioOffsetSegundos: 6 * 86_400 - 2 * 3600 } })
-      expect(m.definirRelogioSimulado).toHaveBeenLastCalledWith(db, { restaurantId: 'r1', userId: 'u1', conversationId: CONV, offsetSegundos: 6 * 86_400 - 2 * 3600 })
+      expect(m.definirRelogioSimulado).toHaveBeenLastCalledWith(db, { restaurantId: 'r1', userId: 'u1', conversationId: CONV, offsetSegundos: 6 * 86_400 - 2 * 3600 }, sessao.claims)
       expect(await a.relogioSimuladorAction(CONV, '2026-02-30T12:00')).toEqual({ ok: false, fieldErrors: { local: 'Essa data não existe.' } })
       expect(await a.relogioSimuladorAction(CONV, '2028-01-01T12:00')).toEqual({
         ok: false, fieldErrors: { local: 'Escolha uma data até um ano antes ou depois de hoje.' },

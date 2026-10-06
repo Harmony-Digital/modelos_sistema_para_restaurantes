@@ -3,7 +3,8 @@ import { and, asc, desc, eq, gt, inArray, like, min, ne, or, sql } from 'drizzle
 import type { Db } from './client.ts'
 import { ingestInbound } from './ingest.ts'
 import type { Enqueue } from './queue.ts'
-import { withUserContext, type JwtClaims, type Tx } from './rls.ts'
+import { registrarAuditoria } from './painel-comum.ts'
+import { assumirUsuario, withUserContext, type JwtClaims, type Tx } from './rls.ts'
 import { conversations, customers, messages } from './schema/conversation.ts'
 import { aiRuns } from './schema/ops.ts'
 
@@ -97,16 +98,29 @@ async function criar(tx: Tx, p: DonoSimulacao, relogioOffsetSegundos: number | n
   return { conversationId: conv!.id }
 }
 
-export function abrirSimulacao(db: Db, p: DonoSimulacao): Promise<{ conversationId: string }> {
+/**
+ * O simulador gasta IA real: com `claims`, a ação fica no `audit_log` na MESMA transação da mudança (sem texto de
+ * cliente nem telefone). A mudança é feita como web_app; a auditoria passa para o usuário (RLS `self_insert`) no fim.
+ * Auditoria recusada ⇒ a mudança volta.
+ */
+async function auditar(tx: Tx, claims: JwtClaims | undefined, p: DonoSimulacao, acao: string, conversationId: string, diff?: unknown) {
+  if (!claims) return
+  await assumirUsuario(tx, claims)
+  await registrarAuditoria(tx, claims, { restaurantId: p.restaurantId, acao, entidade: 'conversation', entidadeId: conversationId, diff })
+}
+
+export function abrirSimulacao(db: Db, p: DonoSimulacao, claims?: JwtClaims): Promise<{ conversationId: string }> {
   return db.transaction(async (tx) => {
     await travar(tx, p.userId)
     const [atual] = await abertasDoUsuario(tx, p)
-    return atual ? { conversationId: atual.id } : criar(tx, p, null)
+    const r = atual ? { conversationId: atual.id } : await criar(tx, p, null)
+    await auditar(tx, claims, p, 'simulador.aberto', r.conversationId)
+    return r
   })
 }
 
 /** Começa do zero (aviso de privacidade, pendente, histórico), mantendo o relógio simulado escolhido. */
-export function novoClienteSimulado(db: Db, p: DonoSimulacao): Promise<{ conversationId: string }> {
+export function novoClienteSimulado(db: Db, p: DonoSimulacao, claims?: JwtClaims): Promise<{ conversationId: string }> {
   return db.transaction(async (tx) => {
     await travar(tx, p.userId)
     const abertas = await abertasDoUsuario(tx, p)
@@ -115,7 +129,9 @@ export function novoClienteSimulado(db: Db, p: DonoSimulacao): Promise<{ convers
         .set({ estado: 'encerrada', pendente: null })
         .where(inArray(conversations.id, abertas.map((a) => a.id)))
     }
-    return criar(tx, p, abertas[0]?.relogioOffsetSegundos ?? null)
+    const r = await criar(tx, p, abertas[0]?.relogioOffsetSegundos ?? null)
+    await auditar(tx, claims, p, 'simulador.novo_cliente', r.conversationId)
+    return r
   })
 }
 
@@ -146,11 +162,15 @@ export async function enviarMensagemSimulada(
 export async function definirRelogioSimulado(
   db: Db,
   p: NaConversa & { offsetSegundos: number | null },
+  claims?: JwtClaims,
 ): Promise<'ok' | 'nao_encontrada'> {
-  const c = await conversaDoUsuario(db, p)
-  if (!c) return 'nao_encontrada'
-  await db.update(conversations).set({ relogioOffsetSegundos: p.offsetSegundos }).where(eq(conversations.id, c.id))
-  return 'ok'
+  return db.transaction(async (tx) => {
+    const c = await conversaDoUsuario(tx, p)
+    if (!c) return 'nao_encontrada'
+    await tx.update(conversations).set({ relogioOffsetSegundos: p.offsetSegundos }).where(eq(conversations.id, c.id))
+    await auditar(tx, claims, p, 'simulador.relogio', c.id, { relogioOffsetSegundos: p.offsetSegundos })
+    return 'ok' as const
+  })
 }
 
 export async function mensagensSimuladas(db: Db, p: NaConversa & { desdeId: number }): Promise<EstadoSimulacao | null> {

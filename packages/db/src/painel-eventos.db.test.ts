@@ -59,6 +59,20 @@ describe('painel de espaços', () => {
     expect((await logs(id)).map((l) => l.acao).sort()).toEqual(['espaco.atualizado', 'espaco.criado'])
   })
 
+  it('espaco.atualizado: diff só com os campos alterados (de/para); texto livre só marca que mudou', async () => {
+    const c = await cenario()
+    const r = await salvarEspaco(db, as(c.dono), null, espaco(c.u1, { descricao: 'Amplo', condicoes: 'Sinal de 30%' }))
+    const id = r.ok ? r.valor.id : ''
+    await salvarEspaco(db, as(c.dono), id, espaco(c.u1, { nome: 'Salão Nobre', capacidadeMax: 100, descricao: 'Muito amplo', condicoes: 'Sinal de 30%' }))
+    await salvarEspaco(db, as(c.dono), id, espaco(c.u1, { nome: 'Salão Nobre', capacidadeMax: 100, descricao: 'Muito amplo', condicoes: 'Sinal de 30%' }))
+    const atualizados = (await logs(id)).filter((l) => l.acao === 'espaco.atualizado').sort((a, b) => a.id - b.id)
+    expect(atualizados.map((l) => l.diff)).toEqual([
+      { nome: { de: 'Salão', para: 'Salão Nobre' }, capacidadeMax: { de: 80, para: 100 }, descricao: { alterado: true } },
+      {},
+    ])
+    expect(JSON.stringify(atualizados.map((l) => l.diff))).not.toContain('amplo')
+  })
+
   it('capacidade fora da regra ⇒ capacidade_invalida (criar e editar), sem gravar', async () => {
     const c = await cenario()
     expect(await salvarEspaco(db, as(c.dono), null, espaco(c.u1, { capacidadeMin: 50, capacidadeMax: 20 }))).toEqual({ ok: false, erro: 'capacidade_invalida' })
