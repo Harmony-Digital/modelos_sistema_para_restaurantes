@@ -265,6 +265,8 @@ describe('resolverS3 — cancelar', () => {
     expect(r.acoes).toEqual([{
       tipo: 'cancelar_evento', pedidoId: 'p1', texto,
       textoSeFalhar: 'Já temos um evento confirmado seu nesse dia. Vou chamar a equipe para te ajudar.', handoffSeFalhar: true,
+      // a equipe recusou ou cancelou o pedido no meio: texto neutro (nunca "confirmado")
+      textoSeAtualizado: 'Seu pedido de evento foi atualizado pela equipe. Vou chamar alguém para te ajudar.',
     }])
     expect(r.acoes[0]).not.toMatchObject({ textoSeFalhar: NAO_ACHOU })
     expect(r.handoff).toBe(false)

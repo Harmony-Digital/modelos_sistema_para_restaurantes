@@ -48,7 +48,8 @@ export const ROTULOS_MODELO: Record<ChaveModelo, { titulo: string; quando: strin
   evento_qual_cancelar: { titulo: 'Qual pedido de evento cancelar', quando: 'O cliente tem vários pedidos e não disse qual cancelar. {exemplo} é uma frase de cancelamento com o primeiro pedido da lista.' },
   evento_confirmado_humano: { titulo: 'Evento já confirmado', quando: 'O cliente quer cancelar um evento confirmado: um atendente assume.' },
   evento_mudanca_humano: { titulo: 'Mudança no pedido de evento', quando: 'O cliente quer mudar um pedido de evento em andamento: a equipe assume e o pedido recebe uma observação.' },
-  evento_ja_confirmado_humano: { titulo: 'Já há evento confirmado no dia', quando: 'O cliente pede um evento na unidade e data de um evento já confirmado: um atendente assume.' },
+  evento_ja_confirmado_humano: { titulo: 'Já há evento confirmado no dia', quando: 'O cliente pede um evento na unidade e data de um evento já confirmado (ou quer cancelar um pedido que a equipe acabou de confirmar): um atendente assume.' },
+  evento_atualizado_humano: { titulo: 'Pedido de evento mudado pela equipe', quando: 'O cliente quer cancelar um pedido que a equipe acabou de recusar ou cancelar: um atendente assume.' },
   // cardápio (Etapa 05)
   cardapio_item: { titulo: 'Item do cardápio', quando: 'O cliente pergunta se tem um item ou quanto custa.' },
   cardapio_indisponivel: { titulo: 'Item indisponível na unidade', quando: 'O item existe, mas está indisponível na unidade perguntada.' },

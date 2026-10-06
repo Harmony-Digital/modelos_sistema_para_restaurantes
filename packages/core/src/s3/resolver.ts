@@ -286,7 +286,10 @@ export function resolverItensS3(
       cancelados.add(p.id)
       const texto = m('evento_cancelado', { unidade: nomeDe(p.unitId), quando: minuscula(rotulo(p.data)) })
       // o banco só não cancela se a equipe mexeu no pedido depois da leitura (ex.: confirmou): a equipe assume
-      acoes.push({ tipo: 'cancelar_evento', pedidoId: p.id, texto, textoSeFalhar: m('evento_ja_confirmado_humano'), handoffSeFalhar: true })
+      acoes.push({
+        tipo: 'cancelar_evento', pedidoId: p.id, texto, textoSeFalhar: m('evento_ja_confirmado_humano'),
+        textoSeAtualizado: m('evento_atualizado_humano'), handoffSeFalhar: true,
+      })
       respondidos++
       trechos.push(texto)
       return

@@ -59,9 +59,13 @@ export type AcaoS3 =
   }
   /**
    * `texto` é o trecho da resposta. Se o banco não cancelar (corrida: a equipe confirmou ou mudou o pedido depois da
-   * leitura), o worker troca o trecho por `textoSeFalhar` e, com `handoffSeFalhar`, passa a conversa para a equipe.
+   * leitura), o worker troca o trecho por `textoSeFalhar` (pedido confirmado) ou `textoSeAtualizado` (recusado,
+   * cancelado ou não encontrado: texto neutro, nunca "confirmado") e, com `handoffSeFalhar`, passa a conversa para a equipe.
    */
-  | { tipo: 'cancelar_evento'; pedidoId: string; texto: string; textoSeFalhar: string; handoffSeFalhar: boolean }
+  | {
+    tipo: 'cancelar_evento'; pedidoId: string; texto: string; textoSeFalhar: string; textoSeAtualizado: string
+    handoffSeFalhar: boolean
+  }
   /** mudança pedida num pedido em andamento: o worker acrescenta `observacao` (texto nosso, ≤ 300) às observações */
   | { tipo: 'observar_pedido'; pedidoId: string; observacao: string }
 

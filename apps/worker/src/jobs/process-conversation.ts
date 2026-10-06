@@ -9,7 +9,7 @@ import {
 } from '@atd/core'
 import { horarioHumanoSchema, proximoHorarioHumano, textoProximoHorario, type HandoffMotivo } from '@atd/core/conversa'
 import {
-  arquivoParaEnvio, avisosAtivosDoCliente, buscarCardapio, cancelarAvisoDoCliente, cancelarPedidoDoCliente,
+  arquivoParaEnvio, avisosAtivosDoCliente, buscarCardapio, cancelarAvisoDoCliente, cancelarPedidoDoCliente, statusPedidoDoCliente,
   carregarContextoS1, espacosAtivos, observarPedidoDoCliente, pedidosDoCliente, registrarAviso,
   registrarLacunas, registrarPedidoEvento, releaseBudget, reserveBudget, resumoCardapio, schema, settleBudget, type ArquivoCardapio,
   type Db, type ItemEncontrado, type Reservation, type ResumoCardapioDb, type Tx,
@@ -818,7 +818,9 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision, now: Date): P
           await tx.insert(auditLog).values({ restaurantId, atorTipo: 'ia', acao: 'evento.pedido_cancelado', entidade: 'event_request', entidadeId: a.pedidoId })
           continue
         }
-        saidas = trocarTrecho(saidas, a.texto, a.textoSeFalhar)
+        // confirmado pela equipe: o texto diz isso; recusado, cancelado ou não é dele: texto neutro (nunca "confirmado")
+        const atual = await statusPedidoDoCliente(tx, { restaurantId, customerId: ctx.customer.id, pedidoId: a.pedidoId })
+        saidas = trocarTrecho(saidas, a.texto, atual === 'confirmado' ? a.textoSeFalhar : a.textoSeAtualizado)
         // a equipe mexeu no pedido depois da leitura (ex.: confirmou): a resposta já diz que a equipe vai ajudar
         if (a.handoffSeFalhar && !handoff) {
           handoff = { motivo: 'servico', avisar: 'so_fora' }

@@ -82,6 +82,8 @@ export const MODELOS_S1 = {
   // correções da homologação da Etapa 04 (Etapa 05): mudança de pedido e pedido em dia já confirmado vão para a equipe
   evento_mudanca_humano: { texto: 'Anotei o que você pediu e vou chamar a equipe para ajustar seu pedido de evento.', variaveis: [] },
   evento_ja_confirmado_humano: { texto: 'Já temos um evento confirmado seu nesse dia. Vou chamar a equipe para te ajudar.', variaveis: [] },
+  // revisão final da Etapa 06: o cancelamento não foi feito porque a equipe recusou ou cancelou o pedido no meio
+  evento_atualizado_humano: { texto: 'Seu pedido de evento foi atualizado pela equipe. Vou chamar alguém para te ajudar.', variaveis: [] },
   // S4 — cardápio (Etapa 05). Preço só do banco (`R$ 1.234,56`); nunca texto extraído pelo LLM.
   cardapio_item: { texto: 'Temos sim: {itens}', variaveis: ['itens'] },
   cardapio_indisponivel: { texto: 'Na unidade {unidade}, {item} está indisponível no momento.', variaveis: ['unidade', 'item'] },

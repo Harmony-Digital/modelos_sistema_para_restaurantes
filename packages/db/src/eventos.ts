@@ -107,6 +107,22 @@ export async function cancelarPedidoDoCliente(
   return r.length > 0
 }
 
+/** Status atual do pedido do próprio cliente (`null` se não for dele ou não existir). */
+export async function statusPedidoDoCliente(
+  tx: Tx,
+  p: { restaurantId: string; customerId: string; pedidoId: string },
+): Promise<string | null> {
+  const [r] = await tx
+    .select({ status: eventRequests.status })
+    .from(eventRequests)
+    .where(and(
+      eq(eventRequests.id, p.pedidoId),
+      eq(eventRequests.restaurantId, p.restaurantId),
+      eq(eventRequests.customerId, p.customerId),
+    ))
+  return r?.status ?? null
+}
+
 const MAX_OBSERVACOES = 300
 
 /** Mudança pedida pelo cliente num pedido em andamento: acrescenta a observação (texto nosso) sem passar de 300. */

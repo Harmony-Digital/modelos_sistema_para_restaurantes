@@ -378,7 +378,7 @@ describe('S3 no worker', () => {
     injecao.pedidos = [{ id: pA!.id, unitId: pA!.unitId, spaceId: null, data: pA!.data, convidados: 40, tipo: 'aniversario', status: 'novo' }]
     await receive(restaurantId, 'cancela o pedido de evento', null, 'bia')
     await processConversation(deps(fakeLlm([triagem(cancelarEv())]).llm, wa), convB)
-    expect(ultimoTexto(wa)).toBe('Já temos um evento confirmado seu nesse dia. Vou chamar a equipe para te ajudar.')
+    expect(ultimoTexto(wa)).toBe('Seu pedido de evento foi atualizado pela equipe. Vou chamar alguém para te ajudar.')
     expect(await pedidos()).toMatchObject([{ id: pA!.id, status: 'novo' }])
     expect((await acoesAudit()).map((a) => a.acao)).toEqual(['evento.pedido_criado', 'conversa.handoff_evento'])
     expect(await conversa(convB)).toMatchObject({ estado: 'aguardando_humano', handoffMotivo: 'servico' })
@@ -599,6 +599,21 @@ describe('S3 no worker — pendências da Etapa 04 (Etapa 06)', () => {
     await receive(restaurantId, 'Asa Norte', ids['Asa Norte']!)
     await processConversation(deps(fakeLlm([]).llm, wa), conv)
     expect(ultimoTexto(wa)).toBe('Essa lista expirou. Pode me mandar a pergunta de novo?')
+  })
+
+  it.each(['recusado', 'cancelado'] as const)('a equipe marca o pedido como %s durante a resposta ⇒ texto neutro (nunca "confirmado") e passa para a equipe', async (status) => {
+    const { restaurantId } = await setup()
+    const conv = await receive(restaurantId, 'aniversário pra 40 na asa sul dia 20/10')
+    const wa = fakeWa()
+    await processConversation(deps(fakeLlm([triagem(ev(COMPLETO))]).llm, wa), conv)
+    const [p] = await pedidos()
+    injecao.pedidos = [{ id: p!.id, unitId: p!.unitId, spaceId: null, data: p!.data, convidados: 40, tipo: 'aniversario', status: 'novo' }]
+    await db.update(schema.eventRequests).set({ status })
+    await receive(restaurantId, 'quero cancelar o evento')
+    await processConversation(deps(fakeLlm([triagem(cancelarEv())]).llm, wa), conv)
+    expect(ultimoTexto(wa)).toBe('Seu pedido de evento foi atualizado pela equipe. Vou chamar alguém para te ajudar.')
+    expect(await pedidos()).toMatchObject([{ status }])
+    expect(await conversa(conv)).toMatchObject({ estado: 'aguardando_humano', handoffMotivo: 'servico' })
   })
 
   it('pendência 4: a equipe confirma o pedido durante a resposta ⇒ não cancela, avisa e passa para a equipe', async () => {
