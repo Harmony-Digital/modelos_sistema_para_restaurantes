@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
-import { boolean, index, integer, jsonb, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { boolean, check, index, integer, jsonb, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import { authUsers } from 'drizzle-orm/supabase'
-import { holidayPolicy, staffRole } from './enums.ts'
+import { holidayPolicy, inviteStatus, staffRole } from './enums.ts'
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -19,8 +19,10 @@ export const restaurants = pgTable('restaurants', {
   dpoContato: text('dpo_contato'),
   politicaUrl: text('politica_url'),
   politicaFeriado: holidayPolicy('politica_feriado').notNull().default('como_domingo'),
+  /** Cotação US$ → R$ só para exibição (o dinheiro fica em USD). Editável pelo dono. */
+  cotacaoUsdBrl: numeric('cotacao_usd_brl', { precision: 10, scale: 4, mode: 'string' }).notNull().default('5.5'),
   ...timestamps,
-})
+}, (t) => [check('restaurants_cotacao_ck', sql`${t.cotacaoUsdBrl} between 0.5 and 50`)])
 
 export const units = pgTable(
   'units',
@@ -62,6 +64,37 @@ export const staff = pgTable(
     ...timestamps,
   },
   (t) => [index('staff_restaurant_idx').on(t.restaurantId)],
+)
+
+/**
+ * Convite de equipe (Etapa 08): o dono cria pelo painel; o worker chama o convite do Supabase Auth (chave de serviço
+ * só no worker) e cria o `staff`. E-mail é PII: nunca em log nem no `diff` da auditoria. `unidades` vazio = todas.
+ */
+export const staffInvites = pgTable(
+  'staff_invites',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    restaurantId: uuid('restaurant_id').notNull().references(() => restaurants.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    nome: text('nome').notNull(),
+    papel: staffRole('papel').notNull(),
+    unidades: uuid('unidades').array().notNull().default(sql`'{}'::uuid[]`),
+    status: inviteStatus('status').notNull().default('pendente'),
+    /** Código do erro (sem PII), p.ex. `email_existente`. */
+    erro: text('erro'),
+    userId: uuid('user_id').references(() => authUsers.id, { onDelete: 'set null' }),
+    createdBy: uuid('created_by').references(() => authUsers.id, { onDelete: 'set null' }),
+    ...timestamps,
+  },
+  (t) => [
+    // um convite em aberto por e-mail no restaurante
+    uniqueIndex('staff_invites_email_uq').on(t.restaurantId, sql`lower(${t.email})`).where(sql`status <> 'aceito'`),
+    index('staff_invites_restaurant_idx').on(t.restaurantId, t.createdAt.desc()),
+    check('staff_invites_papel_ck', sql`${t.papel} <> 'dono'`),
+    check('staff_invites_email_ck', sql`char_length(${t.email}) between 3 and 254 and position('@' in ${t.email}) > 1`),
+    check('staff_invites_nome_ck', sql`char_length(${t.nome}) between 1 and 80`),
+    check('staff_invites_erro_ck', sql`${t.erro} is null or char_length(${t.erro}) <= 60`),
+  ],
 )
 
 export { timestamps }

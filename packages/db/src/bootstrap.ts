@@ -7,6 +7,8 @@ import type { StaffRole } from './staff.ts'
 export const DEFAULT_BUDGET = [
   { escopo: 'ia', periodo: 'dia', limiteUsd: '2' },
   { escopo: 'ia', periodo: 'mes', limiteUsd: '40' },
+  { escopo: 'simulacao', periodo: 'dia', limiteUsd: '1' },
+  { escopo: 'simulacao', periodo: 'mes', limiteUsd: '10' },
   { escopo: 'whatsapp', periodo: 'dia', limiteUsd: '1' },
   { escopo: 'whatsapp', periodo: 'mes', limiteUsd: '20' },
 ] as const

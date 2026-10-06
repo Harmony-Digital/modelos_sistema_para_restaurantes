@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ActionResult } from '@/lib/action-result'
 import {
-  AVISO_SIMULACAO, avisoDoEstado, horaDe, paraSimMessage, rotuloRelogio,
+  AVISO_LIMITE_SIMULACAO, AVISO_SIMULACAO, avisoDoEstado, horaDe, paraSimMessage, rotuloRelogio,
   type DetalheTela, type MensagemTela, type RespostaSimulador,
 } from '@/lib/simulador-tela'
 import type { SimMessage } from './types'
@@ -27,6 +27,7 @@ export function useSimulador(acoes: AcoesSimulador, aberto: boolean, timezone: s
   const [estado, setEstado] = useState<RespostaSimulador['estado']>('ia')
   const [digitando, setDigitando] = useState(false)
   const [offset, setOffset] = useState<number | null>(null)
+  const [limite, setLimite] = useState(false)
   // o polling só limpa o erro que ele mesmo gerou; erro de ação fica até a próxima ação bem-sucedida
   const [erroPolling, setErroPolling] = useState<string | null>(null)
   const [erroAcao, setErroAcao] = useState<string | null>(null)
@@ -52,6 +53,7 @@ export function useSimulador(acoes: AcoesSimulador, aberto: boolean, timezone: s
     setEstado(r.estado)
     setDigitando(r.digitando)
     setOffset(r.relogioOffsetSegundos)
+    setLimite(r.limiteSimulacao)
   }, [])
 
   useEffect(() => {
@@ -169,6 +171,7 @@ export function useSimulador(acoes: AcoesSimulador, aberto: boolean, timezone: s
     AVISO_SIMULACAO,
     ...servidor.map((m) => paraSimMessage(m, timezone, offset)),
     ...otimistas,
+    ...(limite ? [AVISO_LIMITE_SIMULACAO] : []),
     ...(aviso ? [aviso] : []),
   ]
   return {

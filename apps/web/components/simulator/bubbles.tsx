@@ -1,6 +1,7 @@
 'use client'
 import { Check, CheckCheck, Clock3, FileText, List, MapPin } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
+import Link from 'next/link'
 import { WA } from './colors'
 import type { SimMessage, SimStatus } from './types'
 
@@ -102,7 +103,13 @@ export function Bubble(props: { m: SimMessage; onEscolher: (mensagemId: string, 
   if (m.tipo === 'aviso') {
     return (
       <p className="mx-auto my-2 max-w-[85%] rounded-lg px-3 py-1.5 text-center text-xs" style={{ background: '#182229', color: WA.meta }}>
-        {m.texto}
+        {m.link && m.texto.includes(m.link.rotulo) ? (
+          <>
+            {m.texto.slice(0, m.texto.indexOf(m.link.rotulo))}
+            <Link href={m.link.href} className="inline-flex min-h-11 items-center underline underline-offset-2">{m.link.rotulo}</Link>
+            {m.texto.slice(m.texto.indexOf(m.link.rotulo) + m.link.rotulo.length)}
+          </>
+        ) : m.texto}
       </p>
     )
   }

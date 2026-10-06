@@ -1,14 +1,20 @@
 import Link from 'next/link'
-import { contarPedidosNovos, getPanelStatus, listAwaitingHuman, resumoInicio, tempoAteAssumirHoje, totalPrevistoHoje } from '@atd/db'
+import {
+  contarPedidosNovos, getPanelStatus, lerLimites, listAwaitingHuman, listarPedidosTitular, resumoInicio, tempoAteAssumirHoje, totalPrevistoHoje,
+} from '@atd/db'
 import { AwaitingHuman } from '@/components/conversations/awaiting-human'
+import { CartaoPrazoLgpd } from '@/components/home/cartao-prazo-lgpd'
 import { PerguntasSemResposta } from '@/components/home/perguntas-sem-resposta'
 import { SpendCard } from '@/components/home/spend-card'
+import { CartaoAlertasGastos } from '@/components/painel/alerta-gastos'
 import { StatCard } from '@/components/home/stat-card'
 import { TopBar } from '@/components/shell/top-bar'
 import { requireStaff } from '@/lib/dal'
 import { formatarEspera } from '@/lib/conversas'
 import { percentual } from '@/lib/inicio'
+import { rotuloProvedorIa } from '@/lib/provedor-ia'
 import { getDb } from '@/lib/server/db'
+import { resumoGastosDoRequest } from '@/lib/server/gastos'
 import { devolverAction } from './conversas/actions'
 
 export const dynamic = 'force-dynamic'
@@ -23,6 +29,10 @@ export default async function InicioPage() {
   const pedidosNovos = await contarPedidosNovos(getDb(), session.claims)
   const resumo = gestao ? await resumoInicio(getDb(), session.claims) : null
   const espera = gestao ? await tempoAteAssumirHoje(getDb(), session.claims) : null
+  const [limites, gastos] = gestao
+    ? await Promise.all([lerLimites(getDb(), session.claims), resumoGastosDoRequest(session.claims)])
+    : [null, null]
+  const pedidosLgpd = gestao ? await listarPedidosTitular(getDb(), session.claims, { status: ['aberto', 'em_andamento'] }) : []
   const online = s.workerLastSeen !== null && Date.now() - s.workerLastSeen.getTime() < ONLINE_MS
   return (
     <>
@@ -71,8 +81,10 @@ export default async function InicioPage() {
             />
           )}
         </div>
+        {gestao && <CartaoPrazoLgpd pedidos={pedidosLgpd} agora={new Date()} />}
         {resumo && <PerguntasSemResposta lacunas={resumo.lacunas} />}
-        {gestao && <SpendCard gastos={s.gastos} />}
+        {gastos && <CartaoAlertasGastos alertas={gastos.alertas} />}
+        {limites && <SpendCard gastos={s.gastos} cotacao={limites.cotacao} provedor={rotuloProvedorIa()} />}
         <AwaitingHuman itens={await listAwaitingHuman(getDb(), session.claims)} action={devolverAction} />
       </main>
     </>

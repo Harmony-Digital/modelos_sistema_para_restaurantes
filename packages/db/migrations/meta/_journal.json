@@ -232,6 +232,55 @@
       "when": 1791293710569,
       "tag": "0032_metrica_assumir_por_unidade",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1791312928440,
+      "tag": "0033_simulacao_escopo",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1791312961910,
+      "tag": "0034_gastos_lgpd_equipe",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1791313001427,
+      "tag": "0035_gastos_lgpd_funcoes",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1791315365572,
+      "tag": "0036_retencao_inativos_defesa",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1791315829172,
+      "tag": "0037_simulacao_limite_leitura",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1791318046738,
+      "tag": "0038_simulacao_limite_indice",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1791318050955,
+      "tag": "0039_simulacao_limite_sem_entrada",
+      "breakpoints": true
     }
   ]
 }

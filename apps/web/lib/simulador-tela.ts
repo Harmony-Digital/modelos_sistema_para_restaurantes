@@ -19,6 +19,8 @@ export type RespostaSimulador = {
   digitando: boolean
   estado: 'ia' | 'aguardando_humano' | 'humano' | 'encerrada'
   relogioOffsetSegundos: number | null
+  /** a última resposta veio do modo econômico por falta de saldo de simulação */
+  limiteSimulacao: boolean
 }
 export type DetalheTela = {
   id: number; etapa: string; modelo: string; promptVersion: string; intent: string | null
@@ -82,6 +84,12 @@ export function paraSimMessage(m: MensagemTela, timezone: string, offsetSegundos
   if (m.tipo === 'documento' && m.midia) return { id, de: 'restaurante', tipo: 'documento', titulo: m.midia.titulo, url: m.midia.url, hora }
   if (m.tipo === 'imagem' && m.midia) return { id, de: 'restaurante', tipo: 'imagem', url: m.midia.url, legenda: m.midia.titulo, hora }
   return { id, de: 'restaurante', tipo: 'texto', texto, hora }
+}
+
+export const TEXTO_LIMITE_SIMULACAO = 'Limite de simulação atingido hoje — ajuste em Gastos e limites'
+export const AVISO_LIMITE_SIMULACAO: SimMessage = {
+  id: 'aviso-limite', de: 'sistema', tipo: 'aviso', texto: TEXTO_LIMITE_SIMULACAO,
+  link: { rotulo: 'Gastos e limites', href: '/mais/gastos' },
 }
 
 export function avisoDoEstado(estado: RespostaSimulador['estado']): SimMessage | null {

@@ -17,13 +17,21 @@ export type JwtClaims = {
  */
 export function withUserContext<T>(db: Db, claims: JwtClaims, fn: (tx: Tx) => Promise<T>): Promise<T> {
   return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`select set_config('request.jwt.claims', ${JSON.stringify(claims)}, true),
-                 set_config('request.jwt.claim.sub', ${claims.sub}, true)`,
-    )
-    await tx.execute(sql`set local role authenticated`)
+    await assumirUsuario(tx, claims)
     return fn(tx)
   })
+}
+
+/**
+ * Passa a transação corrente para o usuário do painel (claims parametrizadas + `authenticated`) até o fim dela.
+ * Para gravar auditoria sob RLS no fim de uma mutação feita como web_app, na mesma transação.
+ */
+export async function assumirUsuario(tx: Tx, claims: JwtClaims): Promise<void> {
+  await tx.execute(
+    sql`select set_config('request.jwt.claims', ${JSON.stringify(claims)}, true),
+               set_config('request.jwt.claim.sub', ${claims.sub}, true)`,
+  )
+  await tx.execute(sql`set local role authenticated`)
 }
 
 const ROLES = { web_app: sql`web_app`, worker_app: sql`worker_app` } as const

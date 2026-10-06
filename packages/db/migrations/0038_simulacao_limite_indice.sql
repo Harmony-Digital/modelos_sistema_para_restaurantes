@@ -1,0 +1,1 @@
+CREATE INDEX "audit_log_sem_saldo_simulacao_idx" ON "audit_log" USING btree ("entidade_id","created_at") WHERE "audit_log"."acao" = 'orcamento.sem_saldo_simulacao';

@@ -31,6 +31,8 @@ test.beforeAll(async () => {
   for (const periodo of ['dia', 'mes']) {
     await sql`insert into budget_limits (restaurant_id, escopo, periodo, limite_usd)
       values (${r!.id}, 'ia', ${periodo}, 5) on conflict do nothing`
+    await sql`insert into budget_limits (restaurant_id, escopo, periodo, limite_usd)
+      values (${r!.id}, 'simulacao', ${periodo}, 5) on conflict do nothing`
   }
   // unidade aberta o dia todo, nos 7 dias: os testes não dependem da hora em que rodam
   const [u] = await sql`insert into units (restaurant_id, nome, slug, endereco)

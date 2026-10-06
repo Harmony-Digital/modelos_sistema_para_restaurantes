@@ -1,9 +1,9 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
-import { asc } from 'drizzle-orm'
+import { asc, eq } from 'drizzle-orm'
 import { createDb } from './client.ts'
 import { getTestDb, resetDb, seedRestaurant, seedStaff, setupPgbossRoles, WEB_URL } from './test-utils.ts'
 import { conversations, customers, messages } from './schema/conversation.ts'
-import { aiRuns } from './schema/ops.ts'
+import { aiRuns, auditLog } from './schema/ops.ts'
 import type { Enqueue } from './queue.ts'
 import {
   abrirSimulacao, definirRelogioSimulado, detalhesSimulacao, enviarMensagemSimulada, mensagensSimuladas, novoClienteSimulado,
@@ -136,17 +136,65 @@ describe('simulador (banco)', () => {
     expect(d!.map((x) => x.intent)).toEqual(['b', 'a'])
   })
 
+  it('auditoria do simulador na mesma transação: grava junto; se a auditoria falhar, a mudança volta', async () => {
+    const { restaurantId, dono } = await setup()
+    const p = { restaurantId, userId: dono }
+    const a = await abrirSimulacao(db, p, claims(dono))
+    expect(await definirRelogioSimulado(db, { ...p, conversationId: a.conversationId, offsetSegundos: 60 }, claims(dono))).toBe('ok')
+    const b = await novoClienteSimulado(db, p, claims(dono))
+    const log = await db.select({ acao: auditLog.acao, entidadeId: auditLog.entidadeId, atorId: auditLog.atorId, diff: auditLog.diff })
+      .from(auditLog).orderBy(asc(auditLog.id))
+    expect(log).toEqual([
+      { acao: 'simulador.aberto', entidadeId: a.conversationId, atorId: dono, diff: null },
+      { acao: 'simulador.relogio', entidadeId: a.conversationId, atorId: dono, diff: { relogioOffsetSegundos: 60 } },
+      { acao: 'simulador.novo_cliente', entidadeId: b.conversationId, atorId: dono, diff: null },
+    ])
+    // auditoria recusada pela RLS (sessão de quem não é da equipe) ⇒ nada muda
+    const intruso = claims('00000000-0000-4000-8000-000000000099')
+    await expect(novoClienteSimulado(db, p, intruso)).rejects.toThrow()
+    await expect(definirRelogioSimulado(db, { ...p, conversationId: b.conversationId, offsetSegundos: 120 }, intruso)).rejects.toThrow()
+    const [atual] = await db.select({ estado: conversations.estado, offset: conversations.relogioOffsetSegundos })
+      .from(conversations).where(eq(conversations.id, b.conversationId))
+    expect(atual).toEqual({ estado: 'ia', offset: 60 })
+    expect(await db.$count(conversations)).toBe(2)
+  })
+
+  it('aviso de limite: conversa sem mensagem do cliente devolve false mesmo com auditoria antiga; outro restaurante devolve false', async () => {
+    const { restaurantId, dono } = await setup()
+    const p = { restaurantId, userId: dono }
+    const { conversationId } = await abrirSimulacao(db, p)
+    const limite = async (rest: string) =>
+      (await sql<{ a: boolean }[]>`select app.simulacao_limite_atingido(${rest}::uuid, ${conversationId}::uuid) as a`)[0]!.a
+    await db.insert(auditLog).values({
+      restaurantId, atorTipo: 'sistema', acao: 'orcamento.sem_saldo_simulacao', entidade: 'conversation', entidadeId: conversationId,
+      createdAt: new Date('2025-01-01T00:00:00Z'),
+    })
+    expect(await limite(restaurantId)).toBe(false)
+    expect((await mensagensSimuladas(db, { ...p, conversationId, desdeId: 0 }))!.limiteSimulacao).toBe(false)
+    // com mensagem do cliente e auditoria posterior: true; mas só no restaurante certo
+    await enviarMensagemSimulada(db, { ...p, conversationId, texto: 'oi' }, enqueue)
+    await db.insert(auditLog).values({ restaurantId, atorTipo: 'sistema', acao: 'orcamento.sem_saldo_simulacao', entidade: 'conversation', entidadeId: conversationId, createdAt: new Date(Date.now() + 60_000) })
+    expect(await limite(restaurantId)).toBe(true)
+    const { restaurantId: outro } = await seedRestaurant(db)
+    expect(await limite(outro)).toBe(false)
+  })
+
   it('fidelidade de produção: tudo funciona conectado como web_app', async () => {
     await setupPgbossRoles()
     const { restaurantId, dono } = await setup()
     const web = createDb(WEB_URL, { max: 1 })
     try {
       const p = { restaurantId, userId: dono }
-      const { conversationId } = await abrirSimulacao(web.db, p)
+      const { conversationId } = await abrirSimulacao(web.db, p, claims(dono))
       expect(await enviarMensagemSimulada(web.db, { ...p, conversationId, texto: 'oi' }, enqueue)).toBe('ok')
-      expect(await definirRelogioSimulado(web.db, { ...p, conversationId, offsetSegundos: 60 })).toBe('ok')
+      expect(await definirRelogioSimulado(web.db, { ...p, conversationId, offsetSegundos: 60 }, claims(dono))).toBe('ok')
       expect((await mensagensSimuladas(web.db, { ...p, conversationId, desdeId: 0 }))!.mensagens).toHaveLength(1)
-      await novoClienteSimulado(web.db, p)
+      // aviso do limite de simulação: audit_log não é legível por web_app, a leitura passa pela função estreita
+      expect((await mensagensSimuladas(web.db, { ...p, conversationId, desdeId: 0 }))!.limiteSimulacao).toBe(false)
+      await db.insert(auditLog).values({ restaurantId, atorTipo: 'sistema', acao: 'orcamento.sem_saldo_simulacao', entidade: 'conversation', entidadeId: conversationId })
+      expect((await mensagensSimuladas(web.db, { ...p, conversationId, desdeId: 0 }))!.limiteSimulacao).toBe(true)
+      await novoClienteSimulado(web.db, p, claims(dono))
+      expect(await db.$count(auditLog, eq(auditLog.acao, 'simulador.novo_cliente'))).toBe(1)
     } finally {
       await web.sql.end()
     }

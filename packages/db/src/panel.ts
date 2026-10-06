@@ -22,8 +22,9 @@ export function getPanelStatus(db: Db, claims: JwtClaims) {
         and(eq(budgetCounters.periodo, 'dia'), eq(budgetCounters.inicioPeriodo, dia)),
         and(eq(budgetCounters.periodo, 'mes'), eq(budgetCounters.inicioPeriodo, mes)),
       ))
-    const gastos: Record<'ia' | 'whatsapp', { dia: string | null; mes: string | null }> = {
+    const gastos: Record<'ia' | 'simulacao' | 'whatsapp', { dia: string | null; mes: string | null }> = {
       ia: { dia: null, mes: null },
+      simulacao: { dia: null, mes: null },
       whatsapp: { dia: null, mes: null },
     }
     for (const c of contadores) gastos[c.escopo][c.periodo] = c.gasto

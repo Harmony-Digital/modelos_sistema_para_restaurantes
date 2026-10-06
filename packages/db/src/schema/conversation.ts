@@ -91,5 +91,7 @@ export const messages = pgTable(
     uniqueIndex('messages_wamid_uq').on(t.wamid),
     // cobre "pendentes desta conversa" (id > processed_up_to_id) e "últimas N" (order by id desc)
     index('messages_conversation_id_idx').on(t.conversationId, t.id),
+    // retenção diária: mensagens vencidas do restaurante, em lotes
+    index('messages_restaurant_created_idx').on(t.restaurantId, t.createdAt),
   ],
 )

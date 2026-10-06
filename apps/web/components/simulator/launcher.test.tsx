@@ -2,12 +2,15 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { MensagemTela, RespostaSimulador } from '@/lib/simulador-tela'
-import { SimulatorLauncher } from './launcher'
+let caminho = '/'
+vi.mock('next/navigation', async (orig) => ({ ...(await orig<typeof Navegacao>()), usePathname: () => caminho }))
+const { SimulatorLauncher } = await import('./launcher')
 import type { AcoesSimulador } from './use-simulador'
+import type * as Navegacao from 'next/navigation'
 
 const CONV = '00000000-0000-4000-8000-000000000001'
 const resp = (mensagens: MensagemTela[] = [], extra: Partial<RespostaSimulador> = {}): RespostaSimulador =>
-  ({ conversationId: CONV, mensagens, cursor: mensagens.at(-1)?.id ?? 0, digitando: false, estado: 'ia', relogioOffsetSegundos: null, ...extra })
+  ({ conversationId: CONV, mensagens, cursor: mensagens.at(-1)?.id ?? 0, digitando: false, estado: 'ia', relogioOffsetSegundos: null, limiteSimulacao: false, ...extra })
 const msg = (id: number, direcao: 'in' | 'out', texto: string): MensagemTela =>
   ({ id, direcao, tipo: 'texto', texto, payload: null, criadaEm: '2026-10-05T17:00:00.000Z' })
 
@@ -35,6 +38,30 @@ describe('SimulatorLauncher', () => {
   // O diálogo vem por next/dynamic; pré-carregar o chunk evita que a 1ª importação no jsdom estoure o tempo sob carga.
   beforeAll(async () => {
     await import('./simulator-dialog')
+  })
+
+  it('mostra o aviso de limite de simulação com link para Gastos e limites; some quando a flag cai', async () => {
+    let limite = true
+    const acoes = acoesFalsas({ abrir: vi.fn(async () => ({ ok: true as const, data: resp([msg(1, 'in', 'oi')], { limiteSimulacao: limite }) })), buscar: vi.fn(async () => ({ ok: true as const, data: resp([], { limiteSimulacao: limite }) })) })
+    await abrir(acoes)
+    const link = await screen.findByRole('link', { name: 'Gastos e limites' })
+    expect(link).toHaveAttribute('href', '/mais/gastos')
+    expect(link.parentElement).toHaveTextContent('Limite de simulação atingido hoje — ajuste em Gastos e limites')
+    limite = false
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Gastos e limites' })).toBeNull(), { timeout: 4000 })
+  })
+
+  it('o link do aviso tem alvo de toque de 44 px e navegar fecha o simulador', async () => {
+    caminho = '/'
+    const acoes = acoesFalsas({ abrir: vi.fn(async () => ({ ok: true as const, data: resp([msg(1, 'in', 'oi')], { limiteSimulacao: true }) })), buscar: vi.fn(async () => ({ ok: true as const, data: resp([], { limiteSimulacao: true }) })) })
+    const user = userEvent.setup()
+    const { rerender } = render(<SimulatorLauncher restaurante="Casa Teste" timezone="America/Sao_Paulo" acoes={acoes} />)
+    await user.click(screen.getByRole('button', { name: 'Abrir simulador de WhatsApp' }))
+    const link = await screen.findByRole('link', { name: 'Gastos e limites' }, { timeout: 5000 })
+    expect(link.className).toContain('min-h-11')
+    caminho = '/mais/gastos'
+    rerender(<SimulatorLauncher restaurante="Casa Teste" timezone="America/Sao_Paulo" acoes={acoes} />)
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Simulador de WhatsApp' })).toBeNull())
   })
 
   it('abre com foco no campo de mensagem, avisa que é simulação e fecha com Esc', async () => {

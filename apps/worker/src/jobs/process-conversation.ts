@@ -683,15 +683,18 @@ function toRun(r: JsonCallResult<TriageV6>, fallbackModel: string): AiRunRow {
 
 async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, now: Date): Promise<Decision> {
   const { db } = deps
+  // simulador tem limite próprio (`simulacao`): estourá-lo só põe a conversa simulada no modo econômico
   const reservation = await reserveBudget(db, {
     restaurantId: ctx.restaurant.id,
-    scope: 'ia',
+    scope: ctx.conv.simulada ? 'simulacao' : 'ia',
     amountUsd: RESERVE_USD, // cobre a chamada e a retentativa
     timeZone: ctx.restaurant.timezone,
     ref: `conversa:${ctx.conv.id}`,
+    aoFalharAlerta: (err) => deps.log.error({ err, conversationId: ctx.conv.id }, 'falha ao gravar o alerta de gasto da recusa'),
   })
   if (!reservation) {
-    return { replies: [], autor: 'sistema', handoff: { motivo: 'economico', avisar: 'sempre' }, audit: 'orcamento.sem_saldo' }
+    const audit = ctx.conv.simulada ? 'orcamento.sem_saldo_simulacao' : 'orcamento.sem_saldo'
+    return { replies: [], autor: 'sistema', handoff: { motivo: 'economico', avisar: 'sempre' }, audit }
   }
 
   // a resposta a uma pergunta nossa vai com o contexto (Decisão 3); pendente vencido não conta

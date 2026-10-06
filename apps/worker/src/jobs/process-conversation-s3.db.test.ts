@@ -66,6 +66,8 @@ async function setup(nUnidades: 1 | 4 = 1) {
   await db.insert(schema.budgetLimits).values([
     { restaurantId, escopo: 'ia', periodo: 'dia', limiteUsd: '1' },
     { restaurantId, escopo: 'ia', periodo: 'mes', limiteUsd: '10' },
+    { restaurantId, escopo: 'simulacao', periodo: 'dia', limiteUsd: '1' }, // conversa simulada tem limite próprio
+    { restaurantId, escopo: 'simulacao', periodo: 'mes', limiteUsd: '10' },
   ])
   const espacos = await db.insert(schema.eventSpaces).values([
     { restaurantId, unitId, nome: 'Varanda', capacidadeMin: 10, capacidadeMax: 30 },

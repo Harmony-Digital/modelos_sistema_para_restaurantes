@@ -39,6 +39,20 @@ export function listarEspacos(db: Db, claims: JwtClaims, unitId: string): Promis
   )
 }
 
+type CamposEspaco = Pick<DadosEspaco, 'nome' | 'capacidadeMin' | 'capacidadeMax' | 'descricao' | 'condicoes' | 'ativo'>
+
+/** Só os campos alterados: de/para nos curtos; descrição e condições (texto livre) só marcam que mudaram. */
+function diffEspaco(antes: CamposEspaco, depois: CamposEspaco): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const k of ['nome', 'capacidadeMin', 'capacidadeMax', 'ativo'] as const) {
+    if (antes[k] !== depois[k]) out[k] = { de: antes[k], para: depois[k] }
+  }
+  for (const k of ['descricao', 'condicoes'] as const) {
+    if ((antes[k] ?? null) !== (depois[k] ?? null)) out[k] = { alterado: true }
+  }
+  return out
+}
+
 export type ResultadoSalvarEspaco = ResultadoPainel<{ id: string }> | { ok: false; erro: 'capacidade_invalida' }
 
 /** Nome repetido na unidade ⇒ `nome_duplicado`; capacidade fora de 1 ≤ mín ≤ máx ≤ 1000 ⇒ `capacidade_invalida`. */
@@ -62,6 +76,15 @@ export function salvarEspaco(db: Db, claims: JwtClaims, id: string | null, v: Da
         return ok({ id: e!.id })
       }
       // o espaço não muda de unidade: unidade diferente da gravada ⇒ não encontrado
+      const [antes] = await tx
+        .select({
+          nome: eventSpaces.nome, capacidadeMin: eventSpaces.capacidadeMin, capacidadeMax: eventSpaces.capacidadeMax,
+          descricao: eventSpaces.descricao, condicoes: eventSpaces.condicoes, ativo: eventSpaces.ativo,
+        })
+        .from(eventSpaces)
+        .where(and(eq(eventSpaces.id, id), eq(eventSpaces.unitId, v.unitId)))
+        .for('update')
+      if (!antes) return falha('nao_encontrada')
       const [e] = await tx
         .update(eventSpaces)
         .set({
@@ -71,7 +94,7 @@ export function salvarEspaco(db: Db, claims: JwtClaims, id: string | null, v: Da
         .where(and(eq(eventSpaces.id, id), eq(eventSpaces.unitId, v.unitId)))
         .returning({ id: eventSpaces.id })
       if (!e) return falha('nao_encontrada')
-      await registrarAuditoria(tx, claims, { restaurantId: u.restaurantId, acao: 'espaco.atualizado', entidade: 'event_space', entidadeId: id, diff })
+      await registrarAuditoria(tx, claims, { restaurantId: u.restaurantId, acao: 'espaco.atualizado', entidade: 'event_space', entidadeId: id, diff: diffEspaco(antes, v) })
       return ok({ id })
     }),
     { event_spaces_unit_nome_uq: 'nome_duplicado', event_spaces_capacidade_ck: 'capacidade_invalida' },

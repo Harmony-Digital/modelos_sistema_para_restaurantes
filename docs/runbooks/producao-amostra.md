@@ -35,7 +35,8 @@ Você (agente no Claude Code de quem publica) segue este arquivo sozinho, do pas
 
 **Resultado esperado:** painel em `https://<domínio>` com o dono logando por TOTP; Início com "IA: Online";
 simulador respondendo S1–S4; handoff aparecendo em Conversas em tempo real; importação de CSV funcionando;
-gerente restrito vendo só a sua unidade; `scripts/producao/verificar.sh` com `Resultado: 0 falha(s)`;
+gerente restrito (convidado pelo painel, Mais → Equipe) vendo só a sua unidade; limites de gasto conferidos em
+Mais → Gastos e limites; `scripts/producao/verificar.sh` com `Resultado: 0 falha(s)`;
 mensagem de "pronto" (passo 9) entregue ao humano.
 
 ## Variáveis por destino
@@ -204,10 +205,23 @@ scripts/producao/verificar.sh --bootstrap .env.production-bootstrap
 ```
 
 **Saída esperada:** o drizzle-kit aplica as migrations sem erro; o script mostra
-`OK migrations aplicadas: 33 de 33 (até 0032_…)`, `OK bucket cardapio existe e é privado`,
+`OK migrations aplicadas: 40 de 40 (até 0039_…)`, `OK bucket cardapio existe e é privado`,
 `OK bucket importacoes existe e é privado`, `OK role web_app existe com login`, `OK role worker_app existe com login`.
 **Se falhar:** erro de `MAINTAIN` → o banco não é PG 17 (passo 1); falha no meio → rode o mesmo comando de novo
 (o drizzle aplica só as que faltam) e, se repetir, pare e relate a mensagem do drizzle-kit. Nunca edite uma migration.
+
+**Atualizando uma amostra já publicada (worker já rodando no VPS):** pare o worker **antes** do `db:migrate` e suba a
+imagem nova **logo depois**. Motivo: a 0033 recria o tipo `budget_scope` (`DROP TYPE`), e um worker antigo com
+statements preparados passa a falhar nas reservas até reiniciar. Na ordem:
+
+```bash
+ssh <usuario>@<host> 'cd /opt/atendimento && docker compose --env-file .deploy.env -f docker-compose.prod.yml stop worker'
+( set -a; . ./.env.production-bootstrap; set +a; pnpm db:migrate )
+scripts/producao/verificar.sh --bootstrap .env.production-bootstrap
+```
+
+Depois suba a imagem nova pelo passo 8 (Caminho A ou B, que fazem `up -d`) e confira a linha `worker iniciado`.
+Enquanto o worker está parado, as mensagens ficam na fila e são respondidas quando ele volta.
 
 ## Passo 3 — Senhas dos roles e URLs de conexão
 
@@ -414,7 +428,7 @@ scripts/producao/verificar.sh --bootstrap .env.production-bootstrap --vercel .en
 **Saída esperada:** só `OK` (e `AVISO` apenas se você usou outra porta de propósito) e `Resultado: 0 falha(s)`;
 código de saída 0. O script confere: arquivos `600` e fora do git; variáveis obrigatórias e proibidas por destino;
 chaves de 32 bytes iguais nos dois destinos; `NEXT_PUBLIC_LIMITE_UPLOAD_MB=4`; `AI_PROVIDER=openai` e `OPENAI_API_KEY` no worker (sem `OPENROUTER_API_KEY`) e ausência de `OPENROUTER_DEV_SEM_ZDR`;
-login real como `web_app`/`worker_app`; Postgres 17; 33 migrations; buckets privados; roles com login; restaurante,
+login real como `web_app`/`worker_app`; Postgres 17; 40 migrations; buckets privados; roles com login; restaurante,
 dono, limites de gasto e demo; `RESTAURANT_ID` igual ao do banco; cadastro público desligado; Data API sem `public`;
 chave de serviço lendo o Storage; `/login` 200 e webhook recusando POST sem assinatura.
 **Se falhar:** cada `FALHA` traz a correção depois do `—`. Corrigiu variável da Vercel → cadastre de novo (passo 5) e redeploy.
@@ -445,6 +459,14 @@ scp apps/worker/docker-compose.prod.yml <usuario>@<host>:/opt/atendimento/docker
 scp .env.worker-producao <usuario>@<host>:/opt/atendimento/.env
 ssh <usuario>@<host> 'chmod 600 /opt/atendimento/.env && ls -l /opt/atendimento'
 ```
+
+**O que o worker faz além das conversas (Etapa 08; nenhuma variável nova):** envia os **convites de equipe** do
+painel (fila `equipe.convite`, com `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` que já estão no `.env` do worker) e
+agenda a **limpeza diária de retenção** às 03:00 (horário de Brasília; fila `retencao.diaria`, agendada no boot pelo
+pg-boss, sem `pg_cron`). **Conexões:** o worker abre até **14** conexões no pooler de sessão (drizzle 11 + pg-boss 3).
+Nos planos menores do Supabase (Nano/Micro) o pool do pooler é de cerca de 15 por usuário e banco: confira em
+Database → Settings → Connection pooling (Pool Size). Se o log mostrar `max clients reached` ou `too many connections`,
+🔑 peça ao humano para aumentar o Pool Size ou o tamanho da instância.
 
 **Caminho A — workflow `Worker deploy` (preferido se o GitHub já estiver configurado):** precisa do environment
 `production` com os secrets `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`, `VPS_KNOWN_HOSTS` e aprovação obrigatória
@@ -490,37 +512,34 @@ Rode e anote cada item. 🔑 O humano faz os itens de navegador (ou acompanha vo
 | 4 | Simulador S1–S4 | botão "Abrir simulador de WhatsApp" do painel: "que horas abre a Asa Sul hoje?" (S1), "vou chegar às 20h com 4 pessoas" (S2), "quero fazer um aniversário para 30 pessoas" (S3), "quanto custa a picanha?" (S4) | uma linha por serviço: pergunta → resumo da resposta |
 | 5 | Handoff em tempo real | no simulador: "quero falar com um atendente"; com Conversas aberta em outra aba, a conversa aparece **sem recarregar** | "apareceu em N s sem recarregar" |
 | 6 | Importar CSV | Conteúdo → Cardápio → sub-aba Importar → CSV pequeno (2 itens) → revisar → aprovar | itens novos visíveis no cardápio |
-| 7 | Gerente restrito | ver abaixo | gerente vê só a unidade dele em Unidades/Agenda/Conversas |
-| 8 | Gastos | Início → Gastos mostra o gasto de IA do dia (> US$ 0 após o item 4) | valor exibido |
+| 7 | Gerente restrito | ver abaixo (convite pelo painel) | gerente vê só a unidade dele em Unidades/Agenda/Conversas |
+| 8 | Gastos | Início → Gastos mostra o gasto do dia (> US$ 0 após o item 4; o simulador conta na linha **Simulação**, fora do total dos clientes); Mais → **Gastos e limites** mostra os limites padrão (IA 2/dia e 40/mês; Simulação 1/dia e 10/mês; WhatsApp 1/dia e 20/mês) — o dono ajusta ali, pelo painel, se quiser | valor exibido e limites conferidos |
 
-Gerente restrito (o painel ainda não convida equipe; isso vem na Etapa 08): 🔑 o humano convida o e-mail em
-Authentication → Users → **Invite user**; depois você vincula, com a conexão de administrador:
+Gerente restrito (pelo painel, Etapa 08): 🔑 o **dono**, logado, vai em **Mais → Equipe → Convidar**: nome
+"Gerente Asa Sul", o e-mail do gerente (passo 0), papel **Gerente**, desliga **Todas as unidades** e marca só
+**Asa Sul** ⇒ **Enviar convite** ⇒ "Convite enviado". Em segundos o worker envia o e-mail e a pessoa aparece como
+"Convite enviado, aguardando o primeiro acesso". O gerente abre o convite (vale 1 h), define a senha, cadastra o
+TOTP e só enxerga a Asa Sul. Confira também no banco (só leitura):
 
 ```bash
 ( set -a; . ./.env.production-bootstrap; set +a
-  psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -v email='<email-do-gerente>' -v nome='Gerente Asa Sul' <<'SQL'
-insert into staff (user_id, restaurant_id, nome, papel, unidades_permitidas)
-select u.id, r.id, :'nome', 'gerente', array[un.id]
-from auth.users u
-cross join restaurants r
-join units un on un.restaurant_id = r.id and un.slug = 'asa-sul'
-where lower(u.email) = lower(:'email')
-on conflict (user_id) do nothing;
-SQL
-)
+  psql "$DATABASE_URL" -X -At -c "select status, coalesce(erro, '-') from staff_invites order by created_at desc limit 1" )
 ```
 
-Saída esperada: `INSERT 0 1`. O gerente entra (convite + TOTP; o convite também vale 1 h) e só enxerga a Asa Sul.
-**Se falhar:** `INSERT 0 0` → (a) o humano ainda não convidou ou o e-mail difere do convidado (confira em
-Authentication → Users e rode de novo com o e-mail exato); (b) a unidade `asa-sul` não existe (o `demo:s1:prod`
-do passo 4 não rodou: rode-o e repita); (c) o usuário já está em `staff` (convidado antes como dono?) → pare e relate.
+Saída esperada: `enviado|-`. **Se falhar:** "Falha ao enviar o convite" na tela (no banco, `erro|limite_envio` ou
+`erro|falha_convite`) → o SMTP padrão do Supabase só entrega para membros da organização e com poucos e-mails por
+hora: 🔑 o humano usa um e-mail de membro da organização ou configura SMTP próprio (passo 0) e o dono toca em
+**Reenviar convite**; `erro|indisponivel` → o worker não alcançou o Supabase Auth: confira `SUPABASE_URL` no `.env`
+do worker e reenvie; `erro|outro_restaurante` → o e-mail já é de outro restaurante: pare e relate; convite parado em
+"Enviando o convite…" por mais de 1 minuto → o worker não está rodando (passo 8). Link expirado → **Reenviar
+convite** no painel.
 
 **Mensagem de "pronto" para devolver ao humano** (preencha; sem segredos):
 
 ```
 Amostra publicada.
 - Painel: https://<domínio> (Vercel, região gru1, deploy <id/URL do deploy>)
-- Supabase: projeto <ref> em sa-east-1, Postgres <versão>, 33 migrations, buckets privados
+- Supabase: projeto <ref> em sa-east-1, Postgres <versão>, 40 migrations, buckets privados
 - Worker: VPS <host>, imagem <tag>, status running, "worker iniciado" às <hora>
 - IA: OpenAI direto (`AI_PROVIDER=openai`, `store: false`, retenção padrão de 30 dias aceita pelo time); triagem gpt-4.1-mini; cardápio gpt-4.1-mini → gpt-4.1 (smoke:ia:prod: <resultado>; eval:prod: <resultado>)
 - verificar.sh: 0 falha(s) em <data/hora>
@@ -535,6 +554,5 @@ Amostra publicada.
 - **WhatsApp/Meta** (webhook assinado, número, templates, token permanente): [deploy.md §7](deploy.md#7-meta) — Etapa 09.
 - **Staging** e release regular: [deploy.md](deploy.md#staging).
 - **Go-live** (Etapa 09): PITR, environment `production` com aprovação (se usar o caminho B aqui), Ignored Build Step
-  da Vercel, rollback, upload acima de ~4,5 MB por URL assinada, `secure_password_change`, Sentry, domínio definitivo,
-  convite de equipe pelo painel (Etapa 08).
+  da Vercel, rollback, upload acima de ~4,5 MB por URL assinada, `secure_password_change`, Sentry, domínio definitivo.
 - Upload: na amostra o limite é **4 MB** por arquivo (corpo da Vercel); acima disso o painel recusa com mensagem.

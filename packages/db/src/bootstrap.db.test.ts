@@ -14,7 +14,11 @@ describe('bootstrap', () => {
     const b = await bootstrapRestaurant(db, { nome: 'Casa X' })
     expect(b).toBe(a)
     expect(await db.select().from(restaurants)).toHaveLength(1)
-    expect(await db.select().from(budgetLimits)).toHaveLength(4)
+    const limites = await db.select().from(budgetLimits)
+    expect(limites).toHaveLength(6)
+    // simulação tem limite próprio (Etapa 08): US$ 1/dia e 10/mês
+    expect(limites.filter((l) => l.escopo === 'simulacao').map((l) => [l.periodo, l.limiteUsd]).sort())
+      .toEqual([['dia', '1.000000'], ['mes', '10.000000']])
     expect(await db.select().from(retentionSettings)).toHaveLength(DEFAULT_RETENTION.length)
   })
 

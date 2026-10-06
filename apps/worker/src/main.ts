@@ -2,12 +2,14 @@ import { hostname } from 'node:os'
 import { createLlmClient } from '@atd/ai'
 import { loadEnv, workerEnvSchema } from '@atd/config'
 import { keyFromBase64 } from '@atd/core'
-import { createBoss, createDb, ensureQueues, QUEUES, type DeliverJob, type IngestJob, type ProcessJob } from '@atd/db'
+import { createBoss, createDb, ensureQueues, QUEUES, type ConviteJob, type DeliverJob, type IngestJob, type ProcessJob } from '@atd/db'
 import { createWhatsAppClient } from '@atd/whatsapp'
 import { CONCORRENCIA, POOL_DRIZZLE_WORKER } from './concorrencia.ts'
+import { createAuthAdmin, processarConvite } from './jobs/convite.ts'
 import { entregarRespostaHumana } from './jobs/deliver.ts'
 import { ingestDocument } from './jobs/ingest-document.ts'
 import { processConversation, type ProcessDeps } from './jobs/process-conversation.ts'
+import { agendarRetencao, executarRetencaoDiaria } from './jobs/retencao.ts'
 import { startHeartbeat } from './heartbeat.ts'
 import { sanitizeJobError } from './job-error.ts'
 import { createLogger } from './logger.ts'
@@ -25,8 +27,8 @@ initSentry(env.SENTRY_DSN, VERSION)
 
 // Session pooler (IPv4) ou conexão direta: processo de longa duração com prepared statements (o modo
 // transaction não os suporta). O pg-boss 12 não usa LISTEN/NOTIFY por padrão (só polling + advisory
-// xact locks), então isso não exige sessão. Pools: drizzle 9 (4 process + 2 deliver + 1 ingest + heartbeat
-// + folga; ver concorrencia.ts) + pg-boss 3 = 12 conexões no máximo.
+// xact locks), então isso não exige sessão. Pools: drizzle 11 (4 process + 2 deliver + 1 ingest + 1 convite
+// + 1 retenção + heartbeat + folga; ver concorrencia.ts) + pg-boss 3 = 14 conexões no máximo.
 const { db, sql } = createDb(env.DATABASE_URL, { max: POOL_DRIZZLE_WORKER })
 const boss = createBoss(env.DATABASE_URL, 'worker', (err) => {
   log.error({ err }, 'pg-boss erro')
@@ -103,6 +105,30 @@ try {
       }
     }
   })
+
+  // convite de equipe (Server Action do dono): Auth admin com a chave de serviço; o e-mail nunca vai para log
+  const auth = createAuthAdmin({ url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY })
+  await boss.work<ConviteJob>(QUEUES.convite, { localConcurrency: CONCORRENCIA.convite }, async (jobs) => {
+    for (const job of jobs) {
+      try {
+        const outcome = await processarConvite({ db, auth, log }, job.data.conviteId)
+        log.info({ conviteId: job.data.conviteId, outcome }, 'convite processado')
+      } catch (err) {
+        // erro do Auth já virou `erro` no convite; aqui só falha de banco (pg-boss retenta e depois DLQ)
+        log.error({ err, conviteId: job.data.conviteId }, 'falha ao processar convite')
+        Sentry.captureException(err, { extra: { conviteId: job.data.conviteId } })
+        throw sanitizeJobError(err)
+      }
+    }
+  })
+
+  // retenção diária (03:00 de São Paulo): idempotente e em lotes; retenta só quem falhou e nunca relança o job
+  await boss.work(QUEUES.retencao, { localConcurrency: CONCORRENCIA.retencao }, async () => {
+    const r = await executarRetencaoDiaria({ db, log })
+    log.info({ restaurantes: r.restaurantes, falhas: r.falhas }, 'retenção diária executada')
+    if (r.falhas > 0) Sentry.captureMessage(`retenção falhou em ${r.falhas} restaurante(s)`, 'error')
+  })
+  await agendarRetencao(boss)
 
   heartbeat = startHeartbeat(db, `${hostname()}-${process.pid}`, VERSION)
   await heartbeat.beat()

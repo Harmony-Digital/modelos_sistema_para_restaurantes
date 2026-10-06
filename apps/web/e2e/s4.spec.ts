@@ -58,6 +58,8 @@ test.beforeAll(async () => {
   for (const periodo of ['dia', 'mes']) {
     await getSql()`insert into budget_limits (restaurant_id, escopo, periodo, limite_usd)
       values (${r!.id}, 'ia', ${periodo}, 5) on conflict do nothing`
+    await getSql()`insert into budget_limits (restaurant_id, escopo, periodo, limite_usd)
+      values (${r!.id}, 'simulacao', ${periodo}, 5) on conflict do nothing`
   }
   await getSql()`insert into units (restaurant_id, nome, slug, endereco)
     values (${r!.id}, ${UNIDADE}, ${'e2e-cardapio-' + SUFIXO}, 'Rua do Cardápio, 1')`

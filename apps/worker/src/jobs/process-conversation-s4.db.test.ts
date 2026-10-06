@@ -43,6 +43,8 @@ async function setup(o: { arquivo?: 'pdf' | 'jpeg' | null; asaNorte?: boolean } 
   await db.insert(schema.budgetLimits).values([
     { restaurantId, escopo: 'ia', periodo: 'dia', limiteUsd: '1' },
     { restaurantId, escopo: 'ia', periodo: 'mes', limiteUsd: '10' },
+    { restaurantId, escopo: 'simulacao', periodo: 'dia', limiteUsd: '1' }, // conversa simulada tem limite próprio
+    { restaurantId, escopo: 'simulacao', periodo: 'mes', limiteUsd: '10' },
   ])
   const [carnes, bebidas] = await db.insert(schema.menuCategories).values([
     { restaurantId, nome: 'Carnes', ordem: 1 },
