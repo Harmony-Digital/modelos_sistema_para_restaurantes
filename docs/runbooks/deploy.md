@@ -52,7 +52,7 @@ Dashboard → Connect → Connection pooling. Se a senha tiver caracteres especi
 | Web (Vercel) | **transaction** | `6543` | `web_app.<project_ref>` |
 | Worker (VPS) | **session** | `5432` | `worker_app.<project_ref>` |
 
-O worker usa o pooler de sessão (IPv4) porque é um processo de longa duração que usa prepared statements, que o modo transaction não suporta. Não é por causa de `LISTEN`: o pg-boss 12 vem com `useListenNotify: false` (usa polling e advisory locks de transação). Conexão direta também funciona, se a VPS tiver IPv6. Pools do worker: drizzle `max 6` + pg-boss `max 3` = até 9 conexões; confira o limite do pooler do plano.
+O worker usa o pooler de sessão (IPv4) porque é um processo de longa duração que usa prepared statements, que o modo transaction não suporta. Não é por causa de `LISTEN`: o pg-boss 12 vem com `useListenNotify: false` (usa polling e advisory locks de transação). Conexão direta também funciona, se a VPS tiver IPv6. Pools do worker: drizzle `max 11` (`POOL_DRIZZLE_WORKER`) + pg-boss `max 3` = até 14 conexões; confira o limite do pooler do plano.
 
 ## 5. Bootstrap
 

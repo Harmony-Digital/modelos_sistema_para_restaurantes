@@ -4,17 +4,21 @@ const TIMEOUT_MS = 20_000
 const BUCKET = /^[a-z0-9_-]+$/
 
 /**
+ * Cabeçalhos da chave de serviço do Supabase (Storage e Auth admin). A chave secreta nova (sb_secret_…) não é JWT: o
+ * Supabase a recusa como Bearer; vai só no apikey. A service_role legada (JWT) segue nos dois cabeçalhos.
+ */
+export function cabecalhosDeServico(chave: string): Record<string, string> {
+  return chave.startsWith('sb_secret_') ? { apikey: chave } : { Authorization: `Bearer ${chave}`, apikey: chave }
+}
+
+/**
  * Leitura de objetos dos buckets privados por REST com a chave de serviço (só no worker; nunca em log).
  * Sem dependência nova: `GET {SUPABASE_URL}/storage/v1/object/{bucket}/{caminho}`.
  */
 export function createStorage(cfg: { url: string; serviceRoleKey: string; fetch?: typeof fetch }) {
   const doFetch = cfg.fetch ?? fetch
   const base = cfg.url.replace(/\/+$/, '')
-  // chave secreta nova (sb_secret_…) não é JWT: o Supabase a recusa como Bearer; vai só no apikey.
-  // A service_role legada (JWT) segue nos dois cabeçalhos.
-  const headers: Record<string, string> = cfg.serviceRoleKey.startsWith('sb_secret_')
-    ? { apikey: cfg.serviceRoleKey }
-    : { Authorization: `Bearer ${cfg.serviceRoleKey}`, apikey: cfg.serviceRoleKey }
+  const headers = cabecalhosDeServico(cfg.serviceRoleKey)
   return {
     async baixarObjeto(bucket: string, caminho: string): Promise<Uint8Array> {
       const partes = caminho.split('/')
