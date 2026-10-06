@@ -80,7 +80,7 @@ describe('webhook POST', () => {
     const raw = JSON.stringify(status)
     expect((await handleWebhookPost(deps, raw, sign(raw))).status).toBe(200)
     const [after] = await db.select().from(schema.messages)
-    expect(after!.statusEnvio).toBe('failed:131047')
+    expect(after!.statusEnvio).toBe('falhou:131047')
   })
 
   it('aceita corpo como Buffer (bytes brutos)', async () => {

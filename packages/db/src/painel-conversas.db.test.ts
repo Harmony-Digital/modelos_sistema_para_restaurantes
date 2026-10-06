@@ -300,6 +300,15 @@ describe('reenviarMensagem', () => {
     expect(m!.statusEnvio).toBe('pendente')
     expect(await reenviarMensagem(db, eu, falhou)).toEqual({ ok: false, erro: 'transicao_invalida' })
   })
+
+  it('linha antiga do webhook (failed:<código>) também volta a pendente', async () => {
+    const c = await cenario()
+    const id = await conversa({ restaurantId: c.restaurantId, unitId: c.unitId, estado: 'humano', atendenteId: c.atendente })
+    const antiga = await msg(c.restaurantId, id, 'a', { direcao: 'out', autor: 'humano', atendenteId: c.atendente, statusEnvio: 'failed:131026' })
+    expect(await reenviarMensagem(db, as(c.atendente, 'aal1'), antiga)).toEqual({ ok: true, conversationId: id })
+    const [m] = await db.select().from(messages).where(eq(messages.id, antiga))
+    expect(m!.statusEnvio).toBe('pendente')
+  })
 })
 
 describe('devolver e encerrar', () => {

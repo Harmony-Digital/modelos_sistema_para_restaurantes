@@ -132,6 +132,15 @@ describe('applyStatus', () => {
     await ingestInbound(db, input(restaurantId, { wamid: 'wamid.OUT' }), enqueueProcess(boss))
     await applyStatus(db, { wamid: 'wamid.OUT', status: 'failed', errorCode: 131047 })
     const [m] = await db.select().from(messages)
-    expect(m!.statusEnvio).toBe('failed:131047')
+    expect(m!.statusEnvio).toBe('falhou:131047')
+  })
+
+  it('failed da Meta vira falhou:<código> (o painel mostra "Não enviada" e permite reenviar); sem código ⇒ desconhecido', async () => {
+    const { restaurantId } = await seedRestaurant(db)
+    await ingestInbound(db, input(restaurantId, { wamid: 'wamid.OUT' }), enqueueProcess(boss))
+    await applyStatus(db, { wamid: 'wamid.OUT', status: 'failed', errorCode: null })
+    expect((await db.select().from(messages))[0]!.statusEnvio).toBe('falhou:desconhecido')
+    await applyStatus(db, { wamid: 'wamid.OUT', status: 'delivered', errorCode: null })
+    expect((await db.select().from(messages))[0]!.statusEnvio).toBe('delivered')
   })
 })

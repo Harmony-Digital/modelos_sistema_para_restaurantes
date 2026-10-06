@@ -52,6 +52,14 @@ describe('Bolha', () => {
     expect(onTentarDeNovo).toHaveBeenCalledWith(1)
   })
 
+  it('linha antiga do webhook (failed:<código>) também é falha e pode ser reenviada', async () => {
+    const onTentarDeNovo = vi.fn()
+    render(<Bolha m={m({ direcao: 'out', autor: 'humano', atendente: 'Ana', statusEnvio: 'failed:131026' })} timezone={TZ} onTentarDeNovo={onTentarDeNovo} />)
+    expect(screen.getByRole('article')).toHaveTextContent('Não enviada')
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Tentar de novo' }))
+    expect(onTentarDeNovo).toHaveBeenCalledWith(1)
+  })
+
   it('sem quem possa reenviar: só o estado, sem botão', () => {
     render(<Bolha m={m({ direcao: 'out', autor: 'humano', atendente: 'Ana', statusEnvio: 'falhou:x' })} timezone={TZ} />)
     expect(screen.queryByRole('button')).toBeNull()

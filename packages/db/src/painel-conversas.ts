@@ -335,14 +335,16 @@ export function reenviarMensagem(
         from public.messages m join public.conversations c on c.id = m.conversation_id
        where m.id = ${messageId} for update of c`)
     if (!r) return erro('nao_encontrada')
-    if (r.autor !== 'humano' || r.direcao !== 'out' || !r.status_envio?.startsWith('falhou:')) return erro('transicao_invalida')
+    // `failed`/`failed:<código>`: linhas gravadas pelo webhook antes da normalização para `falhou:<código>`
+    if (r.autor !== 'humano' || r.direcao !== 'out' || !falhouNoEnvio(r.status_envio)) return erro('transicao_invalida')
     if (r.estado !== 'humano') return erro('transicao_invalida')
     if (r.atendente_id !== ctx.eu) return erro('nao_e_seu')
     if (!r.na_janela) return erro('fora_da_janela')
     await comoApp(tx)
     const upd = await tx.execute(sql`
       update public.messages set status_envio = 'pendente'
-       where id = ${messageId} and status_envio like 'falhou:%' returning id`)
+       where id = ${messageId} and (status_envio like 'falhou:%' or status_envio = 'failed' or status_envio like 'failed:%')
+       returning id`)
     await comoUsuario(tx)
     if (upd.length === 0) return erro('transicao_invalida')
     await registrarAuditoria(tx, claims, {
@@ -351,6 +353,8 @@ export function reenviarMensagem(
     return { ok: true as const, conversationId: r.conversation_id }
   })
 }
+
+const falhouNoEnvio = (s: string | null) => !!s && (s.startsWith('falhou:') || s === 'failed' || s.startsWith('failed:'))
 
 /** Devolver à IA: de `aguardando_humano` (equipe) ou `humano` (quem assumiu ou dono/gerente). Zera atendente e falhas. */
 export function devolverConversa(db: Db, claims: JwtClaims, id: string): Promise<{ ok: true } | Falha> {

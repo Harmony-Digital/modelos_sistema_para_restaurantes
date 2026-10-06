@@ -89,9 +89,15 @@ export function ingestInbound(db: Db, input: IngestInput, enqueue: Enqueue) {
   })
 }
 
+/** Status de entrega da Meta. `failed` vira `falhou:<código>`, o mesmo formato do worker (painel: "Não enviada" + reenviar). */
+export function statusEnvioDaMeta(status: string, errorCode: number | null): string {
+  if (status === 'failed') return `falhou:${errorCode ?? 'desconhecido'}`
+  return errorCode ? `${status}:${errorCode}` : status
+}
+
 export async function applyStatus(db: Db, s: { wamid: string; status: string; errorCode: number | null }) {
   await db
     .update(messages)
-    .set({ statusEnvio: s.errorCode ? `${s.status}:${s.errorCode}` : s.status })
+    .set({ statusEnvio: statusEnvioDaMeta(s.status, s.errorCode) })
     .where(eq(messages.wamid, s.wamid))
 }

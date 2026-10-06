@@ -29,7 +29,8 @@ function autorDe(m: MensagemTelaInbox): string {
 /** Situação do envio de uma mensagem nossa (worker e webhook de status da Meta). */
 function envio(s: string | null): { rotulo: string; falhou: boolean } | null {
   if (!s) return null
-  if (s.startsWith('falhou:') || s === 'failed') return { rotulo: 'Não enviada', falhou: true }
+  // `failed:<código>`: linhas antigas do webhook (hoje normalizadas para `falhou:<código>`)
+  if (s.startsWith('falhou:') || s === 'failed' || s.startsWith('failed:')) return { rotulo: 'Não enviada', falhou: true }
   const r: Record<string, string> = {
     pendente: 'Enviando…', enviado: 'Enviada', sent: 'Enviada', delivered: 'Entregue', read: 'Lida',
     simulado: 'Simulada (não sai pelo WhatsApp)', cancelado: 'Cancelada',
