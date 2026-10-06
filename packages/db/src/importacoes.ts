@@ -7,6 +7,7 @@ import { gravarArquivo, podeEditarCardapioGeral } from './painel-cardapio.ts'
 import { withUserContext, type JwtClaims, type Tx } from './rls.ts'
 import { units } from './schema/restaurant.ts'
 import { knowledgeDocuments, menuCategories, menuItems, type STATUS_IMPORTACAO } from './schema/s4.ts'
+import { mensagemVazio, rascunhoVazio, validarRascunho, type AlvoImportacao, type ModoImportacao } from './importacoes-rascunho.ts'
 
 const GESTAO = ['dono', 'gerente'] as const
 
@@ -14,12 +15,22 @@ export type StatusImportacao = (typeof STATUS_IMPORTACAO)[number]
 export type OrigemImportacao = 'csv' | 'arquivo'
 export type ImportacaoPainel = {
   id: string
+  alvo: AlvoImportacao
+  modo: ModoImportacao
   origem: OrigemImportacao
   status: StatusImportacao
   /** `importacoes/<restaurant_id>/<arquivo>`; null no CSV */
   storagePath: string | null
+  /** vários arquivos: o tipo do primeiro ('' antes do primeiro arquivo) */
   mime: string
+  /** vários arquivos: a soma dos tamanhos */
   tamanho: number
+  /** quantos arquivos (CSV = 0) */
+  arquivos: number
+  /** próximo lote a ler (0 = nenhum) e total de lotes (null até o worker planejar): "Lendo n de m" */
+  loteAtual: number
+  lotesTotal: number | null
+  /** só o rascunho do cardápio completo; os demais alvos vêm por `revisaoImportacao` */
   draft: RascunhoCardapio | null
   /** mensagem amigável (status `erro`) */
   erro: string | null
@@ -33,14 +44,18 @@ export const ERRO_RASCUNHO_INVALIDO = 'Não consegui ler esse arquivo. Tente uma
 export const ERRO_SEM_ITENS = 'Não encontrei itens de cardápio nesse arquivo.'
 
 const colunas = {
-  id: knowledgeDocuments.id, origem: knowledgeDocuments.origem, status: knowledgeDocuments.status,
-  storagePath: knowledgeDocuments.storagePath, mime: knowledgeDocuments.mime, tamanho: knowledgeDocuments.tamanho,
+  id: knowledgeDocuments.id, alvo: knowledgeDocuments.alvo, modo: knowledgeDocuments.modo, origem: knowledgeDocuments.origem,
+  status: knowledgeDocuments.status, storagePath: knowledgeDocuments.storagePath,
+  mime: sql<string>`coalesce(${knowledgeDocuments.mime}, (select f.mime from public.knowledge_document_files f where f.importacao_id = "knowledge_documents"."id" order by f.ordem limit 1), '')`,
+  tamanho: sql<number>`coalesce(${knowledgeDocuments.tamanho}, (select sum(f.tamanho) from public.knowledge_document_files f where f.importacao_id = "knowledge_documents"."id")::int, 0)`,
+  arquivos: sql<number>`(case when ${knowledgeDocuments.storagePath} is not null then 1 else (select count(*) from public.knowledge_document_files f where f.importacao_id = "knowledge_documents"."id") end)::int`,
+  loteAtual: knowledgeDocuments.loteAtual, lotesTotal: knowledgeDocuments.lotesTotal,
   draft: knowledgeDocuments.draft, erro: knowledgeDocuments.erro, criadoEm: knowledgeDocuments.createdAt,
   revisadoEm: knowledgeDocuments.revisadoAt,
 }
 type Linha = Omit<ImportacaoPainel, 'draft'> & { draft: unknown }
 const paraPainel = (r: Linha): ImportacaoPainel => {
-  const d = r.draft == null ? null : rascunhoSchema.safeParse(r.draft)
+  const d = r.draft == null || r.alvo !== 'cardapio' || r.modo !== 'completo' ? null : rascunhoSchema.safeParse(r.draft)
   return { ...r, draft: d?.success ? d.data : null }
 }
 
@@ -70,7 +85,7 @@ export async function criarImportacao(db: Db, claims: JwtClaims, v: NovaImportac
       insert into public.knowledge_documents (restaurant_id, origem, status, storage_path, mime, tamanho, sha256, draft, enviado_por)
       values ((select app.my_restaurant_id()), ${v.origem}, ${status}, ${v.storagePath}, ${v.mime}, ${v.tamanho}, ${v.sha256},
               ${draft === null ? null : JSON.stringify(draft)}::jsonb, ${claims.sub})
-      on conflict (restaurant_id, sha256) where origem = 'arquivo' and status not in ('rejeitado', 'erro') do nothing
+      on conflict (restaurant_id, alvo, modo, sha256) where origem = 'arquivo' and status not in ('rejeitado', 'erro') do nothing
       returning id, restaurant_id`)
     if (!d) {
       const [existente] = await tx
@@ -79,6 +94,8 @@ export async function criarImportacao(db: Db, claims: JwtClaims, v: NovaImportac
         .where(and(
           eq(knowledgeDocuments.sha256, v.sha256),
           eq(knowledgeDocuments.origem, 'arquivo'),
+          eq(knowledgeDocuments.alvo, 'cardapio'),
+          eq(knowledgeDocuments.modo, 'completo'),
           notInArray(knowledgeDocuments.status, ['rejeitado', 'erro']),
         ))
       // conflito com importação que este usuário não enxerga não acontece (mesmo restaurante, dono/gerente)
@@ -101,12 +118,13 @@ export function lerImportacao(db: Db, claims: JwtClaims, id: string): Promise<Im
   })
 }
 
-/** As 20 importações mais recentes. */
-export function listarImportacoes(db: Db, claims: JwtClaims): Promise<ImportacaoPainel[]> {
+/** As 20 importações mais recentes (opcionalmente só de um alvo). */
+export function listarImportacoes(db: Db, claims: JwtClaims, filtro: { alvo?: AlvoImportacao } = {}): Promise<ImportacaoPainel[]> {
   return withUserContext(db, claims, async (tx) => {
     const rows = await tx
       .select(colunas)
       .from(knowledgeDocuments)
+      .where(filtro.alvo === undefined ? undefined : eq(knowledgeDocuments.alvo, filtro.alvo))
       .orderBy(desc(knowledgeDocuments.createdAt), desc(knowledgeDocuments.id))
       .limit(20)
     return rows.map(paraPainel)
@@ -153,24 +171,29 @@ export async function aplicarRascunho(
       .select({
         restaurantId: knowledgeDocuments.restaurantId, status: knowledgeDocuments.status, storagePath: knowledgeDocuments.storagePath,
         mime: knowledgeDocuments.mime, tamanho: knowledgeDocuments.tamanho, sha256: knowledgeDocuments.sha256,
+        alvo: knowledgeDocuments.alvo, modo: knowledgeDocuments.modo,
       })
       .from(knowledgeDocuments)
       .where(eq(knowledgeDocuments.id, id))
       .for('update')
     if (!doc) return (await existe(tx, id)) ? { ok: false, erro: 'ja_aplicado' } : falha('nao_encontrada')
+    // outros alvos/modos (Etapa 07) se aplicam por `aplicarImportacao`
+    if (doc.alvo !== 'cardapio' || doc.modo !== 'completo') return falha('nao_encontrada')
     if (doc.status !== 'rascunho') return { ok: false, erro: 'ja_aplicado' }
-    // arquivo de envio só de PDF/imagem enviado (CSV não tem arquivo): recusa antes de mexer no cardápio
-    if (opcoes.usarComoArquivoDeEnvio && (doc.storagePath === null || !(MIMES_ARQUIVO_CARDAPIO as readonly string[]).includes(doc.mime))) {
-      return { ok: false, erro: 'arquivo_invalido' }
-    }
+    // arquivo de envio só de PDF/imagem enviado (CSV e vários arquivos não têm um): recusa antes de mexer no cardápio
+    const arquivo = doc.storagePath !== null && doc.mime !== null && doc.tamanho !== null && doc.sha256 !== null
+      && (MIMES_ARQUIVO_CARDAPIO as readonly string[]).includes(doc.mime)
+      ? { storagePath: doc.storagePath, mime: doc.mime, tamanho: doc.tamanho, sha256: doc.sha256 }
+      : null
+    if (opcoes.usarComoArquivoDeEnvio && arquivo === null) return { ok: false, erro: 'arquivo_invalido' }
 
     const contagem = await aplicarNoCardapio(tx, doc.restaurantId, r)
 
-    if (opcoes.usarComoArquivoDeEnvio && doc.storagePath !== null) {
+    if (opcoes.usarComoArquivoDeEnvio && arquivo !== null) {
       // o nome original não é guardado (o caminho no Storage é gerado): título com a data da importação
       await gravarArquivo(tx, {
-        unitId: opcoes.unitIdArquivo, titulo: `Cardápio importado em ${dataBr(new Date())}`, storagePath: caminhoArquivoDeEnvio(doc.storagePath),
-        mime: doc.mime, tamanho: doc.tamanho, sha256: doc.sha256,
+        unitId: opcoes.unitIdArquivo, titulo: `Cardápio importado em ${dataBr(new Date())}`, storagePath: caminhoArquivoDeEnvio(arquivo.storagePath),
+        mime: arquivo.mime, tamanho: arquivo.tamanho, sha256: arquivo.sha256,
       })
     }
 
@@ -195,7 +218,8 @@ async function existe(tx: Tx, id: string): Promise<boolean> {
   return r !== undefined
 }
 
-async function aplicarNoCardapio(
+/** Aplica o rascunho do cardápio completo (também usado por `aplicarImportacao`). Só dentro da transação travada. */
+export async function aplicarNoCardapio(
   tx: Tx,
   restaurantId: string,
   r: RascunhoCardapio,
@@ -309,12 +333,13 @@ export async function marcarProcessando(
 ): Promise<{ storagePath: string; mime: string; sha256: string; restaurantId: string; retomada: boolean } | null> {
   return (db as Db).transaction(async (tx) => {
     const [atual] = await tx
-      .select({ status: knowledgeDocuments.status, parado: sql<boolean>`${knowledgeDocuments.updatedAt} < now() - ${PRAZO_PROCESSANDO}::interval` })
+      .select({ status: knowledgeDocuments.status, storagePath: knowledgeDocuments.storagePath, parado: sql<boolean>`${knowledgeDocuments.updatedAt} < now() - ${PRAZO_PROCESSANDO}::interval` })
       .from(knowledgeDocuments)
       .where(eq(knowledgeDocuments.id, id))
       .for('update')
     const retomada = atual?.status === 'processando' && atual.parado
-    if (!atual || (atual.status !== 'enviado' && !retomada)) return null
+    // importação de vários arquivos (Etapa 07) é do `proximoLote`
+    if (!atual || atual.storagePath === null || (atual.status !== 'enviado' && !retomada)) return null
     // o gatilho touch_updated_at renova updated_at (o prazo recomeça)
     const [r] = await tx
       .update(knowledgeDocuments)
@@ -324,28 +349,37 @@ export async function marcarProcessando(
         storagePath: knowledgeDocuments.storagePath, mime: knowledgeDocuments.mime, sha256: knowledgeDocuments.sha256,
         restaurantId: knowledgeDocuments.restaurantId,
       })
-    // origem 'arquivo' sempre tem caminho (check knowledge_documents_storage_ck)
-    return r && r.storagePath !== null
+    // com caminho, mime e sha256 existem (check knowledge_documents_storage_ck)
+    return r && r.storagePath !== null && r.mime !== null && r.sha256 !== null
       ? { storagePath: r.storagePath, mime: r.mime, sha256: r.sha256, restaurantId: r.restaurantId, retomada }
       : null
   })
 }
 
 /**
- * Resultado da leitura (só de `processando`): rascunho válido com itens ⇒ `rascunho`; falha, rascunho fora do schema
- * ou sem nenhum item ⇒ `erro` com mensagem amigável (até 300 caracteres; nunca detalhe técnico nem conteúdo do
- * documento). Devolve o status gravado.
+ * Resultado da leitura (só de `processando`), validado pelo schema do alvo/modo da importação: rascunho válido e não
+ * vazio ⇒ `rascunho`; falha, rascunho fora do schema ou vazio ⇒ `erro` com mensagem amigável (até 300 caracteres;
+ * nunca detalhe técnico nem conteúdo do documento). O parcial dos lotes some. Devolve o status gravado.
  */
 export async function concluirIngestao(
   db: Db | Tx,
   id: string,
   r: { ok: true; draft: unknown } | { ok: false; erro: string },
 ): Promise<'rascunho' | 'erro'> {
-  const d = r.ok ? rascunhoSchema.safeParse(r.draft) : null
-  const semItens = d?.success === true && d.data.categorias.every((c) => c.itens.length === 0)
-  const set = d?.success && !semItens
-    ? { status: 'rascunho' as const, draft: d.data, erro: null }
-    : { status: 'erro' as const, draft: null, erro: (semItens ? ERRO_SEM_ITENS : r.ok ? ERRO_RASCUNHO_INVALIDO : r.erro).slice(0, 300) }
+  const [doc] = await db
+    .select({ alvo: knowledgeDocuments.alvo, modo: knowledgeDocuments.modo })
+    .from(knowledgeDocuments)
+    .where(eq(knowledgeDocuments.id, id))
+  const alvo = doc?.alvo ?? 'cardapio'
+  const modo = doc?.modo ?? 'completo'
+  const d = r.ok ? validarRascunho(alvo, modo, r.draft) : null
+  const vazio = d !== null && rascunhoVazio(d)
+  const set = d !== null && !vazio
+    ? { status: 'rascunho' as const, draft: d.draft, erro: null, draftParcial: null }
+    : {
+        status: 'erro' as const, draft: null, draftParcial: null,
+        erro: (vazio ? mensagemVazio(alvo, modo) : r.ok ? ERRO_RASCUNHO_INVALIDO : r.erro).slice(0, 300),
+      }
   await db
     .update(knowledgeDocuments)
     .set(set)

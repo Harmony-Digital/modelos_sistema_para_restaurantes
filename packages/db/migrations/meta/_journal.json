@@ -281,6 +281,20 @@
       "when": 1791318050955,
       "tag": "0039_simulacao_limite_sem_entrada",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1791323625053,
+      "tag": "0040_importacao_alvos",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1791323637112,
+      "tag": "0041_importacao_alvos_rls",
+      "breakpoints": true
     }
   ]
 }

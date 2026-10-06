@@ -1,6 +1,6 @@
 import { sql, type SQL } from 'drizzle-orm'
 import {
-  boolean, check, customType, foreignKey, index, integer, jsonb, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex, uuid,
+  boolean, check, customType, foreignKey, index, integer, jsonb, pgEnum, pgTable, primaryKey, smallint, text, timestamp, uniqueIndex, uuid,
 } from 'drizzle-orm/pg-core'
 import { authUsers } from 'drizzle-orm/supabase'
 import { restaurants, timestamps, units } from './restaurant.ts'
@@ -134,24 +134,41 @@ export const menuFiles = pgTable(
 export const STATUS_IMPORTACAO = ['enviado', 'processando', 'rascunho', 'aprovado', 'rejeitado', 'erro'] as const
 export const knowledgeDocumentStatus = pgEnum('knowledge_document_status', STATUS_IMPORTACAO)
 export const knowledgeDocumentOrigin = pgEnum('knowledge_document_origin', ['csv', 'arquivo'])
-export const knowledgeDocumentTarget = pgEnum('knowledge_document_target', ['cardapio'])
+export const ALVOS_IMPORTACAO = ['cardapio', 'informacoes', 'horarios', 'espacos'] as const
+export const MODOS_IMPORTACAO = ['completo', 'so_precos'] as const
+export const knowledgeDocumentTarget = pgEnum('knowledge_document_target', ALVOS_IMPORTACAO)
+export const knowledgeDocumentMode = pgEnum('knowledge_document_mode', MODOS_IMPORTACAO)
+/** Arquivos por importação (Etapa 07): até 10, cada um até 20 MB. */
+export const MAX_ARQUIVOS_IMPORTACAO = 10
 
-/** Documentos importados (PRD §3.6). Nunca viram dado oficial sem aprovação humana (I10). */
+/**
+ * Documentos importados (PRD §3.6). Nunca viram dado oficial sem aprovação humana (I10).
+ * Duas formas de `origem = 'arquivo'`: a da Etapa 05 (um arquivo: `storage_path`, `mime`, `tamanho` e `sha256` dele) e a
+ * da Etapa 07 (vários arquivos em `knowledge_document_files`: `storage_path`/`mime`/`tamanho` nulos e `sha256` = hash do
+ * conjunto, gravado só quando a leitura começa — nulo = ainda recebendo arquivos).
+ */
 export const knowledgeDocuments = pgTable(
   'knowledge_documents',
   {
     id: uuid('id').primaryKey().defaultRandom(),
     restaurantId: restaurantFk(),
     alvo: knowledgeDocumentTarget('alvo').notNull().default('cardapio'),
+    /** `so_precos` só no cardápio */
+    modo: knowledgeDocumentMode('modo').notNull().default('completo'),
     origem: knowledgeDocumentOrigin('origem').notNull(),
     status: knowledgeDocumentStatus('status').notNull(),
-    /** null no CSV (lido no servidor, só o rascunho fica) */
+    /** null no CSV (lido no servidor, só o rascunho fica) e na importação com vários arquivos */
     storagePath: text('storage_path'),
-    mime: text('mime').notNull(),
-    tamanho: integer('tamanho').notNull(),
-    sha256: text('sha256').notNull(),
-    /** RascunhoCardapio validado por Zod */
+    mime: text('mime'),
+    tamanho: integer('tamanho'),
+    sha256: text('sha256'),
+    /** rascunho do alvo validado por Zod */
     draft: jsonb('draft'),
+    /** próximo lote a ler (0 = nenhum lido); lotes_total calculado no primeiro passo do worker */
+    loteAtual: integer('lote_atual').notNull().default(0),
+    lotesTotal: integer('lotes_total'),
+    /** junção dos lotes já lidos (some ao concluir) */
+    draftParcial: jsonb('draft_parcial'),
     /** mensagem amigável para o painel (nunca detalhe técnico nem conteúdo do documento) */
     erro: text('erro'),
     enviadoPor: uuid('enviado_por').references(() => authUsers.id, { onDelete: 'set null' }),
@@ -160,15 +177,53 @@ export const knowledgeDocuments = pgTable(
     ...timestamps,
   },
   (t) => [
-    check('knowledge_documents_storage_ck', sql`(${t.origem} = 'csv' and ${t.storagePath} is null) or (${t.origem} = 'arquivo' and ${t.storagePath} ~ '^importacoes/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[^/]+$')`),
+    check('knowledge_documents_storage_ck', sql`(${t.origem} = 'csv' and ${t.storagePath} is null and ${t.mime} is not null and ${t.tamanho} is not null and ${t.sha256} is not null) or (${t.origem} = 'arquivo' and ${t.storagePath} ~ '^importacoes/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[^/]+$' and ${t.mime} is not null and ${t.tamanho} is not null and ${t.sha256} is not null) or (${t.origem} = 'arquivo' and ${t.storagePath} is null and ${t.mime} is null and ${t.tamanho} is null)`),
     check('knowledge_documents_mime_ck', sql`${t.mime} in ('application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'text/csv')`),
     check('knowledge_documents_tamanho_ck', sql`${t.tamanho} between 1 and 20971520`),
     check('knowledge_documents_sha256_ck', sql`${t.sha256} ~ '^[0-9a-f]{64}$'`),
     check('knowledge_documents_erro_ck', sql`${t.erro} is null or char_length(${t.erro}) <= 300`),
+    // só preços é do cardápio; CSV só existe para o cardápio
+    check('knowledge_documents_modo_ck', sql`${t.modo} = 'completo' or ${t.alvo} = 'cardapio'`),
+    check('knowledge_documents_csv_alvo_ck', sql`${t.origem} = 'arquivo' or ${t.alvo} = 'cardapio'`),
+    check('knowledge_documents_lotes_ck', sql`${t.loteAtual} >= 0 and (${t.lotesTotal} is null or (${t.lotesTotal} between 1 and 1000 and ${t.loteAtual} <= ${t.lotesTotal}))`),
     index('knowledge_documents_restaurant_idx').on(t.restaurantId, t.createdAt),
-    // dedup de arquivo enviado: o mesmo arquivo em andamento ou aprovado é uma importação só (rejeitada/erro liberam)
+    // alvo da FK composta (importacao_id, restaurant_id) de knowledge_document_files
+    uniqueIndex('knowledge_documents_id_restaurant_uq').on(t.id, t.restaurantId),
+    // dedup: o mesmo arquivo (ou conjunto) do mesmo alvo e modo em andamento ou aprovado é uma importação só
+    // (rejeitada/erro liberam; sha256 nulo — ainda recebendo arquivos — não conflita)
     uniqueIndex('knowledge_documents_arquivo_sha256_uq')
-      .on(t.restaurantId, t.sha256)
+      .on(t.restaurantId, t.alvo, t.modo, t.sha256)
       .where(sql`${t.origem} = 'arquivo' and ${t.status} not in ('rejeitado', 'erro')`),
+  ],
+)
+
+/** Arquivos de uma importação (Etapa 07), lidos na ordem. Só mudam enquanto a importação recebe arquivos. */
+export const knowledgeDocumentFiles = pgTable(
+  'knowledge_document_files',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    restaurantId: restaurantFk(),
+    // FK composta (importacao_id, restaurant_id) → knowledge_documents (id, restaurant_id) vive na migration custom
+    importacaoId: uuid('importacao_id').notNull(),
+    ordem: smallint('ordem').notNull(),
+    storagePath: text('storage_path').notNull(),
+    mime: text('mime').notNull(),
+    tamanho: integer('tamanho').notNull(),
+    sha256: text('sha256').notNull(),
+    /** páginas do PDF (o worker preenche); null em imagem */
+    paginas: integer('paginas'),
+    ...timestamps,
+  },
+  (t) => [
+    check('knowledge_document_files_ordem_ck', sql`${t.ordem} between 1 and 10`),
+    check('knowledge_document_files_storage_ck', sql`${t.storagePath} ~ '^importacoes/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[^/]+$'`),
+    check('knowledge_document_files_mime_ck', sql`${t.mime} in ('application/pdf', 'image/jpeg', 'image/png', 'image/webp')`),
+    check('knowledge_document_files_tamanho_ck', sql`${t.tamanho} between 1 and 20971520`),
+    check('knowledge_document_files_sha256_ck', sql`${t.sha256} ~ '^[0-9a-f]{64}$'`),
+    check('knowledge_document_files_paginas_ck', sql`${t.paginas} is null or ${t.paginas} between 1 and 5000`),
+    uniqueIndex('knowledge_document_files_ordem_uq').on(t.importacaoId, t.ordem),
+    // o mesmo arquivo duas vezes na mesma importação é um só
+    uniqueIndex('knowledge_document_files_sha256_uq').on(t.importacaoId, t.sha256),
+    index('knowledge_document_files_restaurant_idx').on(t.restaurantId),
   ],
 )
