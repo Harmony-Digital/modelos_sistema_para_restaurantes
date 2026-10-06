@@ -117,7 +117,26 @@ Spec aprovada: [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-
 - [x] Handoff por frustração/falhas; horário de atendimento humano — 06/10/2026; `triage-v6` com `frustracao` (v1–v5 intactas; evals S1–S4 medem a v6), 2 falhas/fora do escopo seguidos ⇒ handoff, modelos `handoff_dentro`/`handoff_fora` (com `{proximo_horario}`)/`handoff_frustracao` editáveis, **Mais → Atendimento humano** (só dono) e **Conteúdo → Mensagens → Respostas rápidas**; `demo:s1` com horário seg–sex 9h–18h e 2 respostas rápidas; e2e: horário salvo pela tela e handoff num sábado (relógio simulado) responde "Nossa equipe atende na segunda a partir das 9h"; `pnpm check` com 1900 testes em 186 arquivos; e2e celular 37/37
 - [ ] ~~Áudio: download Meta, limite de duração, STT, descarte do arquivo~~ — **adiado (06/10/2026, decisão do dono):** a versão atual é demonstração por simulação; vira melhoria futura (ver "Melhorias futuras")
 - [ ] Evals · Homologação — roteiro em [docs/homologacao/etapa-06.md](docs/homologacao/etapa-06.md) (06/10/2026); camada 2 de S1–S4 com a v6 no `pnpm test`; pendentes: `pnpm --filter @atd/ai eval:frustracao` e camada 1 de `eval:s1`–`eval:s4` (precisam de crédito no OpenRouter) e homologação do dono
-- [ ] Pendências da revisão do Bloco C (menores, não bloqueiam): ordem da resposta rápida calculada fora da transação; limite de 30 conta só as ativas; "Tempo até assumir" só para dono/gerente; duas recargas por mensagem na conversa aberta (debounce compartilhado); `minhas_unidades()` lido como texto; `membrosDaEquipe` repete `membroAcessaUnidade`; menu de respostas rápidas sem clique fora nem setas; conversa em `humano` sem atendente só assumível com "Assumir mesmo assim"
+- [x] Revisão final e onda única de correções — 06/10/2026 (`b431d82..HEAD`): falha da Meta pelo webhook vira `falhou:<código>` (bolha e "Tentar de novo" também aceitam linhas antigas `failed:*`); entrega que esgota as tentativas marca as respostas humanas como `falhou:temporaria`; encerrar cancela só pendentes da IA (a despedida do atendente sai); pool do worker com 9 conexões; texto neutro (`evento_atualizado_humano`) quando o pedido foi recusado/cancelado pela equipe; `humano` sem atendente é livre para quem tem acesso; cortesia sem item não conta falha e respostas prontas zeram o contador; restaurante de uma unidade grava `unidade_contexto_id` já na primeira resposta; `returnToAi` removido; "Tempo até assumir" por unidade (migration 0032)
+- [ ] Pendências menores — não bloqueiam (ledger da Etapa 06):
+  - A6: Encerradas e ordenação usam `last_message_at`, que só conta mensagens de entrada (ruling; documentado)
+  - A7: policy `app_roles` de `quick_replies` inclui `worker_app` sem grant (inofensivo, incoerente)
+  - B5: pergunta de evento adiada se perde quando a resposta ambígua a "Para quantas pessoas?" cai na triagem
+  - B6: falha temporária no meio da mídia desfaz o `guardarMidiaMeta` e a retentativa sobe o arquivo de novo
+  - B7: eval de frustração não confere os itens (comparar com a v5 nos casos com item)
+  - B8: respostas antigas `handoff`/`modoEconomico`/`erro` sem uso no worker; estimativa da triagem com `maxTokens` 520
+  - C2: ordem da resposta rápida calculada fora da transação (duas criações simultâneas recebem a mesma ordem)
+  - C3: limite de 30 respostas rápidas conta só as ativas (registrar a decisão ou alinhar com a spec)
+  - C4: "Tempo até assumir (hoje)" aparece só para dono e gerente
+  - C5: duas recargas por mensagem na conversa aberta (debounce compartilhado entre `inbox:*` e `conversa:<id>`)
+  - C6: `acessoInbox` lê `app.minhas_unidades()` como texto e faz parse por regex
+  - C7: `membrosDaEquipe` repete a regra de `membroAcessaUnidade`
+  - C9: `lib/server/midias-conversa.ts` importa `./db.ts` em vez de `@/lib/server/db`
+  - C10: `revalidatePath('/conversas')` sem efeito em `/conversas/[id]` (páginas `force-dynamic`)
+  - C11: menu de respostas rápidas não fecha com clique fora nem navega pelas setas
+  - C12: `use-inbox.ts` grava `routerRef.current` durante o render (mover para `useLayoutEffect`)
+  - Devolver à IA não responde a mensagem que ficou sem resposta: a IA só fala na próxima mensagem do cliente
+  - Grant `update (estado, atendente_id)` em `conversations` para `authenticated` (0006) segue porque a DAL depende dele no `for update`; rever no go-live (Data API desligada hoje)
 - [ ] Pendências de produção da Etapa 06: conferir policies de `realtime.messages`, triggers de broadcast e Realtime privado no Supabase hospedado; resposta fora da janela de 24 h por template da Meta (Etapa 09); e-mail/push com o painel fechado (sem etapa definida)
 - [x] Pendências menores da Etapa 04 (revisões; não bloqueiam): handoff da triagem grava todas as saídas com autor `sistema` (rever ao montar a inbox); "pessoas" e evento na mesma mensagem perdem o evento (só pergunta pessoas); lista de unidades antiga com pendente `pedido_evento` responde "lista expirada"; corrida com pedido confirmado pela equipe durante a coleta responde "não encontrei"; responsável do pedido pode ser alguém que não vê a unidade (validar no seletor/DAL); `TRANSICOES` de status duplicada em `apps/web/lib/eventos.ts` (extrair de um lugar só) — resolvidas em 06/10/2026 (9b0a715, eba2a43, 688583b): saídas do handoff com o autor certo, pergunta de evento adiada retomada, toque na lista com pedido de evento em andamento, corrida com pedido confirmado ⇒ handoff, responsável só entre quem vê a unidade, `TRANSICOES_PEDIDO_EVENTO` no core
 
