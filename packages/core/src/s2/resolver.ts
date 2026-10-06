@@ -79,8 +79,14 @@ export function resolverItensS2(
   let validos = 0
   let respondidos = 0
 
-  function registrar(item: ItemExtraido): void {
-    let u: UnidadeS1 | null = escolhida ?? encontrarUnidade(item.unidade, unidades)
+  function registrar(entrada: ItemExtraido): void {
+    // "na verdade seremos 6": sem unidade nem dia e com um único aviso ativo, é atualização desse aviso
+    const unico = !escolhida && !entrada.unidade && !entrada.data && ativos.length === 1 ? ativos[0]! : null
+    const doUnico = unico ? (unidades.find((x) => x.id === unico.unitId) ?? null) : null
+    const item = doUnico && unico
+      ? { ...entrada, unidade: doUnico.nome, data: unico.data, horario: entrada.horario ?? unico.horarioAprox }
+      : entrada
+    let u: UnidadeS1 | null = doUnico ?? escolhida ?? encontrarUnidade(item.unidade, unidades)
     if (!u) {
       if (unidades.length === 0) {
         validos++

@@ -152,6 +152,22 @@ describe('resolverS2 — registrar', () => {
     expect(outro.acoes[0]).toMatchObject({ atualiza: false, data: '2026-10-11' })
   })
 
+  it('sem unidade e sem dia com exatamente 1 aviso ativo: atualiza esse aviso', () => {
+    const avisos: AvisoAtivoS2[] = [{ id: 'a1', unitId: 'u-asa-sul', data: '2026-10-10', pessoas: 4, horarioAprox: '20:00' }]
+    const r = resolverS2([reg({ pessoas: 6 })], CONTEXTO, SEG_14H, avisos)
+    // o horário já anotado continua quando o cliente não diz outro
+    expect(r.texto).toBe('Atualizei seu aviso: Asa Sul, sábado (10/10), 6 pessoas, por volta das 20h.')
+    expect(r.acoes).toEqual([{ tipo: 'registrar', unitId: 'u-asa-sul', data: '2026-10-10', pessoas: 6, horarioAprox: '20:00', atualiza: true }])
+    expect(resolverS2([reg({ pessoas: 6, horario: '21h' })], CONTEXTO, SEG_14H, avisos).acoes[0]).toMatchObject({ horarioAprox: '21:00' })
+    expect(r.pendenteUnidade).toEqual([])
+    // aviso passado não conta; com 2 ativos, ou com o dia dito, segue a regra normal (lista)
+    const passado: AvisoAtivoS2 = { id: 'a0', unitId: 'u-asa-norte', data: '2026-10-01', pessoas: 2, horarioAprox: null }
+    expect(resolverS2([reg({ pessoas: 6 })], CONTEXTO, SEG_14H, [...avisos, passado]).acoes[0]).toMatchObject({ unitId: 'u-asa-sul', atualiza: true })
+    const dois = [...avisos, { ...avisos[0]!, id: 'a2', data: '2026-10-11' }]
+    expect(resolverS2([reg({ pessoas: 6 })], CONTEXTO, SEG_14H, dois).pendenteUnidade).toHaveLength(1)
+    expect(resolverS2([reg({ data: 'domingo', pessoas: 6 })], CONTEXTO, SEG_14H, avisos).pendenteUnidade).toHaveLength(1)
+  })
+
   it('meia-noite: 23h50 de sábado ⇒ hoje é sábado; 00h10 de domingo ⇒ domingo', () => {
     const sab = resolverS2([reg({ unidade: 'asa norte', pessoas: 2 })], CONTEXTO, SAB_2350, [])
     expect(sab.acoes[0]).toMatchObject({ data: '2026-10-10' })

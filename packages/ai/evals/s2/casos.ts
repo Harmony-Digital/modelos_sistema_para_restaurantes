@@ -127,6 +127,8 @@ export const CASOS: Caso[] = [
   c('r50', 'sábado agora somos 5 na asa sul às 21h', SEG_14H, [reg({ unidade: 'asa sul', data: 'sábado', pessoas: 5, horario: '21h' })],
     { texto: 'Atualizei seu aviso: Asa Sul, sábado (10/10), 5 pessoas, por volta das 21h.', acoes: [registrar(AS, '2026-10-10', 5, '21:00', true)] },
     { avisos: [SAB_AS] }),
+  c('r54', 'na verdade seremos 6 (tem 1 aviso ativo)', SEG_14H, [reg({ pessoas: 6 })],
+    { texto: 'Atualizei seu aviso: Asa Sul, sábado (10/10), 6 pessoas, por volta das 20h.', acoes: [registrar(AS, '2026-10-10', 6, '20:00', true)] }, { avisos: [SAB_AS] }),
   c('r51', 'domingo também vou na asa sul, em 3', SEG_14H, [reg({ unidade: 'asa sul', data: 'domingo', pessoas: 3 })],
     { texto: `Anotado: Asa Sul, domingo (11/10), 3 pessoas. ${FIM}`, acoes: [registrar(AS, '2026-10-11', 3)] }, { avisos: [SAB_AS] }),
   c('r52', 'sábado na asa sul, em 4; digo, em 6', SEG_14H, [reg({ unidade: 'asa sul', data: 'sábado', pessoas: 4 }), reg({ unidade: 'asa sul', data: 'sábado', pessoas: 6 })],

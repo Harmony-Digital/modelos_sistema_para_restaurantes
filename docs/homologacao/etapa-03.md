@@ -17,7 +17,7 @@ O simulador usa a IA de verdade (triagem **v3**) e precisa de `OPENROUTER_API_KE
 Use **Novo cliente** entre os blocos para começar do zero.
 
 1. **Registrar:** "vou hoje na Asa Sul com 4 pessoas às 20h". A resposta começa com "Anotado:" e repete unidade, dia, pessoas e horário, terminando em "Se mudar de ideia, é só me avisar."
-2. **Atualizar:** na mesma conversa, "na verdade seremos 6". Resposta começa com "Atualizei seu aviso:" — continua um aviso só (um por cliente, unidade e dia).
+2. **Atualizar:** na mesma conversa, "na verdade seremos 6". Resposta começa com "Atualizei seu aviso:" e mantém unidade, dia e horário — continua um aviso só (um por cliente, unidade e dia). Sem dizer unidade nem dia, isso só vale quando o cliente tem **um** aviso ativo; com vários, ele precisa dizer a unidade e o dia ("na verdade seremos 6 no sábado na Asa Sul").
 3. **Pessoas:** "vou amanhã na Asa Sul". Pergunta "Para quantas pessoas?"; responda "3" ⇒ "Anotado: …". Teste também "somos 80": a resposta explica o limite de 1 a 60 pessoas.
 4. **Lista de unidades:** "vou sábado com 2 pessoas" (sem dizer a unidade). Aparece a lista; toque numa unidade ⇒ "Anotado: …".
 5. **Dia ou horário fora:** um dia em que a unidade não abre ("vou na segunda", se estiver fechada) ou um horário fora do turno ⇒ a IA explica e pede outro dia/horário. Mais de 30 dias à frente ⇒ "Consigo anotar avisos de hoje até …".
