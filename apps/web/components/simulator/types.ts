@@ -6,4 +6,4 @@ export type SimMessage =
   /** arquivo do cardápio; `url` assinada e curta (null: não foi possível gerar agora) */
   | { id: string; de: 'restaurante'; tipo: 'documento'; titulo: string; url: string | null; hora: string }
   | { id: string; de: 'restaurante'; tipo: 'imagem'; url: string | null; legenda: string; hora: string }
-  | { id: string; de: 'sistema'; tipo: 'aviso'; texto: string }
+  | { id: string; de: 'sistema'; tipo: 'aviso'; texto: string; /** trecho do texto que vira link */ link?: { rotulo: string; href: string } }

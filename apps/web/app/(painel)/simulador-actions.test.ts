@@ -27,7 +27,7 @@ vi.mock('@atd/db', async (orig) => ({
 const a = await import('./simulador-actions')
 const CONV = '00000000-0000-4000-8000-000000000001'
 const sessao = { userId: 'u1', role: 'dono', restaurantId: 'r1', claims: { sub: 'u1' } }
-const vazio = { mensagens: [], cursor: 0, digitando: false, estado: 'ia', relogioOffsetSegundos: null }
+const vazio = { mensagens: [], cursor: 0, digitando: false, estado: 'ia', relogioOffsetSegundos: null, limiteSimulacao: false }
 
 describe('Server Actions do simulador', () => {
   it('audita abrir, novo cliente e relógio (sem texto de cliente no diff)', async () => {
@@ -81,7 +81,7 @@ describe('Server Actions do simulador', () => {
     expect(await a.abrirSimuladorAction()).toEqual({
       ok: true,
       data: {
-        conversationId: CONV, cursor: 7, digitando: false, estado: 'ia', relogioOffsetSegundos: null,
+        conversationId: CONV, cursor: 7, digitando: false, estado: 'ia', relogioOffsetSegundos: null, limiteSimulacao: false,
         mensagens: [{ id: 7, direcao: 'in', tipo: 'texto', texto: 'oi', payload: null, criadaEm: '2026-10-05T17:00:00.000Z' }],
       },
     })

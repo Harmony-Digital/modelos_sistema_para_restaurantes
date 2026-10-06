@@ -65,6 +65,7 @@ async function paraTela(s: Sessao, conversationId: string, e: EstadoSimulacao): 
     digitando: e.digitando,
     estado: e.estado,
     relogioOffsetSegundos: e.relogioOffsetSegundos,
+    limiteSimulacao: e.limiteSimulacao,
     mensagens: mensagens.map((m) => {
       const id = arquivoDaMensagem(m)
       const midia = id ? midias.get(id) : undefined
