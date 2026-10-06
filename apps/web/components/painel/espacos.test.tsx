@@ -53,6 +53,15 @@ describe('Espacos', () => {
     expect(salvarEspacoAction).toHaveBeenCalledWith('u1', null, expect.objectContaining({ nome: 'Varanda', capacidadeMin: '5', capacidadeMax: '10' }))
   })
 
+  it('dicas de descrição e condições dizem a verdade: a IA envia os dois ao cliente', async () => {
+    const user = userEvent.setup()
+    render(<Espacos unitId="u1" espacos={[]} somenteLeitura={false} />)
+    await user.click(screen.getByRole('button', { name: 'Novo espaço' }))
+    expect(await screen.findByText('A IA envia ao cliente na lista de espaços; não coloque dados internos.')).toBeInTheDocument()
+    expect(screen.getByText('Opcional. A IA envia ao cliente na lista de espaços, como está escrito aqui.')).toBeInTheDocument()
+    expect(screen.queryByText(/Só para a equipe/)).toBeNull()
+  })
+
   it('nome repetido volta como erro do campo', async () => {
     const user = userEvent.setup()
     salvarEspacoAction.mockResolvedValue({ ok: false, fieldErrors: { nome: 'Já existe um espaço com esse nome nesta unidade.' } })

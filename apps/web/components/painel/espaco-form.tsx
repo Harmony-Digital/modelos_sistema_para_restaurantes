@@ -37,10 +37,10 @@ export function EspacoForm(props: {
           {(a) => <TextInput {...a} inputMode="numeric" autoComplete="off" placeholder="Ex.: 80" {...form.register('capacidadeMax')} />}
         </Field>
       </div>
-      <Field id="descricao" label="Descrição" hint="Opcional. A IA pode citar ao listar os espaços." error={errors.descricao?.message}>
+      <Field id="descricao" label="Descrição" hint="Opcional. A IA envia ao cliente na lista de espaços, como está escrito aqui." error={errors.descricao?.message}>
         {(a) => <Textarea {...a} rows={3} {...form.register('descricao')} />}
       </Field>
-      <Field id="condicoes" label="Condições" hint="Opcional. Só para a equipe consultar; a IA não promete valores nem reserva." error={errors.condicoes?.message}>
+      <Field id="condicoes" label="Condições" hint="A IA envia ao cliente na lista de espaços; não coloque dados internos." error={errors.condicoes?.message}>
         {(a) => <Textarea {...a} rows={3} {...form.register('condicoes')} />}
       </Field>
       <Controller
