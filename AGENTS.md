@@ -17,7 +17,7 @@ Atendimento ao cliente de um restaurante multiunidade **100% por IA via WhatsApp
 
 ## Stack (detalhes e motivos no PRD §2)
 
-TypeScript strict · pnpm + Turborepo · Next.js 16 (Vercel gru1) · Node 24 worker (Docker, VPS Hostinger, sem portas abertas) · Supabase Postgres sa-east-1 + Auth + Storage + Realtime · Drizzle ORM · pg-boss · OpenRouter (cliente `fetch` próprio) · Zod 4 · Tailwind v4 + shadcn/ui · Vitest · Playwright · Sentry.
+TypeScript strict · pnpm + Turborepo · Next.js 16 (Vercel gru1) · Node 24 worker (Docker, VPS Hostinger, sem portas abertas) · Supabase Postgres sa-east-1 + Auth + Storage + Realtime · Drizzle ORM · pg-boss · IA: OpenAI direto em produção e OpenRouter no desenvolvimento local (clientes `fetch` próprios, `AI_PROVIDER`) · Zod 4 · Tailwind v4 + shadcn/ui · Vitest · Playwright · Sentry.
 
 **Não adicionar** NestJS, tRPC, Redis, outro ORM ou outro storage sem decisão registrada no PRD.
 
@@ -36,7 +36,7 @@ TypeScript strict · pnpm + Turborepo · Next.js 16 (Vercel gru1) · Node 24 wor
 - **Grounding:** preço, horário, endereço e disponibilidade só de dado aprovado no banco, via tool. Nada de conhecimento geral.
 - **LLM só age por tools** tipadas e validadas no código. Saída do LLM sempre validada com Zod.
 - **Orçamento:** nenhuma chamada paga sem reserva atômica bem-sucedida.
-- **LGPD:** redação de PII antes do LLM; `data_collection: 'deny'` + `zdr: true` em toda chamada; dado de saúde nunca persistido em campo estruturado; telefone cifrado; áudio descartado após transcrição; nada de PII em log/Sentry.
+- **LGPD:** redação de PII antes do LLM; OpenRouter (dev) sempre com `data_collection: 'deny'` + `zdr: true`; OpenAI (produção, `AI_PROVIDER=openai` obrigatório) sempre com `store: false`, retenção padrão de 30 dias aceita pelo time em 06/10/2026 (PRD I8 e Adendo); dado de saúde nunca persistido em campo estruturado; telefone cifrado; áudio descartado após transcrição; nada de PII em log/Sentry.
 - **Segurança:** RLS em toda tabela; toda Server Action verifica sessão + papel + unidade na DAL (nunca confiar só no `proxy.ts`); webhook só com HMAC válido; `service_role` e segredos nunca no browser; `set_config` sempre **parametrizado** (nunca `sql.raw` com dado).
 - **Banco:** dinheiro em centavos (`integer`) ou `numeric`, nunca `float`; `timestamptz`; toda consulta de caminho quente com índice e `EXPLAIN` revisado; migrations só via `drizzle-kit`, nunca editar migration já aplicada.
 - **Documentos enviados** nunca viram dado oficial sem aprovação humana.
@@ -50,7 +50,7 @@ TypeScript strict · pnpm + Turborepo · Next.js 16 (Vercel gru1) · Node 24 wor
 
 ## Deploy da amostra
 
-Vai publicar a amostra em produção (painel na Vercel + worker no VPS, só simulador, sem Meta)? Siga
+Vai publicar a amostra em produção (painel na Vercel + worker no VPS, só simulador, sem Meta, IA pela OpenAI com projeto, limite de gasto e chave 🔑 no passo 6, `smoke:ia:prod` e `eval:prod` antes de apresentar)? Siga
 [docs/runbooks/producao-amostra.md](docs/runbooks/producao-amostra.md) do passo 0 ao 9, na ordem: ele diz o que
 conferir, o comando exato, a saída esperada e onde **parar e pedir ao humano** (🔑). Confira com
 `scripts/producao/verificar.sh` (só leitura, não imprime segredos). Segredos só nos arquivos `.env.*-producao` /
@@ -59,6 +59,7 @@ o build de produção é pelo Git. O go-live completo (Meta, staging) é [docs/r
 
 ## Onde paramos
 
+- **06/10/2026** — IA de produção pela OpenAI direto (branch `openai-producao`; spec `docs/specs/2026-10-06-openai-producao-design.md`, plano `docs/plans/openai-producao.md`): `AI_PROVIDER=openai` obrigatório em produção, `store: false`, retenção de 30 dias aceita pelo time, tabela de preços em código; PRD (stack, I8, adendo), runbook da amostra e `verificar.sh` atualizados; local segue no OpenRouter. Nenhuma chamada real à OpenAI no desenvolvimento. Próximo: revisão final, `pnpm check` + e2e, e `smoke:ia:prod` + `eval:prod` por quem tem a chave; Etapa 09: política/RIPD com a OpenAI e avaliar ZDR.
 - **06/10/2026** — Revisão final da `producao-amostra` e onda de correções aplicadas (`06522b9..HEAD`; deploy da Vercel pelo Git com link na raiz, convite de 1 h com recuperação, `require_parameters` no OpenRouter com smoke test pelo cliente do worker, `verificar.sh` com a Data API certa; `pnpm check` com 1950 testes; e2e 37/37). Próximo: mesclar na `main` e publicação por quem tem acesso à Vercel/VPS.
 - **06/10/2026** — Amostra em produção preparada na branch `producao-amostra` (`c901521..HEAD`): testes de banco em paralelo (um banco por processo; `pnpm check` ~1m45 com 1940 testes), limite de upload configurável (`NEXT_PUBLIC_LIMITE_UPLOAD_MB=4` na Vercel), `bootstrap:prod`/`demo:s1:prod`, runbook para outro agente publicar (`docs/runbooks/producao-amostra.md`) com `scripts/producao/verificar.sh`, modelos com ZDR (triagem `mistral-nemo` → `mistral-small-3.2`; cardápio `gemini-3.1-flash-lite` → `gpt-4.1-mini`; a família gemini-2.5 expira em 20/10/2026), worker aceita a Secret key nova do Supabase; e2e 37/37. Próximo: revisão final da branch e publicação por quem tem acesso à Vercel/VPS.
 - **06/10/2026** — Revisão final da Etapa 06 e onda única de correções aplicadas (`b431d82..HEAD`; falha do webhook vira `falhou:<código>`, entrega esgotada vira `falhou:temporaria`, encerrar preserva a despedida humana, pool do worker 9, texto neutro de evento recusado, `humano` sem atendente livre, cortesia não conta falha, unidade única gravada cedo, `returnToAi` removido, métrica por unidade na 0032; `pnpm check` com 1928 testes; e2e 37/37). Pendentes externos: crédito no OpenRouter (`eval:frustracao` e camada 1 dos evals). Próximo: homologação do dono (`docs/homologacao/etapa-06.md`) e fechamento da Etapa 06.

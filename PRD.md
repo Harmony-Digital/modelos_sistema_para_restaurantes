@@ -61,7 +61,7 @@ Atendimento ao cliente final de um restaurante com várias unidades, feito **do 
 | Fila | **pg-boss 12** (no próprio Postgres) | Fila `conversation.process` com policy **`stately`** + `singletonKey = conversationId` + `startAfter: 4s` (agrupa rajadas e serializa por conversa), retry/backoff, DLQ, cron, enfileirar na mesma transação |
 | Redis | **Não usar** no MVP | Volume não justifica; menos um serviço/fornecedor com dado pessoal. Upstash só se métricas exigirem |
 | Storage | **Supabase Storage** (bucket privado, RLS em `storage.objects`, URL assinada) | Mesma região/auth; R2 não tem location hint na América do Sul (complica LGPD) e o egress aqui é irrisório |
-| IA | **OpenRouter** via cliente fino próprio (`fetch` + Zod) sobre a API REST documentada, em `packages/ai` | Fallback de modelos (`models`), `provider: { data_collection: 'deny', zdr: true }`, `usage.cost` por chamada, plugin de PDF, STT; sem dependência dos nomes de campo do SDK, testável com `fetch` injetado (decisão de 05/10/2026 ao detalhar a Etapa 01) |
+| IA | **Produção: OpenAI direto** (`AI_PROVIDER=openai`); **desenvolvimento local: OpenRouter** (`AI_PROVIDER=openrouter`, padrão). Clientes finos próprios (`fetch` + Zod) sobre as APIs REST, em `packages/ai`, atrás da mesma interface `LlmClient` | OpenRouter: fallback de modelos (`models`), `provider: { data_collection: 'deny', zdr: true, require_parameters: true }`, `usage.cost` por chamada. OpenAI: `/chat/completions` com `store: false`, `json_schema` estrito, PDF como parte `file`, custo calculado por tabela de preços em código (modelo sem preço ⇒ worker não sobe). Sem dependência dos nomes de campo do SDK, testável com `fetch` injetado (decisões de 05/10/2026 e de 06/10/2026, ver Adendo) |
 | WhatsApp | Cliente próprio fino (fetch + Zod) em `packages/whatsapp` | Superfície pequena; HMAC sob nosso controle; menos supply chain |
 | Validação | Zod 4 | Env, webhook, Server Actions, saída do LLM |
 | UI | Tailwind v4 + shadcn/ui; **design system definido na Etapa 02** | |
@@ -84,7 +84,7 @@ Meta Cloud API ──webhook (X-Hub-Signature-256)──▶ apps/web — Next.js
 apps/worker — Node 24 @ VPS Hostinger (Docker, sem portas abertas)
    pré-filtro → (áudio→STT) → triagem → orçamento → contexto → resposta+tools → envio Meta → registro
    │                                   │
-   └──────────── OpenRouter ◀──────────┘          Meta Graph API (envio)
+   └─ OpenAI (prod) / OpenRouter (dev) ◀┘          Meta Graph API (envio)
 ```
 
 ### 2.3 Estrutura do repositório
@@ -99,7 +99,7 @@ ia-atendimento/
 │   ├── core/       domínio puro (sem I/O direto): serviços S1–S4, pré-filtro, triagem, orçamento, redação de PII
 │   ├── db/         schema Drizzle, migrations, policies RLS, seeds, cliente com contexto RLS
 │   ├── whatsapp/   cliente Cloud API, verificação HMAC, schemas Zod do webhook
-│   ├── ai/         cliente OpenRouter, prompts versionados, definição de tools, evals
+│   ├── ai/         clientes LLM (OpenAI e OpenRouter), prompts versionados, definição de tools, evals
 │   └── config/     tsconfig, eslint, schema de env (Zod, validado no boot)
 ├── supabase/       config do Supabase CLI (dev local)
 └── docs/           runbooks (deploy, incidente LGPD), RIPD, decisões
@@ -243,7 +243,7 @@ Após a chamada: `reservado -= $est, gasto += $real` (custo real de `usage.cost`
 4. Conteúdo do cliente e de documentos é **dado, nunca instrução** (defesa contra prompt injection; delimitadores + instrução explícita + evals de injeção).
 5. Histórico curto (≈10 mensagens) + `conversations.resumo` atualizado periodicamente.
 6. Prompt estruturado para **prompt caching**: parte estática primeiro, dados variáveis no fim.
-7. Toda chamada ao OpenRouter com `provider: { data_collection: 'deny', zdr: true }`; lista `models: [...]` de fallback.
+7. Toda chamada ao OpenRouter com `provider: { data_collection: 'deny', zdr: true, require_parameters: true }`; lista `models: [...]` de fallback. Toda chamada à OpenAI com `store: false`; a lista de modelos é percorrida em ordem pelo cliente (erro transitório passa ao próximo).
 8. Modelos ficam em **configuração** (banco/env), não no código; escolhidos por **evals** (acerto, custo, latência) na etapa correspondente.
 9. Tom: português do Brasil, cordial, mensagens curtas próprias de WhatsApp; identifica-se como assistente virtual.
 
@@ -276,7 +276,7 @@ Não há fine-tuning. A IA é "treinada" por: (a) dados aprovados no banco; (b) 
 ## 5. Custos e limites
 
 1. **Camada 1 — nosso banco:** reserva atômica antes de cada chamada (§3.6), liquidação pelo custo real. Limites diário e mensal por escopo (`ia`, `whatsapp`), alerta em `alerta_pct` (padrão 80%) e ação ao estourar.
-2. **Camada 2 — OpenRouter:** API key de produção com `limit` mensal + **Guardrail** com `limit_usd`, `reset_interval` e `enforce_zdr`. Protege contra bug na camada 1.
+2. **Camada 2 — provedor:** em produção (OpenAI), **projeto** na plataforma da OpenAI com **limite de gasto mensal** e só os modelos usados liberados; no OpenRouter (dev), API key com `limit` mensal + **Guardrail** com `limit_usd`, `reset_interval` e `enforce_zdr`. Protege contra bug na camada 1.
 3. **WhatsApp:** respostas dentro da janela de atendimento de 24h aberta pelo cliente não são cobradas; mensagens de template (iniciadas pela empresa) são contabilizadas no escopo `whatsapp` e limitadas. Tabela de preços por categoria/país configurável no painel.
 4. Custos exibidos em USD e BRL (cotação configurável).
 
@@ -288,7 +288,7 @@ Não há fine-tuning. A IA é "treinada" por: (a) dados aprovados no banco; (b) 
 
 ### 6.1 Papéis
 - **Controlador:** o restaurante. **Encarregado (DPO):** indicado pelo dono no painel; publicado na política.
-- **Suboperadores:** Supabase (sa-east-1), Vercel, Hostinger, Meta (WhatsApp), OpenRouter e provedores de modelo roteados, Sentry. Lista mantida em `docs/suboperadores.md`.
+- **Suboperadores:** Supabase (sa-east-1), Vercel, Hostinger, Meta (WhatsApp), **OpenAI** (produção; retenção padrão de 30 dias e transferência internacional, ver §6.5), OpenRouter e provedores de modelo roteados (só desenvolvimento local), Sentry. Lista mantida em `docs/suboperadores.md`.
 
 ### 6.2 Base legal por finalidade (art. 7º)
 | Finalidade | Base |
@@ -306,9 +306,9 @@ Primeira interação de cada cliente (e novamente após 12 meses — `privacy_no
 ### 6.5 Minimização e segurança do dado
 - Coleta: nome de perfil, telefone, conteúdo da conversa. Nada mais.
 - Telefone cifrado (AES-256-GCM, chave fora do banco); busca por HMAC com pepper.
-- **Redação de PII antes do LLM:** CPF, e-mail, cartão, telefone mascarados no texto enviado ao OpenRouter. O LLM nunca recebe o número do cliente.
+- **Redação de PII antes do LLM:** CPF, e-mail, cartão, telefone mascarados no texto enviado ao provedor de LLM. O LLM nunca recebe o número do cliente.
 - Áudio descartado após transcrição.
-- OpenRouter com `dataCollection: 'deny'` + ZDR (mitigação da transferência internacional — art. 33).
+- OpenRouter (desenvolvimento local) com `dataCollection: 'deny'` + ZDR. OpenAI (produção): `store: false`, retenção padrão de 30 dias para monitoramento de abuso, sem uso para treino (aceita pelo time em 06/10/2026), sem região de dados no Brasil; a transferência internacional (art. 33) é coberta na política de privacidade e no RIPD (Etapa 09), que também avaliam pedir ZDR à OpenAI.
 - Logs e Sentry com scrub de PII.
 
 ### 6.6 Retenção (padrões; configuráveis em `retention_settings`; cron diário)
@@ -369,7 +369,7 @@ Runbook em `docs/runbooks/incidente-lgpd.md`: contenção, avaliação, comunica
 | Domínio | Vitest (TDD) | Regras S1–S4, "aberto agora" com fuso/feriado/virada de dia, pré-filtro, redação de PII, orçamento |
 | Banco | Vitest + Postgres local | RLS por papel, grants do `worker_app`, reserva concorrente (100 paralelas sem estourar), `EXPLAIN` |
 | Webhook | Vitest | HMAC válido/inválido, replay, `wamid` duplicado, payloads reais gravados |
-| IA | Evals próprios + OpenRouter | Acerto por serviço, fora de escopo, injeção, áudio; custo e latência |
+| IA | Evals próprios + OpenAI/OpenRouter | Acerto por serviço, fora de escopo, injeção, áudio; custo e latência |
 | Painel | Playwright | Login+MFA, CRUDs, inbox, limites |
 
 ### 9.2 Ambientes
@@ -396,7 +396,7 @@ Sentry (web + worker) com scrub de PII; logs JSON; `worker_heartbeats` (alerta s
 | I5 | Conversa em `humano`/`aguardando_humano` não recebe resposta da IA. |
 | I6 | Nenhuma chamada paga (LLM, STT, template) sem reserva de orçamento bem-sucedida. |
 | I7 | Webhook sem HMAC válido não grava nada; mensagem com `wamid` repetido não é reprocessada. |
-| I8 | Nenhum dado pessoal sai para o LLM sem redação de PII e sem `dataCollection: 'deny'`/ZDR. |
+| I8 | Nenhum dado pessoal sai para o LLM sem redação de PII. No OpenRouter, sempre com `dataCollection: 'deny'` + ZDR; na OpenAI (produção), sempre com `store: false` e retenção padrão de 30 dias aceita pelo time em 06/10/2026 (revisão do invariante; ver Adendo). Produção só com `AI_PROVIDER=openai`. |
 | I9 | Dado de saúde nunca é persistido em campo estruturado. |
 | I10 | Toda tabela tem RLS; toda Server Action verifica sessão, papel e unidade. |
 | I11 | `audit_log` é append-only. |
@@ -427,7 +427,7 @@ Aprovado em [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-05-
 - **§2.1:** formulários com React Hook Form + Zod compartilhado; design system com tokens da Harmony Digital, **tema escuro padrão** e claro opcional, celular primeiro.
 - **Simulador de WhatsApp** no painel: roda o pipeline real com adaptador de canal `simulador`, relógio injetável e isolamento (`simulada`), sujeito ao teto de gasto.
 
-- **Painel — gastos (pedido do dono na homologação do 02-A, 05/10/2026):** a tela Início mostra a dono/gerente um quadro **Gastos** com **IA (OpenRouter)** e **WhatsApp (API oficial)** separados, **hoje** e **no mês**, e o total, lidos de `budget_counters` (escopos `ia` e `whatsapp`) no fuso do restaurante; atendente não vê custos. Valores em USD (4 casas abaixo de US$ 1). O gasto do WhatsApp só sobe com mensagens cobradas pela Meta (templates iniciados pela empresa); respostas dentro da janela de 24 h aberta pelo cliente são gratuitas. Telas de limites e relatórios continuam na Etapa 08.
+- **Painel — gastos (pedido do dono na homologação do 02-A, 05/10/2026):** a tela Início mostra a dono/gerente um quadro **Gastos** com **IA (OpenAI/OpenRouter)** e **WhatsApp (API oficial)** separados, **hoje** e **no mês**, e o total, lidos de `budget_counters` (escopos `ia` e `whatsapp`) no fuso do restaurante; atendente não vê custos. Valores em USD (4 casas abaixo de US$ 1). O gasto do WhatsApp só sobe com mensagens cobradas pela Meta (templates iniciados pela empresa); respostas dentro da janela de 24 h aberta pelo cliente são gratuitas. Telas de limites e relatórios continuam na Etapa 08.
 
 - **Plano 02-B (implementado, 05/10/2026):** triagem `triage-v2` (lista de até 5 itens); resolução e composição determinísticas em `@atd/core/s1`; busca de unidade/fato em TypeScript sobre o contexto carregado (índices `pg_trgm`/GIN ficam para o painel); lista interativa até 10 unidades com pendente de 30 min; a escolha da lista é respondida sem chamar o LLM somente quando é uma única mensagem igual ao nome/apelido de uma unidade (`escolhaDeUnidade`) ou um toque na lista; lacunas com `NULLS NOT DISTINCT`; `knowledge_gaps.fact_id` amarrado ao mesmo restaurante (migrations 0013/0014; a 0014 revoga `MAINTAIN` de `authenticated` e exige Postgres 17); indicador "% respondido pela IA" conta só itens de S1 (`ai_runs.itens_validos/itens_respondidos`). Avaliação em duas camadas: camada 2 (composição exata, no CI) com 101 casos; camada 1 (extração com modelo real, job `evals-extracao`).
 - **Modelo de triagem escolhido:** pendente da chave do OpenRouter (camada 1 pendente: falta `OPENROUTER_API_KEY`). Candidatos a avaliar: mistralai/mistral-nemo (US$ 0,019/M entrada, 0,03/M saída), google/gemini-2.5-flash-lite (0,10/0,40), openai/gpt-4.1-nano (0,10/0,40), qwen/qwen3.5-9b (0,10/0,15), openai/gpt-oss-120b (0,037/0,17); todos aceitam `response_format`/`structured_outputs` (lista de 05/10/2026 da API pública; ZDR por endpoint ainda não verificado). Critério: maior acerto (meta >= 95%), depois menor custo por mensagem, depois menor latência p95; o segundo colocado vira fallback.
@@ -472,3 +472,13 @@ Aprovado em [docs/specs/2026-10-06-etapa-06-inbox-audio-design.md](docs/specs/20
 - **§4.5:** gatilhos implementados — pedido explícito (pré-filtro, sem IA), frustração (`triage-v6`, campo `frustracao`; v1–v5 intactas; medida pelo `eval:frustracao` com crédito), falhas seguidas (2 respostas inválidas ou fora do escopo seguidas; erro do modelo na triagem passa direto para a equipe), modo econômico e pedidos de evento que pedem a equipe. Mensagens por modelo editável: `handoff_dentro`, `handoff_fora` (com `{proximo_horario}`, ex.: "na segunda a partir das 9h") e `handoff_frustracao`. Evals S1–S4 medem a v6 por padrão.
 - **Realtime (§8 item 6):** Broadcast **privado** disparado por triggers (`security definer`, `search_path` fixo) em `conversations` (mudança de `estado`, `atendente_id`, `last_message_at` ou `unidade_contexto_id`; a unidade antiga também é avisada) e em `messages` (INSERT; mudança de `status_envio` só para a conversa aberta), nos tópicos `inbox:u:<unit_id>`, `inbox:r:<restaurant_id>` (quem vê tudo e conversas sem unidade) e `conversa:<id>`; policies em `realtime.messages` por unidade/visibilidade com MFA restritiva. **Payload só `{ conversation_id, evento }`**, sem conteúdo nem PII; o painel recarrega pela DAL (RLS vale). Sem conexão, recarga a cada 60 s.
 - **Painel:** barra inferior **Início · Conversas · Agenda · Conteúdo · Mais**; "Unidades" vai para **Mais** (rota `/unidades` mantida). **Conversas** com abas **Aguardando** · **Em atendimento** (todas as conversas em `humano`, as minhas primeiro com o selo "Você"; substitui a "Comigo" da spec) · **Com a IA** · **Encerradas**, filtro de unidade e "Mostrar simulações" (padrão desligado). Conversa aberta com Assumir, Responder, respostas rápidas, Devolver à IA, Encerrar e Mostrar telefone (auditado). Avisos com o painel aberto: contador no ícone e no título da aba, som opcional e notificação do navegador com texto fixo sem PII ("Nova conversa aguardando atendente"). **Mais → Atendimento humano** (só dono) e **Conteúdo → Mensagens → Respostas rápidas**. Início com "Tempo até assumir (hoje)" (mediana, só conversas reais).
+
+## Adendo de 06/10/2026 — IA de produção pela OpenAI direto
+
+Spec: `docs/specs/2026-10-06-openai-producao-design.md`; plano: `docs/plans/openai-producao.md`. Motivos do time: conta/contrato da empresa com a OpenAI e qualidade dos modelos GPT.
+
+- **Provedor por ambiente:** `AI_PROVIDER=openrouter` (padrão, desenvolvimento local, modelos grátis) | `openai` (produção). `OPENAI_API_KEY` obrigatória com `openai`; `OPENROUTER_API_KEY` obrigatória só com `openrouter`; `OPENAI_BASE_URL` opcional (e2e aponta para o servidor falso). Com `NODE_ENV=production` o worker recusa subir com outro provedor, com `OPENROUTER_DEV_SEM_ZDR` ou com modelo fora da tabela de preços. Modelos de partida: triagem `gpt-4.1-mini`; cardápio `gpt-4.1-mini,gpt-4.1`.
+- **Invariante de ZDR revisto (I8, §4.3 item 7, §6.5):** o OpenRouter segue sempre com `deny` + `zdr` + `require_parameters`. A OpenAI não oferece região de dados no Brasil nem ZDR por padrão: o time **aceitou, em 06/10/2026, a retenção padrão de 30 dias para monitoramento de abuso, sem uso para treino**. Mitigações mantidas: `store: false` em toda chamada, PII redigida antes, o LLM nunca recebe o telefone, dado de saúde nunca persistido, nada de conteúdo em log.
+- **Orçamento:** inalterado (reserva atômica antes de toda chamada). O custo da OpenAI é calculado por tabela de preços em código (`packages/ai/src/precos-openai.ts`, com a data da consulta).
+- **Verificação:** `pnpm --filter @atd/worker smoke:ia:prod` (exige `{"ok":true}` por modelo) e `pnpm --filter @atd/ai eval:prod` (S1–S4 e frustração contra a OpenAI; custa centavos) antes de apresentar ou publicar.
+- **Pendências de conformidade (Etapa 09):** política de privacidade e RIPD citam a OpenAI como suboperadora, a retenção de 30 dias e a transferência internacional; avaliar pedido de ZDR à OpenAI.

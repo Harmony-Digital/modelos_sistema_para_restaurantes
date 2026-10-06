@@ -7,6 +7,7 @@
 
 ## Onde paramos
 
+- **06/10/2026** — IA de produção pela OpenAI direto (branch `openai-producao`; spec `docs/specs/2026-10-06-openai-producao-design.md`, plano `docs/plans/openai-producao.md`; seção "IA de produção pela OpenAI"): PRD (stack, I8 e adendo), runbook da amostra e `verificar.sh` atualizados (Task 3); clientes e worker nas Tasks 1–2. Nenhuma chamada real à OpenAI no desenvolvimento. Próximo: revisão final, `pnpm check` + e2e, e `smoke:ia:prod` + `eval:prod` por quem tem a chave.
 - **06/10/2026** — Revisão final da branch `producao-amostra` e onda única de correções aplicadas (`06522b9..HEAD`): deploy da Vercel pelo Git com link na raiz e projeto criado no passo 0, convite de 1 h com recuperação, `require_parameters` no OpenRouter (repete sem `reasoning` no 404 de parâmetros) e smoke test com o cliente do worker, `verificar.sh` com a Data API certa e senha fora do `ps`. `pnpm check` com 1950 testes em 188 arquivos; e2e 37/37. Próximo: mesclar na `main` e a publicação por quem tem acesso à Vercel e ao VPS.
 - **06/10/2026** — Amostra em produção preparada na branch `producao-amostra` (`c901521..HEAD`; seção "Amostra em produção"): testes de banco em paralelo com um banco por processo (`pnpm check` ~1m45 com 1940 testes em 187 arquivos), limite de upload configurável (`NEXT_PUBLIC_LIMITE_UPLOAD_MB`, 4 na Vercel), `bootstrap:prod`/`demo:s1:prod` lendo `.env.production-bootstrap`, runbook executável por outro agente (`docs/runbooks/producao-amostra.md`) com `scripts/producao/verificar.sh`, modelos com provedor ZDR escolhidos (triagem `mistralai/mistral-nemo,mistralai/mistral-small-3.2-24b-instruct`; cardápio `google/gemini-3.1-flash-lite,openai/gpt-4.1-mini`), worker aceita a Secret key nova (`sb_secret_…`) do Supabase; Supabase Analytics local desligado; e2e 37/37. Próximo: revisão final da branch; depois a publicação por quem tem acesso à Vercel e ao VPS (smoke test dos modelos após pôr crédito).
 - **06/10/2026** — Revisão final da Etapa 06 (0 crítico, 3 importantes, 5 menores novos) e onda única de correções aplicada (`b431d82..HEAD`): falha da Meta pelo webhook vira `falhou:<código>` e permite "Tentar de novo" (linhas antigas `failed:*` também); entrega que esgota as tentativas marca a resposta humana como `falhou:temporaria`; encerrar não cancela mais a despedida do atendente; pool do worker com 9 conexões; texto neutro quando o pedido de evento foi recusado/cancelado pela equipe (`evento_atualizado_humano`); `humano` sem atendente livre para quem tem acesso; cortesia sem item não conta falha (agradecimento ou modelo `cortesia`) e respostas prontas zeram o contador; restaurante de uma unidade grava a unidade já na primeira resposta; `returnToAi` removido; "Tempo até assumir" por unidade (migration 0032). Menores restantes registrados na Etapa 06. `pnpm check` com 1928 testes em 187 arquivos (após a micro-rodada da cortesia); e2e 37/37. Pendentes externos: crédito no OpenRouter (`eval:frustracao` e camada 1 dos evals S1–S4 com a v6). Próximo: homologação do dono (`docs/homologacao/etapa-06.md`) e fechamento da Etapa 06.
@@ -175,11 +176,20 @@ Spec aprovada: [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-
 - [ ] Publicação pela pessoa com acesso à Vercel/VPS seguindo o runbook; smoke test dos modelos com crédito; mensagem de "pronto" com a evidência
 - Fica para a Etapa 09: Meta/número oficial, staging, PITR, environment `production` com aprovação, Ignored Build Step, rollback, upload > ~4,5 MB por URL assinada, convite de equipe pelo painel (Etapa 08).
 
+## IA de produção pela OpenAI (06/10/2026)
+> Mudança fora das etapas, decidida pelo time (conta da empresa na OpenAI, qualidade GPT). Spec: [docs/specs/2026-10-06-openai-producao-design.md](docs/specs/2026-10-06-openai-producao-design.md); plano: [docs/plans/openai-producao.md](docs/plans/openai-producao.md). Local continua no OpenRouter.
+- [ ] Task 1 — cliente OpenAI (`createOpenAiClient`, tabela de preços, `createLlmClient`) com `fetch` falso
+- [ ] Task 2 — worker, evals, smoke (`smoke:ia:prod`) e e2e com `AI_PROVIDER=openai`; `eval:prod`
+- [x] Task 3 — PRD (stack, I8, adendo), runbook da amostra (passo 6 OpenAI, tabela de variáveis), `verificar.sh` por provedor, apontador no `deploy.md`, CLAUDE.md/AGENTS.md — 06/10/2026
+- [ ] Revisão final e onda única de correções; `pnpm check` e e2e verdes
+- [ ] Na publicação: `smoke:ia:prod` com `{"ok":true}` por modelo e `eval:prod` antes de apresentar (por quem tem a chave)
+
 ## Etapa 09 — Go-live
 - [ ] Remover a chave de desenvolvimento `OPENROUTER_DEV_SEM_ZDR` (modelos grátis sem ZDR, criada em 06/10/2026 a pedido do dono) e confirmar que toda chamada envia `data_collection: deny` + `zdr: true`
 - [ ] Revisão de segurança completa e teste de carga (inclui CSP com nonce via `proxy.ts`)
-- [ ] Política, LIA e RIPD revisados pelo jurídico; runbook de incidente
-- [ ] Número oficial em produção; Guardrail OpenRouter em produção
+- [ ] Política, LIA e RIPD revisados pelo jurídico; runbook de incidente. A política de privacidade e o RIPD citam a **OpenAI como suboperadora**, a **retenção de 30 dias** (monitoramento de abuso, sem treino) e a **transferência internacional** (sem região no Brasil)
+- [ ] Avaliar pedido de **ZDR** (retenção zero) à OpenAI e, se concedido, passar o invariante I8 de volta para zero retenção
+- [ ] Número oficial em produção; limite de gasto do projeto na OpenAI (e Guardrail do OpenRouter só se voltar a ser usado)
 - [ ] Checklist de produção 100% · Homologação final
 
 ## Melhorias futuras
