@@ -51,7 +51,7 @@ const LS = 'u-lago-sul'
 const AC = 'u-aguas-claras'
 export const registrar = (extra: Partial<Extract<AcaoS3, { tipo: 'registrar_evento' }>> = {}): AcaoS3 => ({
   tipo: 'registrar_evento', unitId: AS, spaceId: null, data: '2026-10-10', convidados: 40,
-  tipoEvento: 'aniversario', tipoTexto: 'aniversário', observacoes: null, ...extra,
+  tipoEvento: 'aniversario', tipoTexto: null, observacoes: null, ...extra,
 })
 export const pedidoAtivo = (id: string, unitId: string, data: string, status: PedidoAtivoS3['status'] = 'novo', tipo: PedidoAtivoS3['tipo'] = 'aniversario', convidados = 40): PedidoAtivoS3 =>
   ({ id, unitId, data, convidados, tipo, status })
@@ -72,7 +72,7 @@ export const CASOS: Caso[] = [
   c('p01', 'festa de aniversário para 40 na asa sul sábado', [completo()],
     { texto: `Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). ${FIM}\n\nEspaços para eventos:\n• Salão Principal (Asa Sul) — 30 a 80 pessoas. Salão climatizado com som. Consumação mínima por pessoa.`, acoes: [registrar()] }),
   c('p02', 'casamento para 100 na asa norte dia 17', [completo({ unidade: 'asa norte', data: 'dia 17', convidados: 100, tipoEvento: 'casamento' })],
-    { contem: ['pedido de casamento para 100 convidados na unidade Asa Norte, sábado (17/10)', '• Salão Jardim (Asa Norte) — 40 a 120 pessoas.'], naoContem: ['Mezanino'], acoes: [registrar({ unitId: AN, data: '2026-10-17', convidados: 100, tipoEvento: 'casamento', tipoTexto: 'casamento' })] }),
+    { contem: ['pedido de casamento para 100 convidados na unidade Asa Norte, sábado (17/10)', '• Salão Jardim (Asa Norte) — 40 a 120 pessoas.'], naoContem: ['Mezanino'], acoes: [registrar({ unitId: AN, data: '2026-10-17', convidados: 100, tipoEvento: 'casamento' })] }),
   c('p03', 'aniversário no salão principal da asa sul sábado, 40 pessoas', [completo({ espaco: 'no salão principal' })],
     { contem: ['sábado (10/10), no espaço Salão Principal.', FIM], naoContem: ['Espaços para eventos'], acoes: [registrar({ spaceId: 'e-as-salao' })] }),
   c('p04', 'pode ser qualquer espaço', [completo({ espaco: '*' })],
@@ -92,9 +92,9 @@ export const CASOS: Caso[] = [
   c('p10', 'formatura para 50 na asa norte dia 17', [completo({ unidade: 'asa norte', data: 'dia 17', convidados: 50, tipoEvento: 'formatura' })],
     { contem: ['pedido de evento para 50 convidados na unidade Asa Norte'], naoContem: ['formatura'], acoes: [registrar({ unitId: AN, data: '2026-10-17', convidados: 50, tipoEvento: 'outro', tipoTexto: 'formatura' })] }),
   c('p11', 'niver de 15 na asa sul sábado', [completo({ convidados: 15, tipoEvento: 'niver' })],
-    { contem: ['pedido de aniversário para 15 convidados', '• Varanda (Asa Sul) — 10 a 30 pessoas.', '• Sala Privativa (Asa Sul) — 8 a 20 pessoas.'], acoes: [registrar({ convidados: 15, tipoTexto: 'niver' })] }),
+    { contem: ['pedido de aniversário para 15 convidados', '• Varanda (Asa Sul) — 10 a 30 pessoas.', '• Sala Privativa (Asa Sul) — 8 a 20 pessoas.'], acoes: [registrar({ convidados: 15 })] }),
   c('p12', 'confraternização da empresa para 60 no lago sul sábado', [completo({ unidade: 'lago sul', convidados: 60, tipoEvento: 'confraternização da empresa' })],
-    { contem: ['pedido de confraternização para 60 convidados na unidade Lago Sul'], naoContem: ['Espaços para eventos'], acoes: [registrar({ unitId: LS, convidados: 60, tipoEvento: 'confraternizacao', tipoTexto: 'confraternização da empresa' })] }),
+    { contem: ['pedido de confraternização para 60 convidados na unidade Lago Sul'], naoContem: ['Espaços para eventos'], acoes: [registrar({ unitId: LS, convidados: 60, tipoEvento: 'confraternizacao' })] }),
   c('p13', 'aniversário para 40 na asa sul dia 19 (segunda, a unidade fecha)', [completo({ data: 'dia 19', espaco: '*' })],
     { contem: ['segunda-feira (19/10)'], acoes: [registrar({ data: '2026-10-19', observacoes: FECHADA })] }),
   c('p14', 'festa para 30 na AC sexta', [completo({ unidade: 'AC', data: 'sexta', convidados: 30 })],

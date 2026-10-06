@@ -38,7 +38,8 @@ export type AcaoS3 =
     data: DataIso
     convidados: number
     tipoEvento: TipoEvento
-    tipoTexto: string
+    /** texto do cliente; só quando `tipoEvento === 'outro'` (minimização) */
+    tipoTexto: string | null
     observacoes: string | null
   }
   /** `texto` é o trecho da resposta; se o banco não cancelar (corrida), o worker o troca por `textoSeFalhar`. */

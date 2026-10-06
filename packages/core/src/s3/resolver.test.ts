@@ -33,7 +33,7 @@ const LINHA_MEZANINO = '• Mezanino (Asa Norte) — 15 a 40 pessoas. Área rese
 const NAO_ACHOU = 'Não encontrei pedido de evento seu em andamento.'
 const registrar = (extra: Record<string, unknown> = {}) => ({
   tipo: 'registrar_evento', unitId: 'u-asa-sul', spaceId: null, data: '2026-10-10', convidados: 40,
-  tipoEvento: 'aniversario', tipoTexto: 'aniversário', observacoes: null, ...extra,
+  tipoEvento: 'aniversario', tipoTexto: null, observacoes: null, ...extra,
 })
 const pedido = (id: string, unitId: string, data: string, status: PedidoAtivoS3['status'] = 'novo'): PedidoAtivoS3 =>
   ({ id, unitId, data, convidados: 40, tipo: 'aniversario', status })
@@ -59,6 +59,13 @@ describe('resolverS3 — pedido completo', () => {
     const r = resolverS3([completo({ convidados: 1, tipoEvento: 'chá de bebê' })], CONTEXTO, [], SEG_14H, [])
     expect(r.texto).toBe(`Recebemos seu pedido de evento para 1 convidado na unidade Asa Sul, sábado (10/10). ${FIM}`)
     expect(r.acoes).toEqual([registrar({ convidados: 1, tipoEvento: 'outro', tipoTexto: 'chá de bebê' })])
+  })
+
+  it('texto do tipo (LGPD: minimização) só vai para o pedido quando o tipo é "outro"', () => {
+    expect(resolverS3([completo({ tipoEvento: 'niver da minha mãe', espaco: '*' })], CONTEXTO, ESPACOS, SEG_14H, []).acoes)
+      .toEqual([registrar({ tipoTexto: null })])
+    expect(resolverS3([completo({ tipoEvento: 'formatura', espaco: '*' })], CONTEXTO, ESPACOS, SEG_14H, []).acoes)
+      .toEqual([registrar({ tipoEvento: 'outro', tipoTexto: 'formatura' })])
   })
 
   it('espaço citado que comporta: registra no espaço', () => {

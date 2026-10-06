@@ -135,7 +135,7 @@ describe('S3 no worker', () => {
     const [p] = await pedidos()
     expect(p).toMatchObject({
       restaurantId, unitId: ids['Asa Sul'], spaceId: null, data: '2026-10-20', convidados: 40, tipo: 'aniversario',
-      tipoTexto: 'aniversário', status: 'novo', nome: 'Maria', simulado: false,
+      tipoTexto: null, status: 'novo', nome: 'Maria', simulado: false, // texto do tipo só quando é "outro" (minimização)
     })
     expect(p!.customerId).toBe((await conversa(conv)).customerId)
     const [run] = await db.select().from(schema.aiRuns)

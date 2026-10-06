@@ -168,7 +168,8 @@ export function resolverItensS3(
     const observacoes = !agenda.ok && agenda.motivo === 'fechada' ? OBSERVACAO_UNIDADE_FECHADA : null
     acoes.push({
       tipo: 'registrar_evento', unitId: u.id, spaceId: espaco?.id ?? null, data, convidados: n,
-      tipoEvento: tipo.tipo, tipoTexto: tipo.texto, observacoes,
+      // minimização (LGPD): o texto do cliente só é guardado quando o tipo não diz o que é (`outro`)
+      tipoEvento: tipo.tipo, tipoTexto: tipo.tipo === 'outro' ? tipo.texto : null, observacoes,
     })
     validos++
     respondidos++
