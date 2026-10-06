@@ -156,7 +156,7 @@ Spec aprovada: [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-
 - [ ] Lotes por página na importação de PDF grande (spec §3.3; adiado na revisão final da Etapa 05): hoje a leitura tem teto de 16 mil tokens de saída e, se cortar (`finish_reason: length`), não repete a chamada paga e pede o cardápio em partes ou CSV
 
 ## Etapa 08 — Gastos, limites e LGPD no painel
-- [ ] Refinamento · Plano detalhado
+- [x] Refinamento · Plano detalhado (06/10/2026) — spec [docs/specs/2026-10-06-etapa-08-gastos-lgpd-design.md](docs/specs/2026-10-06-etapa-08-gastos-lgpd-design.md); plano enxuto [docs/plans/etapa-08-gastos-lgpd.md](docs/plans/etapa-08-gastos-lgpd.md) (7 tarefas, 4 blocos; limite por negócio no painel, simulação com limite próprio, alertas só no painel, convite de equipe)
 - [ ] Telas de limites (IA e WhatsApp), alertas, relatórios de custo; custo de simulação mostrado à parte (ai_runs.simulado)
 - [ ] Direitos do titular (acesso/exclusão), configuração de retenção, cron de retenção; apagar simulações com mais de 7 dias (spec 02 §5.3)
 - [ ] Exclusão por direito do titular e anonimização da retenção limpam `attendance_notices.nome` (nome de perfil do WhatsApp ou digitado no painel) — achado da revisão final da Etapa 03
