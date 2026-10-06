@@ -216,7 +216,7 @@ const visivel = (ctx: Contexto) =>
       and (${ctx.todas}::boolean or c.unidade_contexto_id = any (${`{${ctx.unidades.join(',')}}`}::uuid[]))`
 
 // o painel não tem INSERT em messages nem UPDATE nas colunas de controle: a escrita sai como web_app (padrão do
-// simulador/returnToAi), sempre com a checagem de visibilidade acima; a auditoria volta a authenticated (self_insert).
+// simulador), sempre com a checagem de visibilidade acima; a auditoria volta a authenticated (self_insert).
 const comoApp = (tx: Tx) => tx.execute(sql`set local role web_app`)
 const comoUsuario = (tx: Tx) => tx.execute(sql`set local role authenticated`)
 
