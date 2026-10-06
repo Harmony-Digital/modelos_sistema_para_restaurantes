@@ -6,15 +6,26 @@ export type JsonCallResult<T> =
   | { ok: true; data: T; model: string; usage: LlmUsage; latencyMs: number }
   | { ok: false; error: string; retryable: boolean; status: number | null; model: string | null; usage: LlmUsage | null; latencyMs: number }
 
+/** Parte de uma mensagem do usuário: texto, imagem (data URL) ou PDF (lido pelo motor nativo do modelo). */
+export type ConteudoUsuario =
+  | { type: 'text'; text: string }
+  | { type: 'image'; mime: string; base64: string }
+  | { type: 'pdf'; filename: string; base64: string }
+
 export interface LlmClient {
   completeJson<T>(p: {
     models: string[]
     system: string
+    /** Texto do usuário; com `userParts`, vai como a primeira parte (texto antes dos anexos, como recomenda o OpenRouter). */
     user: string
+    /** Anexos (imagem/PDF) e textos extras, depois de `user`. */
+    userParts?: ConteudoUsuario[]
     schemaName: string
     jsonSchema: Record<string, unknown>
     parse: (raw: unknown) => T
     maxTokens: number
+    /** Sobrepõe o timeout do cliente (leitura de documento é mais lenta que a triagem). */
+    timeoutMs?: number
   }): Promise<JsonCallResult<T>>
 }
 
@@ -89,6 +100,25 @@ function toUsage(u: unknown): LlmUsage | null {
   }
 }
 
+type ParteApi =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+  | { type: 'file'; file: { filename: string; file_data: string } }
+
+function parteApi(p: ConteudoUsuario): ParteApi {
+  if (p.type === 'text') return { type: 'text', text: p.text }
+  if (p.type === 'image') return { type: 'image_url', image_url: { url: `data:${p.mime};base64,${p.base64}` } }
+  return { type: 'file', file: { filename: p.filename, file_data: `data:application/pdf;base64,${p.base64}` } }
+}
+
+/** content do user: string sem anexos; com anexos, o texto primeiro e as partes depois. PDF sempre pelo motor nativo do modelo (nunca OCR de terceiros). */
+function mensagemUsuario(user: string, partes: readonly ConteudoUsuario[] | undefined) {
+  if (!partes?.length) return { content: user as string | ParteApi[], plugins: undefined }
+  const content: ParteApi[] = [...(user ? [{ type: 'text', text: user } as const] : []), ...partes.map(parteApi)]
+  const temPdf = partes.some((p) => p.type === 'pdf')
+  return { content, plugins: temPdf ? [{ id: 'file-parser', pdf: { engine: 'native' } }] : undefined }
+}
+
 export function createOpenRouterClient(cfg: {
   apiKey: string
   appTitle: string
@@ -105,6 +135,7 @@ export function createOpenRouterClient(cfg: {
     async completeJson(p) {
       const started = performance.now()
       const elapsed = () => Math.round(performance.now() - started)
+      const usuario = mensagemUsuario(p.user, p.userParts)
       let res: Response
       try {
         res = await doFetch(endpoint, {
@@ -118,8 +149,9 @@ export function createOpenRouterClient(cfg: {
             models: p.models,
             messages: [
               { role: 'system', content: p.system },
-              { role: 'user', content: p.user },
+              { role: 'user', content: usuario.content },
             ],
+            ...(usuario.plugins ? { plugins: usuario.plugins } : {}),
             response_format: {
               type: 'json_schema',
               json_schema: { name: p.schemaName, strict: true, schema: p.jsonSchema },
@@ -130,7 +162,7 @@ export function createOpenRouterClient(cfg: {
             max_tokens: p.maxTokens,
             stream: false,
           }),
-          signal: AbortSignal.timeout(cfg.timeoutMs ?? 20_000),
+          signal: AbortSignal.timeout(p.timeoutMs ?? cfg.timeoutMs ?? 20_000),
         })
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'erro de rede'
