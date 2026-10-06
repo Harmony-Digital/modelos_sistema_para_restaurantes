@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { reserveBudget, schema } from '@atd/db'
@@ -12,11 +13,12 @@ afterAll(() => sql.end())
 
 const log = createLogger('silent')
 const PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31])
+const SHA_PDF = createHash('sha256').update(PDF).digest('hex')
 const LEITURA = {
   categorias: [{ nome: 'Carnes', itens: [{ nome: 'Picanha', descricao: null, precoCentavos: 8990, tags: [], unidade: null }] }],
 }
 
-async function setup(o: { status?: 'enviado' | 'rascunho'; limiteDia?: string; mime?: string } = {}) {
+async function setup(o: { status?: 'enviado' | 'rascunho'; limiteDia?: string; mime?: string; sha256?: string } = {}) {
   const { restaurantId } = await seedRestaurant(db)
   await db.insert(schema.budgetLimits).values([
     { restaurantId, escopo: 'ia', periodo: 'dia', limiteUsd: o.limiteDia ?? '1' },
@@ -24,17 +26,20 @@ async function setup(o: { status?: 'enviado' | 'rascunho'; limiteDia?: string; m
   ])
   const [d] = await db.insert(schema.knowledgeDocuments).values({
     restaurantId, origem: 'arquivo', status: o.status ?? 'enviado', storagePath: `importacoes/${restaurantId}/menu.pdf`,
-    mime: o.mime ?? 'application/pdf', tamanho: PDF.length, sha256: 'f'.repeat(64),
+    mime: o.mime ?? 'application/pdf', tamanho: PDF.length, sha256: o.sha256 ?? SHA_PDF,
   }).returning()
   return { restaurantId, id: d!.id }
 }
 
-function fakeLlm(resposta: unknown | 'invalida') {
+function fakeLlm(resposta: unknown | 'invalida' | 'truncada') {
   const chamadas: { models: string[]; userParts: unknown; schemaName: string }[] = []
   const llm: LlmClient = {
     async completeJson(p) {
       chamadas.push({ models: p.models, userParts: p.userParts, schemaName: p.schemaName })
       const usage = { tokensIn: 3000, tokensOut: 400, tokensCache: 0, costUsd: '0.004000' }
+      if (resposta === 'truncada') {
+        return { ok: false as const, error: 'saida_truncada', retryable: false, status: 200, model: 'visao/m', usage, latencyMs: 900 }
+      }
       if (resposta === 'invalida') {
         return { ok: false as const, error: 'saida_invalida', retryable: true, status: 200, model: 'visao/m', usage, latencyMs: 900 }
       }
@@ -96,6 +101,37 @@ describe('job document.ingest', () => {
     const runs = await db.select().from(schema.aiRuns)
     expect(runs.map((r) => [r.etapa, r.resultado, r.erro])).toEqual([['ingestao', 'erro', 'saida_invalida'], ['ingestao', 'erro', 'saida_invalida']])
     expect((await contadores(restaurantId)).map((c) => c.gasto)).toEqual(['0.008000', '0.008000'])
+  })
+
+  it('saída cortada (cardápio grande demais): uma chamada só, custo liquidado, pede o cardápio em partes (I3)', async () => {
+    const { restaurantId, id } = await setup()
+    const { llm, chamadas } = fakeLlm('truncada')
+    expect(await ingestDocument(deps(llm), id)).toBe('erro')
+    expect(chamadas).toHaveLength(1)
+    expect(await importacao(id)).toMatchObject({
+      status: 'erro', draft: null, erro: 'Cardápio grande demais para ler de uma vez: envie em partes (PDF menor ou fotos) ou use o CSV.',
+    })
+    expect((await db.select().from(schema.aiRuns)).map((r) => r.erro)).toEqual(['saida_truncada'])
+    expect((await contadores(restaurantId)).map((c) => [c.reservado, c.gasto])).toEqual([['0.000000', '0.004000'], ['0.000000', '0.004000']])
+  })
+
+  it('arquivo sem itens de cardápio: erro "Não encontrei itens…", custo liquidado, nada de rascunho vazio (M2)', async () => {
+    const { restaurantId, id } = await setup()
+    const { llm } = fakeLlm({ categorias: [{ nome: 'Aviso', itens: [] }] })
+    expect(await ingestDocument(deps(llm), id)).toBe('erro')
+    expect(await importacao(id)).toMatchObject({ status: 'erro', draft: null, erro: 'Não encontrei itens de cardápio nesse arquivo.' })
+    const [log] = await db.select().from(schema.auditLog).where(eq(schema.auditLog.entidadeId, id))
+    expect(log!.acao).toBe('cardapio.importacao_erro')
+    expect((await contadores(restaurantId)).map((c) => [c.reservado, c.gasto])).toEqual([['0.000000', '0.004000'], ['0.000000', '0.004000']])
+  })
+
+  it('conteúdo baixado com sha256 diferente do gravado: erro, sem chamar a IA, reserva devolvida (M8)', async () => {
+    const { restaurantId, id } = await setup({ sha256: 'f'.repeat(64) })
+    const { llm, chamadas } = fakeLlm(LEITURA)
+    expect(await ingestDocument(deps(llm), id)).toBe('erro')
+    expect(chamadas).toHaveLength(0)
+    expect((await importacao(id)).erro).toBe('O arquivo no armazenamento não confere com o enviado. Envie de novo.')
+    expect((await contadores(restaurantId)).map((c) => c.reservado)).toEqual(['0.000000', '0.000000'])
   })
 
   it('exceção inesperada na leitura: a importação vai a erro (nunca fica presa em "processando") e a reserva é devolvida', async () => {

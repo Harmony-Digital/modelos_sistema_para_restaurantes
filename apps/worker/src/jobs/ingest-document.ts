@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import {
   concluirIngestao, ERRO_RASCUNHO_INVALIDO, liberarReservasPendentes, marcarProcessando, releaseBudget, reserveBudget, schema, settleBudget, type Db,
@@ -32,6 +33,8 @@ export const ERRO_STORAGE = 'Não consegui abrir o arquivo enviado. Envie de nov
 export const ERRO_INESPERADO = 'Não foi possível ler o arquivo agora. Envie de novo.'
 export const ERRO_DEMOROU = 'A leitura demorou demais. Envie de novo.'
 export const ERRO_TIPO = 'O arquivo enviado não é um PDF nem uma imagem válida. Envie de novo.'
+export const ERRO_CONTEUDO = 'O arquivo no armazenamento não confere com o enviado. Envie de novo.'
+export const ERRO_GRANDE_DEMAIS = 'Cardápio grande demais para ler de uma vez: envie em partes (PDF menor ou fotos) ou use o CSV.'
 
 const fmt = (m: number) => (m / 1_000_000).toFixed(6)
 const micros = (usd: string) => Math.round(Number(usd) * 1_000_000)
@@ -116,12 +119,20 @@ export async function ingestDocument(deps: IngestDeps, importacaoId: string): Pr
       reserva = null
       return await erro(ERRO_TIPO)
     }
+    // o objeto tem o nome do sha256, mas quem tem acesso ao Storage poderia ter gravado outro conteúdo ali antes
+    if (createHash('sha256').update(bytes).digest('hex') !== alvo.sha256) {
+      deps.log.error({ importacaoId }, 'arquivo da importação não confere com o sha256 gravado')
+      await releaseBudget(db, reserva, ref)
+      reserva = null
+      return await erro(ERRO_CONTEUDO)
+    }
     const arquivo = { mime: alvo.mime, base64: Buffer.from(bytes).toString('base64'), filename: resto.at(-1) ?? 'cardapio' }
     const ler = () => lerCardapioPorIa(deps.llm, { models: modelos, arquivo })
     const runs: Run[] = []
     let resultado = await ler()
     runs.push(paraRun(resultado, modelos[0]!))
     gasto += custoMicros(resultado)
+    // saída cortada (saida_truncada) não é repetível: a segunda chamada cobraria de novo e cortaria igual
     if (!resultado.ok && resultado.retryable) {
       resultado = await ler()
       runs.push(paraRun(resultado, modelos[0]!))
@@ -132,18 +143,21 @@ export async function ingestDocument(deps: IngestDeps, importacaoId: string): Pr
 
     const final = resultado
     const reservaFinal = reserva
+    let status: IngestOutcome = 'erro'
     await db.transaction(async (tx) => {
       if (gasto > 0) await settleBudget(tx, reservaFinal, fmt(gasto), ref)
       else await releaseBudget(tx, reservaFinal, ref)
       for (const run of runs) await tx.insert(aiRuns).values({ ...run, restaurantId: alvo.restaurantId })
-      await concluirIngestao(tx, importacaoId, final.ok ? { ok: true, draft: final.data } : { ok: false, erro: ERRO_RASCUNHO_INVALIDO })
+      status = await concluirIngestao(tx, importacaoId, final.ok
+        ? { ok: true, draft: final.data }
+        : { ok: false, erro: final.error === 'saida_truncada' ? ERRO_GRANDE_DEMAIS : ERRO_RASCUNHO_INVALIDO })
       await tx.insert(auditLog).values({
-        restaurantId: alvo.restaurantId, atorTipo: 'ia', acao: final.ok ? 'cardapio.importacao_lida' : 'cardapio.importacao_erro',
+        restaurantId: alvo.restaurantId, atorTipo: 'ia', acao: status === 'rascunho' ? 'cardapio.importacao_lida' : 'cardapio.importacao_erro',
         entidade: 'knowledge_document', entidadeId: importacaoId,
       })
     })
     reserva = null
-    return final.ok ? 'rascunho' : 'erro'
+    return status
   } catch (err) {
     deps.log.error({ err, importacaoId }, 'falha inesperada na importação do cardápio')
     if (reserva) {

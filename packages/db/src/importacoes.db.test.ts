@@ -124,7 +124,7 @@ describe('worker: processamento', () => {
     const id = idDe(await arquivo(c))
     const doCsv = idDe(await csv(c))
     expect(await withRole(db, 'worker_app', (tx) => marcarProcessando(tx, id))).toEqual({
-      storagePath: `importacoes/${c.restaurantId}/menu.pdf`, mime: 'application/pdf', restaurantId: c.restaurantId, retomada: false,
+      storagePath: `importacoes/${c.restaurantId}/menu.pdf`, mime: 'application/pdf', sha256: SHA, restaurantId: c.restaurantId, retomada: false,
     })
     expect(await marcarProcessando(db, id)).toBeNull()
     expect(await marcarProcessando(db, doCsv)).toBeNull()
@@ -163,6 +163,14 @@ describe('worker: processamento', () => {
     expect(await lerImportacao(db, as(c.dono), a)).toMatchObject({ status: 'erro', erro: 'Não consegui ler esse arquivo.', draft: null })
     expect(await lerImportacao(db, as(c.dono), b)).toMatchObject({ status: 'erro', draft: null })
     expect((await lerImportacao(db, as(c.dono), b))!.erro).toMatch(/\S/)
+  })
+
+  it('leitura válida sem nenhum item ⇒ erro "Não encontrei itens de cardápio nesse arquivo." (M2)', async () => {
+    const c = await cenario()
+    const a = idDe(await arquivo(c))
+    await marcarProcessando(db, a)
+    expect(await concluirIngestao(db, a, { ok: true, draft: { categorias: [{ nome: 'Aviso', itens: [] }] } })).toBe('erro')
+    expect(await lerImportacao(db, as(c.dono), a)).toMatchObject({ status: 'erro', draft: null, erro: 'Não encontrei itens de cardápio nesse arquivo.' })
   })
 })
 

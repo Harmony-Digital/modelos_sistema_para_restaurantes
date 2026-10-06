@@ -29,6 +29,8 @@ export type ImportacaoPainel = {
 
 /** Mensagem do painel quando a leitura devolve algo fora do formato do rascunho. */
 export const ERRO_RASCUNHO_INVALIDO = 'Não consegui ler esse arquivo. Tente uma foto mais nítida ou envie um CSV.'
+/** Leitura válida, mas sem nenhum item (documento que não é cardápio): nunca vira rascunho vazio. */
+export const ERRO_SEM_ITENS = 'Não encontrei itens de cardápio nesse arquivo.'
 
 const colunas = {
   id: knowledgeDocuments.id, origem: knowledgeDocuments.origem, status: knowledgeDocuments.status,
@@ -291,7 +293,7 @@ export const PRAZO_PROCESSANDO = '5 minutes'
 export async function marcarProcessando(
   db: Db | Tx,
   id: string,
-): Promise<{ storagePath: string; mime: string; restaurantId: string; retomada: boolean } | null> {
+): Promise<{ storagePath: string; mime: string; sha256: string; restaurantId: string; retomada: boolean } | null> {
   return (db as Db).transaction(async (tx) => {
     const [atual] = await tx
       .select({ status: knowledgeDocuments.status, parado: sql<boolean>`${knowledgeDocuments.updatedAt} < now() - ${PRAZO_PROCESSANDO}::interval` })
@@ -305,27 +307,35 @@ export async function marcarProcessando(
       .update(knowledgeDocuments)
       .set({ status: 'processando' })
       .where(eq(knowledgeDocuments.id, id))
-      .returning({ storagePath: knowledgeDocuments.storagePath, mime: knowledgeDocuments.mime, restaurantId: knowledgeDocuments.restaurantId })
+      .returning({
+        storagePath: knowledgeDocuments.storagePath, mime: knowledgeDocuments.mime, sha256: knowledgeDocuments.sha256,
+        restaurantId: knowledgeDocuments.restaurantId,
+      })
     // origem 'arquivo' sempre tem caminho (check knowledge_documents_storage_ck)
-    return r && r.storagePath !== null ? { storagePath: r.storagePath, mime: r.mime, restaurantId: r.restaurantId, retomada } : null
+    return r && r.storagePath !== null
+      ? { storagePath: r.storagePath, mime: r.mime, sha256: r.sha256, restaurantId: r.restaurantId, retomada }
+      : null
   })
 }
 
 /**
- * Resultado da leitura (só de `processando`): rascunho válido ⇒ `rascunho`; falha ou rascunho fora do schema ⇒
- * `erro` com mensagem amigável (até 300 caracteres; nunca detalhe técnico nem conteúdo do documento).
+ * Resultado da leitura (só de `processando`): rascunho válido com itens ⇒ `rascunho`; falha, rascunho fora do schema
+ * ou sem nenhum item ⇒ `erro` com mensagem amigável (até 300 caracteres; nunca detalhe técnico nem conteúdo do
+ * documento). Devolve o status gravado.
  */
 export async function concluirIngestao(
   db: Db | Tx,
   id: string,
   r: { ok: true; draft: unknown } | { ok: false; erro: string },
-): Promise<void> {
+): Promise<'rascunho' | 'erro'> {
   const d = r.ok ? rascunhoSchema.safeParse(r.draft) : null
-  const set = d?.success
+  const semItens = d?.success === true && d.data.categorias.every((c) => c.itens.length === 0)
+  const set = d?.success && !semItens
     ? { status: 'rascunho' as const, draft: d.data, erro: null }
-    : { status: 'erro' as const, draft: null, erro: (r.ok ? ERRO_RASCUNHO_INVALIDO : r.erro).slice(0, 300) }
+    : { status: 'erro' as const, draft: null, erro: (semItens ? ERRO_SEM_ITENS : r.ok ? ERRO_RASCUNHO_INVALIDO : r.erro).slice(0, 300) }
   await db
     .update(knowledgeDocuments)
     .set(set)
     .where(and(eq(knowledgeDocuments.id, id), eq(knowledgeDocuments.status, 'processando')))
+  return set.status
 }
