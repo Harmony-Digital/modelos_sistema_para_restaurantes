@@ -15,7 +15,7 @@ export const INGESTAO_MAX_TOKENS = 16_000
 export const INGESTAO_TIMEOUT_MS = 120_000
 
 const L = LIMITES_RASCUNHO
-const MIMES_IMAGEM = ['image/png', 'image/jpeg', 'image/webp'] as const
+export const MIMES_IMAGEM_INGESTAO = ['image/png', 'image/jpeg', 'image/webp'] as const
 
 // Saída do modelo: tipos conferidos aqui; tamanhos e limites são ajustados (cortados) antes do rascunhoSchema,
 // para um texto longo não derrubar a importação inteira. Tipo errado continua sendo saída inválida.
@@ -68,14 +68,14 @@ export function parseLeituraCardapio(raw: unknown): RascunhoCardapio {
 }
 
 /** O nome do arquivo vai para o provedor: só caracteres seguros (sem texto que pareça instrução). */
-function nomeSeguro(filename: string, extensao: string): string {
+export function nomeSeguro(filename: string, extensao: string): string {
   const base = filename.replace(/\.[^.]*$/, '').normalize('NFD').replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60)
   return `${base || 'cardapio'}.${extensao}`
 }
 
 function anexo(arquivo: { mime: string; base64: string; filename: string }): ConteudoUsuario | null {
   if (arquivo.mime === 'application/pdf') return { type: 'pdf', filename: nomeSeguro(arquivo.filename, 'pdf'), base64: arquivo.base64 }
-  if ((MIMES_IMAGEM as readonly string[]).includes(arquivo.mime)) return { type: 'image', mime: arquivo.mime, base64: arquivo.base64 }
+  if ((MIMES_IMAGEM_INGESTAO as readonly string[]).includes(arquivo.mime)) return { type: 'image', mime: arquivo.mime, base64: arquivo.base64 }
   return null
 }
 
