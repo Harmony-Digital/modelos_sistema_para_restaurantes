@@ -55,9 +55,9 @@ describe('resolverS3 — pedido completo', () => {
     expect(r.acoes).toEqual([registrar({ convidados: 200 })])
   })
 
-  it('1 convidado no singular; tipo "outro" usa o texto do cliente', () => {
+  it('1 convidado no singular; tipo "outro" aparece como "evento" (o texto do cliente fica só para a equipe)', () => {
     const r = resolverS3([completo({ convidados: 1, tipoEvento: 'chá de bebê' })], CONTEXTO, [], SEG_14H, [])
-    expect(r.texto).toBe(`Recebemos seu pedido de chá de bebê para 1 convidado na unidade Asa Sul, sábado (10/10). ${FIM}`)
+    expect(r.texto).toBe(`Recebemos seu pedido de evento para 1 convidado na unidade Asa Sul, sábado (10/10). ${FIM}`)
     expect(r.acoes).toEqual([registrar({ convidados: 1, tipoEvento: 'outro', tipoTexto: 'chá de bebê' })])
   })
 
@@ -256,6 +256,13 @@ describe('resolverS3 — cancelar', () => {
   it('pedido de data passada não conta', () => {
     const r = resolverS3([can()], CONTEXTO, ESPACOS, SEG_14H, [pedido('p0', 'u-asa-sul', '2026-10-01')])
     expect(r.texto).toBe(NAO_ACHOU)
+  })
+
+  it('tipo extraído pelo LLM nunca é ecoado: "reserva confirmada" vira "evento" e só a equipe vê o texto', () => {
+    const r = resolverS3([completo({ tipoEvento: 'reserva confirmada' })], CONTEXTO, [], SEG_14H, [])
+    expect(r.texto).toMatch(/^Recebemos seu pedido de evento para 40 convidados/)
+    expect(r.texto).not.toMatch(/confirmad|reservad/i)
+    expect(r.acoes).toEqual([registrar({ tipoEvento: 'outro', tipoTexto: 'reserva confirmada' })])
   })
 
   it('outro tipo de evento aparece como "evento" na lista', () => {

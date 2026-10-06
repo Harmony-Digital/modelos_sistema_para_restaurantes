@@ -1,9 +1,9 @@
 import { and, asc, count, eq, gt, gte, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import {
-  agoraLocal, decryptPhone, escolhaDeUnidade, ESPACO_QUALQUER, lerPessoas, MAX_PESSOAS, normalizarTipoEvento, prefilter, redactPii,
+  agoraLocal, decryptPhone, encontrarUnidade, escolhaDeUnidade, ESPACO_QUALQUER, normalizarHorario, normalizeText, lerPessoas, MAX_PESSOAS, normalizarTipoEvento, prefilter, redactPii,
   renderModelo, renderReply, resolverAtendimento, rotuloTipoEvento, SERVICOS, TIPOS_S1, TIPOS_S2, TIPOS_S3,
-  type AcaoS2, type AcaoS3, type InboundItem, type ItemExtraido, type Lacuna, type ListaUnidades, type Localizacao, type ReplyKey,
+  type AcaoS2, type AcaoS3, type InboundItem, type ItemExtraido, type UnidadeS1, type Lacuna, type ListaUnidades, type Localizacao, type ReplyKey,
   type ResultadoAtendimento,
 } from '@atd/core'
 import {
@@ -42,6 +42,9 @@ type Saida =
   | { tipo: 'localizacao'; texto: string; payload: Localizacao }
   | { tipo: 'lista'; texto: string; payload: Pick<ListaUnidades, 'botao' | 'opcoes'> }
 
+/** Pergunta nossa guardada no pendente: cabe a de capacidade com todas as sugestões (nunca cortar a pergunta). */
+const MAX_PERGUNTA_ENVIADA = 2000
+
 const itemSchema = z.object({
   servico: z.enum(SERVICOS),
   tipo: z.enum([...TIPOS_S1, ...TIPOS_S2, ...TIPOS_S3]).nullable(),
@@ -63,7 +66,7 @@ const itemSchema = z.object({
 const pendenteUnidadeSchema = z.object({
   tipo: z.literal('unidade').default('unidade'),
   pergunta: z.string().max(300).default(''),
-  perguntaEnviada: z.string().max(300).default(''),
+  perguntaEnviada: z.string().max(MAX_PERGUNTA_ENVIADA).default(''),
   itens: z.array(itemSchema).min(1).max(5),
   opcoes: z.array(z.string()).min(1).max(10),
   expiraEm: z.iso.datetime(),
@@ -71,7 +74,7 @@ const pendenteUnidadeSchema = z.object({
 const pendentePessoasSchema = z.object({
   tipo: z.literal('pessoas'),
   pergunta: z.string().max(300).default(''),
-  perguntaEnviada: z.string().max(300).default(''),
+  perguntaEnviada: z.string().max(MAX_PERGUNTA_ENVIADA).default(''),
   item: itemSchema,
   unitId: z.string(),
   expiraEm: z.iso.datetime(),
@@ -79,7 +82,7 @@ const pendentePessoasSchema = z.object({
 // coleta guiada do pedido de evento (Etapa 04): `pergunta` é o texto nosso; `item` traz o que o core já validou
 const pendentePedidoEventoSchema = z.object({
   tipo: z.literal('pedido_evento'),
-  pergunta: z.string().max(300),
+  pergunta: z.string().max(MAX_PERGUNTA_ENVIADA),
   campo: z.enum(['unidade', 'data', 'convidados', 'tipo', 'espaco']),
   item: itemSchema,
   unitId: z.string().nullable().default(null),
@@ -275,7 +278,7 @@ const DATA_ISO = /^\d{4}-\d{2}-\d{2}$/
  * tipo normalizado, espaço "*"); nunca texto livre do cliente.
  */
 function conhecidoDe(item: ItemExtraido, unidadeValidada: boolean): Record<string, string | number> {
-  const c: Record<string, string | number> = {}
+  const c: Record<string, string | number> = { servico: item.servico }
   if (unidadeValidada && item.unidade) c.unidade = item.unidade
   if (item.data && DATA_ISO.test(item.data)) c.data = item.data
   if (item.convidados !== null) c.convidados = item.convidados
@@ -283,6 +286,8 @@ function conhecidoDe(item: ItemExtraido, unidadeValidada: boolean): Record<strin
   if (tipo) c.tipo = tipo.tipo === 'outro' ? 'outro' : rotuloTipoEvento(tipo.tipo, null)
   if (item.espaco === ESPACO_QUALQUER) c.espaco = ESPACO_QUALQUER
   if (item.pessoas !== null) c.pessoas = item.pessoas
+  const horario = normalizarHorario(item.horario).hhmm // só HH:mm; texto livre ("à noite") não vai
+  if (horario) c.horario = horario
   return c
 }
 
@@ -296,17 +301,37 @@ function pendenteDaTriagem(p: Pendente | null, now: Date): PendenteTriagem | nul
 }
 
 /**
- * O que o cliente disse e não vai à triagem (espaço citado, tipo "outro" como ele escreveu) volta ao item do mesmo
- * pedido quando a triagem o devolve vazio ou como "outro".
+ * Resposta a um `pedido_evento`: não depende de o modelo repetir o que já sabemos. Cada item de pedido de evento sem
+ * unidade (ou com a mesma unidade, pela busca tolerante) herda do pendente os campos que vieram vazios — inclusive o
+ * que não vai à triagem (espaço citado, tipo "outro" como o cliente escreveu). O que o cliente disse agora vale
+ * (correção explícita). Se todos os itens são desse pedido, a unidade é resolvida pelo id guardado.
  */
-function completarDoPendente(itens: readonly ItemExtraido[], p: Pendente | null): ItemExtraido[] {
-  if (p?.tipo !== 'pedido_evento') return [...itens]
-  const mesmaUnidade = (u: string | null) => !!u && u.toLowerCase() === p.item.unidade?.toLowerCase()
-  return itens.map((i) => {
-    if (i.servico !== 'evento' || (i.tipo !== 'pedido' && i.tipo !== null) || !mesmaUnidade(i.unidade)) return i
-    const tipoVago = !i.tipoEvento || normalizarTipoEvento(i.tipoEvento)?.tipo === 'outro'
-    return { ...i, espaco: i.espaco ?? p.item.espaco, tipoEvento: tipoVago ? (p.item.tipoEvento ?? i.tipoEvento) : i.tipoEvento }
+function completarDoPendente(
+  itens: readonly ItemExtraido[],
+  p: Pendente | null,
+  unidades: readonly UnidadeS1[],
+): { itens: ItemExtraido[]; escolhidaId: string | undefined } {
+  if (p?.tipo !== 'pedido_evento') return { itens: [...itens], escolhidaId: undefined }
+  const unitId = p.unitId ?? encontrarUnidade(p.item.unidade, unidades)?.id ?? null
+  const doPedido = (i: ItemExtraido) =>
+    i.servico === 'evento' && (i.tipo === 'pedido' || i.tipo === null)
+    && (!i.unidade || (unitId !== null && encontrarUnidade(i.unidade, unidades)?.id === unitId))
+  const completos = itens.map((i) => {
+    if (!doPedido(i)) return i
+    // "outro" sozinho é o eco do `conhecido`; o texto original do cliente está no pendente
+    const tipoVago = !i.tipoEvento || normalizeText(i.tipoEvento) === 'outro'
+    return {
+      ...i,
+      tipo: 'pedido' as const,
+      unidade: p.item.unidade,
+      data: i.data ?? p.item.data,
+      convidados: i.convidados ?? p.item.convidados,
+      tipoEvento: tipoVago ? (p.item.tipoEvento ?? i.tipoEvento) : i.tipoEvento,
+      espaco: i.espaco ?? p.item.espaco,
+    }
   })
+  const todos = unitId !== null && itens.length > 0 && itens.every(doPedido)
+  return { itens: completos, escolhidaId: todos ? unitId : undefined }
 }
 
 /** Cliente escolheu a unidade na lista (ou digitou o nome): responde os itens guardados sem chamar o LLM. */
@@ -361,7 +386,7 @@ async function respostaDePessoas(deps: ProcessDeps, ctx: Ctx, pending: Pending[]
 }
 
 /** A pergunta que espera resposta sai por último no texto composto (um parágrafo). */
-const ultimoTrecho = (texto: string | null) => (texto?.split('\n\n').at(-1) ?? '').slice(0, MAX_PERGUNTA)
+const ultimoTrecho = (texto: string | null) => (texto?.split('\n\n').at(-1) ?? '').slice(0, MAX_PERGUNTA_ENVIADA)
 
 function decisaoAtendimento(r: ResultadoAtendimento, now: Date, pergunta: string): Decision {
   const saidas: Saida[] = []
@@ -375,7 +400,7 @@ function decisaoAtendimento(r: ResultadoAtendimento, now: Date, pergunta: string
     ? null
     : r.lista && r.pendente.length
       ? {
-        tipo: 'unidade', pergunta, perguntaEnviada: r.lista.corpo.slice(0, MAX_PERGUNTA), itens: r.pendente,
+        tipo: 'unidade', pergunta, perguntaEnviada: r.lista.corpo.slice(0, MAX_PERGUNTA_ENVIADA), itens: r.pendente,
         opcoes: r.lista.opcoes.map((o) => o.id), expiraEm: expira(PENDENTE_MIN),
       }
       : r.perguntarPessoas
@@ -484,14 +509,16 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, now: Da
     return { replies: ['erro'], autor: 'sistema', novoEstado: 'aguardando_humano', falhas: 'incrementar', audit: 'ia.falha_triagem', runs, budget, pendente: null }
   }
 
-  const itens = completarDoPendente(result.data.itens, contexto ? pendenteAtual : null)
+  const { itens } = result.data
   if (itens.some((i) => i.servico === 'humano' || i.servico === 'lgpd')) {
-    return { replies: ['handoff'], autor: 'ia', novoEstado: 'aguardando_humano', audit: 'conversa.handoff_triagem', runs, budget, pendente: null }
+    // resposta do sistema: com `ia` a entrega a cancelaria (a conversa já está aguardando humano)
+    return { replies: ['handoff'], autor: 'sistema', novoEstado: 'aguardando_humano', audit: 'conversa.handoff_triagem', runs, budget, pendente: null }
   }
   if (itens.length === 0) return { replies: ['foraEscopo'], autor: 'ia', falhas: 'zerar', runs, budget, pendente: null }
   try {
     const { s1, avisos, s3 } = await carregarAtendimento(deps, ctx, now)
-    const r = resolverAtendimento(itens, s1, now, avisos, undefined, s3)
+    const c = completarDoPendente(itens, contexto ? pendenteAtual : null, s1.unidades)
+    const r = resolverAtendimento(c.itens, s1, now, avisos, c.escolhidaId, s3)
     return { ...decisaoAtendimento(r, now, perguntaMascarada(text)), runs, budget }
   } catch (err) {
     await compensate(deps, reservation, spentMicros, ctx.conv.id)

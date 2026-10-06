@@ -1057,7 +1057,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "perguntarEvento": null,
   "perguntarPessoas": null,
   "respondidos": 1,
-  "texto": "Recebemos seu pedido de chá de bebê para 1 convidado na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
+  "texto": "Recebemos seu pedido de evento para 1 convidado na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
   "validos": 1,
 }
 `;
@@ -1085,7 +1085,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "perguntarEvento": null,
   "perguntarPessoas": null,
   "respondidos": 1,
-  "texto": "Recebemos seu pedido de formatura para 50 convidados na unidade Asa Norte, sábado (17/10). Nossa equipe vai entrar em contato para confirmar.
+  "texto": "Recebemos seu pedido de evento para 50 convidados na unidade Asa Norte, sábado (17/10). Nossa equipe vai entrar em contato para confirmar.
 
 Espaços para eventos:
 • Salão Jardim (Asa Norte) — 40 a 120 pessoas.",
@@ -1397,6 +1397,37 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "respondidos": 0,
   "texto": "Consigo registrar pedidos de evento de amanhã até 05/10/2027. Qual data você prefere?",
   "validos": 0,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p21: tipo "reserva confirmada" não é ecoado 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "outro",
+      "tipoTexto": "reserva confirmada",
+      "unitId": "u-asa-sul",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de evento para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.
+
+Espaços para eventos:
+• Salão Principal (Asa Sul) — 30 a 80 pessoas. Salão climatizado com som. Consumação mínima por pessoa.",
+  "validos": 1,
 }
 `;
 

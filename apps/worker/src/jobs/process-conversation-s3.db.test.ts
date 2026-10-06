@@ -171,24 +171,87 @@ describe('S3 no worker', () => {
     await receive(restaurantId, 'dia 20')
     await processConversation(deps(llm, wa), conv)
     expect(calls[1]).toContain('<pergunta_pendente>\nPara qual data é o evento?\n</pergunta_pendente>')
-    expect(calls[1]).toContain('<pedido_em_andamento>\n{"unidade":"Asa Norte"}\n</pedido_em_andamento>')
+    expect(calls[1]).toContain('<pedido_em_andamento>\n{"servico":"evento","unidade":"Asa Norte"}\n</pedido_em_andamento>')
     expect(calls[1]).toContain('<mensagem_cliente>\ndia 20\n</mensagem_cliente>')
     expect(ultimoTexto(wa)).toBe('Para quantos convidados?')
 
     await receive(restaurantId, 'uns 40')
     await processConversation(deps(llm, wa), conv)
     expect(calls[2]).toContain('<pergunta_pendente>\nPara quantos convidados?\n</pergunta_pendente>')
-    expect(calls[2]).toContain('{"unidade":"Asa Norte","data":"2026-10-20"}')
+    expect(calls[2]).toContain('{"servico":"evento","unidade":"Asa Norte","data":"2026-10-20"}')
     expect(ultimoTexto(wa)).toBe('Qual o tipo do evento? (aniversário, casamento, corporativo, confraternização…)')
     expect(await pedidos()).toHaveLength(0)
 
     await receive(restaurantId, 'aniversário')
     await processConversation(deps(llm, wa), conv)
     expect(calls).toHaveLength(4)
-    expect(calls[3]).toContain('{"unidade":"Asa Norte","data":"2026-10-20","convidados":40}')
+    expect(calls[3]).toContain('{"servico":"evento","unidade":"Asa Norte","data":"2026-10-20","convidados":40}')
     expect(ultimoTexto(wa)).toMatch(/^Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Norte, /)
     expect(await pedidos()).toMatchObject([{ unitId: ids['Asa Norte'], data: '2026-10-20', convidados: 40, tipo: 'aniversario', status: 'novo' }])
     expect((await conversa(conv)).pendente).toBeNull()
+  })
+
+  it('coleta com a triagem devolvendo SÓ o campo respondido: o worker completa pelo pendente e resolve a unidade pelo id', async () => {
+    const { restaurantId, ids } = await setup(4)
+    const conv = await receive(restaurantId, 'quero fazer um evento')
+    const { llm, calls } = fakeLlm([
+      triagem(ev()),
+      triagem(ev({ data: 'dia 20' })),
+      triagem(ev({ convidados: 40 })),
+      triagem(ev({ tipoEvento: 'aniversário' })),
+    ])
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    await receive(restaurantId, 'Selecionado', ids['Asa Norte']!)
+    await processConversation(deps(llm, wa), conv)
+    expect(ultimoTexto(wa)).toBe('Para qual data é o evento?')
+    // renomeada no meio: a unidade vem do id guardado, não do nome
+    await db.update(schema.units).set({ nome: 'Plano Piloto' }).where(eq(schema.units.id, ids['Asa Norte']!))
+
+    await receive(restaurantId, 'dia 20')
+    await processConversation(deps(llm, wa), conv)
+    expect(ultimoTexto(wa)).toBe('Para quantos convidados?')
+    expect((await conversa(conv)).pendente).toMatchObject({ campo: 'convidados', unitId: ids['Asa Norte'], item: { data: '2026-10-20' } })
+
+    await receive(restaurantId, 'uns 40')
+    await processConversation(deps(llm, wa), conv)
+    expect(ultimoTexto(wa)).toBe('Qual o tipo do evento? (aniversário, casamento, corporativo, confraternização…)')
+    expect((await conversa(conv)).pendente).toMatchObject({ campo: 'tipo', item: { data: '2026-10-20', convidados: 40 } })
+
+    await receive(restaurantId, 'aniversário')
+    await processConversation(deps(llm, wa), conv)
+    expect(calls).toHaveLength(4)
+    expect(wa.enviados.filter((e) => e.tipo === 'lista')).toHaveLength(1) // a lista não reabre
+    expect(ultimoTexto(wa)).toMatch(/^Recebemos seu pedido de aniversário para 40 convidados na unidade Plano Piloto, /)
+    expect(await pedidos()).toMatchObject([{ unitId: ids['Asa Norte'], data: '2026-10-20', convidados: 40, tipo: 'aniversario' }])
+  })
+
+  it('correção explícita do cliente vale sobre o pendente (tipo e espaço novos)', async () => {
+    const { restaurantId, espaco } = await setup()
+    const conv = await receive(restaurantId, 'aniversário pra 40 na varanda da asa sul dia 20/10')
+    const { llm } = fakeLlm([
+      triagem(ev({ ...COMPLETO, espaco: 'varanda' })),
+      triagem(ev({ tipoEvento: 'casamento', espaco: 'salão' })),
+    ])
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    expect((await conversa(conv)).pendente).toMatchObject({ tipo: 'pedido_evento', campo: 'espaco' })
+    await receive(restaurantId, 'na verdade é casamento, no salão')
+    await processConversation(deps(llm, wa), conv)
+    expect(ultimoTexto(wa)).toMatch(/^Recebemos seu pedido de casamento para 40 convidados na unidade Asa Sul, .*, no espaço Salão\./)
+    expect(await pedidos()).toMatchObject([{ tipo: 'casamento', spaceId: espaco['Salão'], data: '2026-10-20' }])
+  })
+
+  it('pergunta de capacidade longa (muitas sugestões) é guardada inteira no pendente', async () => {
+    const { restaurantId, ids } = await setup()
+    const nomes = Array.from({ length: 12 }, (_, i) => `Espaço com nome comprido número ${i + 1}`)
+    await db.insert(schema.eventSpaces).values(nomes.map((nome) => ({ restaurantId, unitId: ids['Asa Sul']!, nome, capacidadeMin: 30, capacidadeMax: 80 })))
+    const conv = await receive(restaurantId, 'aniversário pra 40 na varanda da asa sul dia 20/10')
+    const wa = fakeWa()
+    await processConversation(deps(fakeLlm([triagem(ev({ ...COMPLETO, espaco: 'varanda' }))]).llm, wa), conv)
+    const texto = ultimoTexto(wa)
+    expect(texto.length).toBeGreaterThan(300)
+    expect((await conversa(conv)).pendente).toMatchObject({ tipo: 'pedido_evento', campo: 'espaco', pergunta: texto })
   })
 
   it('espaço sem capacidade ⇒ sugestões e nada gravado; "pode ser qualquer um" ⇒ registra sem espaço', async () => {
@@ -209,7 +272,7 @@ describe('S3 no worker', () => {
     await receive(restaurantId, 'pode ser qualquer um')
     await processConversation(deps(llm, wa), conv)
     expect(calls[1]).toContain('Qual espaço prefere?')
-    expect(calls[1]).toContain('{"unidade":"Asa Sul","data":"2026-10-20","convidados":40,"tipo":"aniversário"}')
+    expect(calls[1]).toContain('{"servico":"evento","unidade":"Asa Sul","data":"2026-10-20","convidados":40,"tipo":"aniversário"}')
     expect(ultimoTexto(wa)).toMatch(/^Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, .*\. Nossa equipe/)
     expect(ultimoTexto(wa)).not.toContain('Espaços para eventos')
     expect(await pedidos()).toMatchObject([{ spaceId: null, status: 'novo' }])
@@ -227,9 +290,9 @@ describe('S3 no worker', () => {
     expect(ultimoTexto(wa)).toBe('Para qual data é o evento?')
     await receive(restaurantId, 'dia 20')
     await processConversation(deps(llm, wa), conv)
-    expect(calls[1]).toContain('{"unidade":"Asa Sul","convidados":40,"tipo":"outro"}')
+    expect(calls[1]).toContain('{"servico":"evento","unidade":"Asa Sul","convidados":40,"tipo":"outro"}')
     expect(calls[1]).not.toMatch(/formatura|sal[aã]o/i)
-    expect(ultimoTexto(wa)).toMatch(/^Recebemos seu pedido de formatura para 40 convidados na unidade Asa Sul, .*, no espaço Salão\./)
+    expect(ultimoTexto(wa)).toMatch(/^Recebemos seu pedido de evento para 40 convidados na unidade Asa Sul, .*, no espaço Salão\./)
     expect(await pedidos()).toMatchObject([{ tipo: 'outro', tipoTexto: 'formatura', spaceId: espaco['Salão'] }])
   })
 
@@ -348,10 +411,10 @@ describe('S3 no worker', () => {
     expect(calls[1]).not.toContain('<pergunta_pendente>')
   })
 
-  it('pendente de pessoas (S2) também vai à triagem v4 com a pergunta e o que já se sabe', async () => {
+  it('pendente de pessoas (S2) também vai à triagem v4 com a pergunta e o que já se sabe (horário normalizado)', async () => {
     const { restaurantId } = await setup()
-    const conv = await receive(restaurantId, 'vou hoje')
-    const av = ev({ servico: 'aviso_presenca', tipo: 'registrar' })
+    const conv = await receive(restaurantId, 'vou hoje lá pelas 20h')
+    const av = ev({ servico: 'aviso_presenca', tipo: 'registrar', horario: 'lá pelas 20h' })
     const { llm, calls } = fakeLlm([triagem(av), triagem(av)])
     const wa = fakeWa()
     await processConversation(deps(llm, wa), conv)
@@ -359,6 +422,6 @@ describe('S3 no worker', () => {
     await receive(restaurantId, 'eu e a família')
     await processConversation(deps(llm, wa), conv)
     expect(calls[1]).toContain('<pergunta_pendente>\nPara quantas pessoas?\n</pergunta_pendente>')
-    expect(calls[1]).toContain('{"unidade":"Asa Sul","data":"2026-10-05"}')
+    expect(calls[1]).toContain('{"servico":"aviso_presenca","unidade":"Asa Sul","data":"2026-10-05","horario":"20:00"}')
   })
 })

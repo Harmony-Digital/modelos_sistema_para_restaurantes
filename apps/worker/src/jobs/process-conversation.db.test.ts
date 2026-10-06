@@ -200,6 +200,19 @@ describe('processConversation', () => {
     expect((await db.select().from(schema.auditLog)).map((a) => a.acao)).toEqual(['conversa.handoff_pedido'])
   })
 
+  it.each(['humano', 'lgpd'])('triagem pede %s: resposta de handoff entregue (não cancelada) e conversa aguardando humano', async (servico) => {
+    const rid = await setup()
+    const conv = await receive(rid, ['quero resolver um problema com meu pedido de ontem'])
+    const { llm } = fakeLlm([{ itens: [item(servico)], fora_escopo: false }])
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    const handoff = (await outMessages()).find((m) => m.replyKey === 'handoff')
+    expect(handoff).toMatchObject({ autor: 'sistema', statusEnvio: 'enviado' })
+    expect(wa.sent.map((s) => s.text)).toContain(handoff!.texto)
+    const [c] = await db.select().from(schema.conversations)
+    expect(c!.estado).toBe('aguardando_humano')
+  })
+
   it('pedido LGPD de exclusão vira data_subject_request', async () => {
     const rid = await setup()
     const conv = await receive(rid, ['quero apagar meus dados'])

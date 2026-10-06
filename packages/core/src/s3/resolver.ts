@@ -160,7 +160,8 @@ export function resolverItensS3(
     validos++
     respondidos++
     trechos.push(m('evento_registrado', {
-      tipo: rotuloTipoEvento(tipo.tipo, tipo.texto),
+      // nunca repete texto extraído pelo LLM (anti-injeção; "reserva confirmada"): `tipoTexto` fica só para a equipe
+      tipo: rotuloTipoEvento(tipo.tipo, null),
       convidados: textoConvidados(n),
       unidade: u.nome,
       quando: minuscula(rotulo(data)),
