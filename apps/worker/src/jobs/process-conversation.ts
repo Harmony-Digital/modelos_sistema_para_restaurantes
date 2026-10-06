@@ -1,7 +1,7 @@
 import { and, asc, count, eq, gt, gte, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import {
-  agoraLocal, decryptPhone, escolhaDeUnidade, lerPessoas, prefilter, redactPii, renderModelo, renderReply, resolverAtendimento,
+  agoraLocal, decryptPhone, escolhaDeUnidade, lerPessoas, MAX_PESSOAS, prefilter, redactPii, renderModelo, renderReply, resolverAtendimento,
   SERVICOS, TIPOS_S1, TIPOS_S2,
   type AcaoS2, type InboundItem, type Lacuna, type ListaUnidades, type Localizacao, type ReplyKey,
   type ResultadoAtendimento,
@@ -48,7 +48,8 @@ const itemSchema = z.object({
   data: z.string().nullable(),
   tema: z.string().nullable(),
   // avisos de presença (Etapa 03): pendentes antigos não têm os campos
-  pessoas: z.number().int().min(1).max(60).nullable().default(null),
+  // até 1000 como na triagem v3: acima de 60 o core responde o limite (o item precisa sobreviver no pendente de unidade)
+  pessoas: z.number().int().min(1).max(1000).nullable().default(null),
   horario: z.string().max(40).nullable().default(null),
 })
 // pendente antigo (sem `tipo`) é lido como 'unidade'
@@ -63,6 +64,7 @@ const pendentePessoasSchema = z.object({
   tipo: z.literal('pessoas'),
   pergunta: z.string().max(300).default(''),
   item: itemSchema,
+  unitId: z.string(),
   expiraEm: z.iso.datetime(),
 })
 const pendenteSchema = z.union([pendentePessoasSchema, pendenteUnidadeSchema])
@@ -285,7 +287,10 @@ async function respostaDePessoas(deps: ProcessDeps, ctx: Ctx, pending: Pending[]
   const n = lerPessoas(pending[0]!.texto ?? '')
   if (n === null) return null // resposta ambígua: a triagem decide (e substitui o pendente)
   const { s1, avisos } = await carregarAtendimento(deps, ctx, now)
-  const r = resolverAtendimento([{ ...p.item, pessoas: n }], s1, now, avisos)
+  // "somos 80": o core responde o limite (aviso_pessoas_invalido) e não guarda pendente ⇒ sem laço
+  const pessoas = n === 'fora' ? MAX_PESSOAS + 1 : n
+  // unidade pelo id guardado: não reabre a lista nem confunde nomes parecidos
+  const r = resolverAtendimento([{ ...p.item, pessoas }], s1, now, avisos, p.unitId)
   const run: AiRunRow = {
     etapa: 'resposta', modelo: 'deterministico', promptVersion: 's2-pessoas', costUsd: '0', intent: 'resposta_pessoas', resultado: 'ok',
   }
@@ -301,7 +306,7 @@ function decisaoAtendimento(r: ResultadoAtendimento, now: Date, pergunta: string
   const pendente: Pendente | null = r.lista && r.pendente.length
     ? { tipo: 'unidade', pergunta, itens: r.pendente, opcoes: r.lista.opcoes.map((o) => o.id), expiraEm }
     : r.perguntarPessoas
-      ? { tipo: 'pessoas', pergunta, item: r.perguntarPessoas, expiraEm }
+      ? { tipo: 'pessoas', pergunta, item: r.perguntarPessoas.item, unitId: r.perguntarPessoas.unitId, expiraEm }
       : null
   return {
     replies: saidas.length ? [] : ['foraEscopo'],
@@ -440,6 +445,7 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outc
     }
 
     // avisos de presença: na mesma transação da resposta; com humano no controle, nada é gravado (acima)
+    let saidas = d.saidas ?? []
     for (const a of d.avisos ?? []) {
       if (a.tipo === 'registrar') {
         const r = await registrarAviso(tx, {
@@ -450,6 +456,7 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outc
       } else {
         const ok = await cancelarAvisoDoCliente(tx, { restaurantId, customerId: ctx.customer.id, avisoId: a.avisoId })
         if (ok) await tx.insert(auditLog).values({ restaurantId, atorTipo: 'ia', acao: 'aviso.cancelado', entidade: 'attendance_notice', entidadeId: a.avisoId })
+        else saidas = trocarTrecho(saidas, a.texto, a.textoSeFalhar) // a resposta diz o que o banco fez
       }
     }
 
@@ -468,7 +475,7 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outc
       })
     }
 
-    for (const s of d.saidas ?? []) {
+    for (const s of saidas) {
       await tx.insert(messages).values({
         restaurantId,
         conversationId,
@@ -501,7 +508,17 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outc
     if (d.audit) {
       await tx.insert(auditLog).values({ restaurantId, atorTipo: d.autor, acao: d.audit, entidade: 'conversation', entidadeId: conversationId })
     }
-    return d.replies.length + (d.saidas?.length ?? 0) > 0 ? 'replied' : 'nothing'
+    return d.replies.length + saidas.length > 0 ? 'replied' : 'nothing'
+  })
+}
+
+/** Troca um trecho (parágrafo) do texto composto; o substituto aparece uma vez só. */
+function trocarTrecho(saidas: Saida[], de: string, para: string): Saida[] {
+  return saidas.map((s) => {
+    if (s.tipo !== 'texto' || !s.texto.split('\n\n').includes(de)) return s
+    const partes = s.texto.split('\n\n').map((p) => (p === de ? para : p))
+    const texto = partes.filter((p, i) => p !== para || partes.indexOf(para) === i).join('\n\n')
+    return { ...s, texto }
   })
 }
 

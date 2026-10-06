@@ -12,20 +12,36 @@ const POR_EXTENSO: Readonly<Record<string, number>> = {
 const UM = new Set(['um', 'uma'])
 const DUVIDA = /\b(ou|talvez|sei|entre|ate)\b/
 const SOZINHO = /^(?:(?:vou|vai|sou|so|somente|apenas)\s+)*(?:eu|eu mesmo|eu mesma|sozinho|sozinha)(?:\s+mesmo|\s+mesma)?$/
-const ACOMPANHANTE_SINGULAR = new Set(['meu', 'minha', 'o', 'a', 'um', 'uma', 'ele', 'ela'])
+// lista fechada: "eu e a família", "eu e o pessoal", "eu e a galera" não dizem quantos ⇒ null
+const ACOMPANHANTE_SINGULAR = new RegExp(
+  '^(?:(?:meu|minha|o|a|um|uma)\\s+)?(?:esposa|esposo|marido|mulher|namorada|namorado|noiva|noivo|filho|filha|amigo|amiga|'
+  + 'mae|pai|irmao|irma|sogro|sogra|colega|parceiro|parceira|companheiro|companheira|ele|ela)$',
+)
+// número junto de hora ou data ("dia 12", "2 da tarde", "amanhã às 8", "20h", "10/10") não é quantidade de pessoas
+const HORA_OU_DATA = new RegExp(
+  '\\d\\s*h\\b|\\d\\s*hs\\b|\\d\\s*horas?\\b|\\bda (?:tarde|noite|manha|madrugada)\\b|\\b(?:as|dia|amanha|hoje|depois|'
+  + 'segunda|terca|quarta|quinta|sexta|sabado|domingo|feriado|semana|mes)\\b',
+)
+
+/** `'fora'`: número claro fora de 1–60 ("somos 80"): o worker responde o limite sem chamar o modelo. */
+export type LeituraPessoas = number | 'fora' | null
 
 const valor = (token: string): number | null =>
   /^\d{1,3}$/.test(token) ? Number(token) : (POR_EXTENSO[token] ?? (UM.has(token) ? 1 : null))
 
-const noIntervalo = (n: number | null) => (n !== null && Number.isInteger(n) && n >= MIN_PESSOAS && n <= MAX_PESSOAS ? n : null)
+const noIntervalo = (n: number | null): LeituraPessoas => {
+  if (n === null || !Number.isInteger(n) || n < MIN_PESSOAS) return null
+  return n > MAX_PESSOAS ? 'fora' : n
+}
 
 /**
  * Lê a quantidade de pessoas de uma resposta curta ("4", "somos 5", "quatro", "eu e minha esposa").
- * Ambíguo ou fora de 1–60 ⇒ null (nunca chuta).
+ * Ambíguo, zero ou com hora/data no meio ⇒ null (nunca chuta); acima de 60 ⇒ `'fora'`.
  */
-export function lerPessoas(texto: string): number | null {
+export function lerPessoas(texto: string): LeituraPessoas {
+  if (/[/:]/.test(texto)) return null // "10/10", "19:30"
   const t = normalizeText(texto)
-  if (!t || DUVIDA.test(t)) return null
+  if (!t || DUVIDA.test(t) || HORA_OU_DATA.test(t)) return null
   if (SOZINHO.test(t)) return 1
 
   const mais = /\beu e mais (\S+)$/.exec(t)
@@ -45,7 +61,7 @@ export function lerPessoas(texto: string): number | null {
     // "eu e minha esposa", "eu, meu marido e minha filha": 1 + um por acompanhante no singular
     const partes = eu[1]!.split(/\b(?:e|com)\b/).map((p) => p.trim()).filter(Boolean)
     if (partes.length === 0) return null
-    const singulares = partes.every((p) => ACOMPANHANTE_SINGULAR.has(p.split(' ')[0]!))
+    const singulares = partes.every((p) => ACOMPANHANTE_SINGULAR.test(p))
     return singulares ? noIntervalo(1 + partes.length) : null
   }
   if (/^(?:so |somente |apenas )?(?:um|uma)(?: pessoa)?$/.test(t)) return 1

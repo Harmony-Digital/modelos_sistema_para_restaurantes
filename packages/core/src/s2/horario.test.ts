@@ -15,6 +15,11 @@ describe('normalizarHorario', () => {
     ['meio-dia', '12:00'],
     ['1h', '01:00'],
     ['20 horas', '20:00'],
+    ['2 pessoas às 20h', '20:00'],
+    ['2 pessoas por volta das 21', '21:00'],
+    ['3 de nós, 8 da noite', '20:00'],
+    ['4 pessoas 19:30', '19:30'],
+    ['20 hoje', '20:00'],
   ])('%s ⇒ %s', (texto, hhmm) => {
     expect(normalizarHorario(texto)).toEqual({ hhmm, livre: null })
   })

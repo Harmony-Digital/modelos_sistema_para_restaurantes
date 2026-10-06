@@ -19,6 +19,8 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > c
   "acoesS2": [
     {
       "avisoId": "a1",
+      "texto": "Pronto, cancelei seu aviso: Asa Sul, sábado (10/10).",
+      "textoSeFalhar": "Não encontrei nenhum aviso ativo seu.",
       "tipo": "cancelar",
     },
   ],
@@ -55,6 +57,8 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > c
   "acoesS2": [
     {
       "avisoId": "a2",
+      "texto": "Pronto, cancelei seu aviso: Asa Norte, hoje.",
+      "textoSeFalhar": "Não encontrei nenhum aviso ativo seu.",
       "tipo": "cancelar",
     },
   ],
@@ -74,6 +78,8 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > c
   "acoesS2": [
     {
       "avisoId": "a1",
+      "texto": "Pronto, cancelei seu aviso: Asa Sul, sábado (10/10).",
+      "textoSeFalhar": "Não encontrei nenhum aviso ativo seu.",
       "tipo": "cancelar",
     },
   ],
@@ -123,6 +129,8 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > c
   "acoesS2": [
     {
       "avisoId": "a1",
+      "texto": "Pronto, cancelei seu aviso: Asa Sul, sábado (10/10).",
+      "textoSeFalhar": "Não encontrei nenhum aviso ativo seu.",
       "tipo": "cancelar",
     },
   ],
@@ -167,6 +175,8 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > m
   "acoesS2": [
     {
       "avisoId": "a1",
+      "texto": "Pronto, cancelei seu aviso: Asa Sul, sábado (10/10).",
+      "textoSeFalhar": "Não encontrei nenhum aviso ativo seu.",
       "tipo": "cancelar",
     },
     {
@@ -206,13 +216,16 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > m
   ],
   "pendente": [],
   "perguntarPessoas": {
-    "data": "2026-10-10",
-    "horario": null,
-    "pessoas": null,
-    "servico": "aviso_presenca",
-    "tema": null,
-    "tipo": "registrar",
-    "unidade": "Asa Norte",
+    "item": {
+      "data": "2026-10-10",
+      "horario": null,
+      "pessoas": null,
+      "servico": "aviso_presenca",
+      "tema": null,
+      "tipo": "registrar",
+      "unidade": "Asa Norte",
+    },
+    "unitId": "u-asa-norte",
   },
   "respondidos": 1,
   "texto": "A unidade Asa Norte fica em SCLN 302 Bloco B, Asa Norte, Brasília/DF.
@@ -404,13 +417,16 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > m
   "localizacoes": [],
   "pendente": [],
   "perguntarPessoas": {
-    "data": "2026-10-06",
-    "horario": null,
-    "pessoas": null,
-    "servico": "aviso_presenca",
-    "tema": null,
-    "tipo": "registrar",
-    "unidade": "Asa Norte",
+    "item": {
+      "data": "2026-10-06",
+      "horario": null,
+      "pessoas": null,
+      "servico": "aviso_presenca",
+      "tema": null,
+      "tipo": "registrar",
+      "unidade": "Asa Norte",
+    },
+    "unitId": "u-asa-norte",
   },
   "respondidos": 0,
   "texto": "Hoje, a unidade Asa Sul não abre. Quer avisar para outro dia?
@@ -727,13 +743,16 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
   "localizacoes": [],
   "pendente": [],
   "perguntarPessoas": {
-    "data": "2026-10-10",
-    "horario": "20h",
-    "pessoas": null,
-    "servico": "aviso_presenca",
-    "tema": null,
-    "tipo": "registrar",
-    "unidade": "Asa Sul",
+    "item": {
+      "data": "2026-10-10",
+      "horario": "20h",
+      "pessoas": null,
+      "servico": "aviso_presenca",
+      "tema": null,
+      "tipo": "registrar",
+      "unidade": "Asa Sul",
+    },
+    "unitId": "u-asa-sul",
   },
   "respondidos": 0,
   "texto": "Para quantas pessoas?",
@@ -1142,9 +1161,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
   "pendente": [],
   "perguntarPessoas": null,
   "respondidos": 2,
-  "texto": "Anotado: Asa Sul, sábado (10/10), 4 pessoas. Se mudar de ideia, é só me avisar.
-
-Anotado: Asa Sul, sábado (10/10), 6 pessoas. Se mudar de ideia, é só me avisar.",
+  "texto": "Anotado: Asa Sul, sábado (10/10), 6 pessoas. Se mudar de ideia, é só me avisar.",
   "validos": 2,
 }
 `;

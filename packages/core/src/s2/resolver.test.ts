@@ -69,15 +69,15 @@ describe('resolverS2 — registrar', () => {
     const r = resolverS2([reg({ unidade: 'asa sul', data: 'sábado', horario: '20h' })], CONTEXTO, SEG_14H, [])
     expect(r.texto).toBe('Para quantas pessoas?')
     expect(r.acoes).toEqual([])
-    expect(r.perguntarPessoas).toEqual(reg({ unidade: 'Asa Sul', data: '2026-10-10', horario: '20h' }))
+    expect(r.perguntarPessoas).toEqual({ item: reg({ unidade: 'Asa Sul', data: '2026-10-10', horario: '20h' }), unitId: 'u-asa-sul' })
     expect([r.validos, r.respondidos]).toEqual([0, 0])
     // a resposta curta reaproveita o item guardado
-    const depois = resolverS2([{ ...r.perguntarPessoas!, pessoas: 4 }], CONTEXTO, SEG_14H, [])
+    const depois = resolverS2([{ ...r.perguntarPessoas!.item, pessoas: 4 }], CONTEXTO, SEG_14H, [], r.perguntarPessoas!.unitId)
     expect(depois.texto).toBe(ANOTADO_AS_SAB)
   })
 
   it('pessoas fora de 1–60', () => {
-    for (const pessoas of [0, 61, 2.5]) {
+    for (const pessoas of [0, 61, 80, 1000, 2.5]) {
       const r = resolverS2([reg({ unidade: 'asa norte', pessoas })], CONTEXTO, SEG_14H, [])
       expect(r.texto).toBe('Consigo anotar avisos de 1 a 60 pessoas. Para grupos maiores, fale com a nossa equipe.')
       expect(r.acoes).toEqual([])
@@ -178,6 +178,10 @@ describe('resolverS2 — registrar', () => {
   })
 })
 
+const CANC_A1 = 'Pronto, cancelei seu aviso: Asa Sul, sábado (10/10).'
+const cancelada = (avisoId: string, texto: string) =>
+  ({ tipo: 'cancelar', avisoId, texto, textoSeFalhar: 'Não encontrei nenhum aviso ativo seu.' })
+
 describe('resolverS2 — cancelar', () => {
   const sab: AvisoAtivoS2 = { id: 'a1', unitId: 'u-asa-sul', data: '2026-10-10', pessoas: 4, horarioAprox: '20:00' }
   const hoje: AvisoAtivoS2 = { id: 'a2', unitId: 'u-asa-norte', data: '2026-10-05', pessoas: 2, horarioAprox: null }
@@ -193,7 +197,7 @@ describe('resolverS2 — cancelar', () => {
   it('um aviso e sem unidade/data: cancela esse', () => {
     const r = resolverS2([can()], CONTEXTO, SEG_14H, [sab])
     expect(r.texto).toBe('Pronto, cancelei seu aviso: Asa Sul, sábado (10/10).')
-    expect(r.acoes).toEqual([{ tipo: 'cancelar', avisoId: 'a1' }])
+    expect(r.acoes).toEqual([cancelada('a1', CANC_A1)])
     expect([r.validos, r.respondidos]).toEqual([1, 1])
   })
 
@@ -205,9 +209,9 @@ describe('resolverS2 — cancelar', () => {
   })
 
   it('vários: escolhe pela unidade ou pela data', () => {
-    expect(resolverS2([can({ unidade: 'asa norte' })], CONTEXTO, SEG_14H, [sab, hoje]).acoes).toEqual([{ tipo: 'cancelar', avisoId: 'a2' }])
+    expect(resolverS2([can({ unidade: 'asa norte' })], CONTEXTO, SEG_14H, [sab, hoje]).acoes).toEqual([cancelada('a2', 'Pronto, cancelei seu aviso: Asa Norte, hoje.')])
     const r = resolverS2([can({ data: 'sábado' })], CONTEXTO, SEG_14H, [sab, hoje])
-    expect(r.acoes).toEqual([{ tipo: 'cancelar', avisoId: 'a1' }])
+    expect(r.acoes).toEqual([cancelada('a1', CANC_A1)])
     expect(r.texto).toBe('Pronto, cancelei seu aviso: Asa Sul, sábado (10/10).')
   })
 
@@ -219,7 +223,7 @@ describe('resolverS2 — cancelar', () => {
 
   it('não cancela o mesmo aviso duas vezes', () => {
     const r = resolverS2([can(), can()], CONTEXTO, SEG_14H, [sab])
-    expect(r.acoes).toEqual([{ tipo: 'cancelar', avisoId: 'a1' }])
+    expect(r.acoes).toEqual([cancelada('a1', CANC_A1)])
   })
 })
 

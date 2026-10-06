@@ -52,6 +52,9 @@ const PESSOAS = 'Para quantas pessoas?'
 const PESSOAS_INVALIDO = 'Consigo anotar avisos de 1 a 60 pessoas. Para grupos maiores, fale com a nossa equipe.'
 const DATA_NAO = 'Não entendi para qual dia é a pergunta. Pode dizer o dia da semana ou a data (ex.: sábado ou 12/10)?'
 const NAO_ACHOU = 'Não encontrei nenhum aviso ativo seu.'
+const CANC_A1 = 'Pronto, cancelei seu aviso: Asa Sul, sábado (10/10).'
+const CANC_A2 = 'Pronto, cancelei seu aviso: Asa Norte, hoje.'
+const cancelada = (avisoId: string, texto: string): AcaoS2 => ({ tipo: 'cancelar', avisoId, texto, textoSeFalhar: NAO_ACHOU })
 const LACUNA = 'Ainda não tenho essa informação; vou verificar com a equipe.'
 const AS_SABADO = 'Sábado (10/10), a unidade Asa Sul abre das 11h30 às 15h e das 18h às 2h.'
 const QUAL_SAB_HOJE = 'Você tem estes avisos:\n• Asa Norte — hoje, 2 pessoas\n• Asa Sul — sábado (10/10), 4 pessoas\nQual deseja cancelar? Diga a unidade e o dia.'
@@ -127,8 +130,8 @@ export const CASOS: Caso[] = [
   c('r51', 'domingo também vou na asa sul, em 3', SEG_14H, [reg({ unidade: 'asa sul', data: 'domingo', pessoas: 3 })],
     { texto: `Anotado: Asa Sul, domingo (11/10), 3 pessoas. ${FIM}`, acoes: [registrar(AS, '2026-10-11', 3)] }, { avisos: [SAB_AS] }),
   c('r52', 'sábado na asa sul, em 4; digo, em 6', SEG_14H, [reg({ unidade: 'asa sul', data: 'sábado', pessoas: 4 }), reg({ unidade: 'asa sul', data: 'sábado', pessoas: 6 })],
-    // só a última vale na ação; o texto ainda cita as duas (comportamento atual do core, registrado no relatório)
-    { texto: `Anotado: Asa Sul, sábado (10/10), 4 pessoas. ${FIM}\n\nAnotado: Asa Sul, sábado (10/10), 6 pessoas. ${FIM}`, acoes: [registrar(AS, '2026-10-10', 6)] }),
+    // só a última vale: a ação e o texto citam apenas o que será gravado
+    { texto: `Anotado: Asa Sul, sábado (10/10), 6 pessoas. ${FIM}`, acoes: [registrar(AS, '2026-10-10', 6)] }),
   c('r53', 'hoje na asa norte em 4 e domingo na asa sul em 2', SEG_14H,
     [reg({ unidade: 'asa norte', data: 'hoje', pessoas: 4 }), reg({ unidade: 'asa sul', data: 'domingo', pessoas: 2 })],
     { texto: `Anotado: Asa Norte, hoje, 4 pessoas. ${FIM}\n\nAnotado: Asa Sul, domingo (11/10), 2 pessoas. ${FIM}`, acoes: [registrar(AN, '2026-10-05', 4), registrar(AS, '2026-10-11', 2)] }),
@@ -141,17 +144,17 @@ export const CASOS: Caso[] = [
   // ---- cancelar
   c('c01', 'não vou mais, pode cancelar', SEG_14H, [can()], { texto: NAO_ACHOU }),
   c('c02', 'cancela meu aviso', SEG_14H, [can()],
-    { texto: 'Pronto, cancelei seu aviso: Asa Sul, sábado (10/10).', acoes: [{ tipo: 'cancelar', avisoId: 'a1' }] }, { avisos: [SAB_AS] }),
+    { texto: 'Pronto, cancelei seu aviso: Asa Sul, sábado (10/10).', acoes: [cancelada('a1', CANC_A1)] }, { avisos: [SAB_AS] }),
   c('c03', 'quero cancelar', SEG_14H, [can()], { texto: QUAL_SAB_HOJE }, { avisos: [SAB_AS, HOJE_AN] }),
   c('c04', 'cancela o da asa norte', SEG_14H, [can({ unidade: 'asa norte' })],
-    { texto: 'Pronto, cancelei seu aviso: Asa Norte, hoje.', acoes: [{ tipo: 'cancelar', avisoId: 'a2' }] }, { avisos: [SAB_AS, HOJE_AN] }),
+    { texto: 'Pronto, cancelei seu aviso: Asa Norte, hoje.', acoes: [cancelada('a2', CANC_A2)] }, { avisos: [SAB_AS, HOJE_AN] }),
   c('c05', 'cancela o de sábado', SEG_14H, [can({ data: 'sábado' })],
-    { texto: 'Pronto, cancelei seu aviso: Asa Sul, sábado (10/10).', acoes: [{ tipo: 'cancelar', avisoId: 'a1' }] }, { avisos: [SAB_AS, HOJE_AN] }),
+    { texto: 'Pronto, cancelei seu aviso: Asa Sul, sábado (10/10).', acoes: [cancelada('a1', CANC_A1)] }, { avisos: [SAB_AS, HOJE_AN] }),
   c('c06', 'cancela meu aviso (só há aviso de ontem)', SEG_14H, [can()], { texto: NAO_ACHOU }, { avisos: [PASSADO] }),
   c('c07', 'cancela o do lago sul', SEG_14H, [can({ unidade: 'lago sul' })],
     { texto: 'Você tem estes avisos:\n• Asa Sul — sábado (10/10), 4 pessoas\nQual deseja cancelar? Diga a unidade e o dia.' }, { avisos: [SAB_AS] }),
   c('c08', 'cancela, cancela!', SEG_14H, [can(), can()],
-    { texto: 'Pronto, cancelei seu aviso: Asa Sul, sábado (10/10).', acoes: [{ tipo: 'cancelar', avisoId: 'a1' }] }, { avisos: [SAB_AS] }),
+    { texto: 'Pronto, cancelei seu aviso: Asa Sul, sábado (10/10).', acoes: [cancelada('a1', CANC_A1)] }, { avisos: [SAB_AS] }),
 
   // ---- misturas com S1 e outros serviços
   c('m01', 'abre sábado na asa sul? vou com 4 às 20h', SEG_14H,
@@ -159,7 +162,7 @@ export const CASOS: Caso[] = [
     { texto: `${AS_SABADO}\n\nAnotado: Asa Sul, sábado (10/10), 4 pessoas, por volta das 20h. ${FIM}`, acoes: [registrar(AS, '2026-10-10', 4, '20:00')] }),
   c('m02', 'cancela o de sábado e vou domingo na asa sul em 3', SEG_14H, [can({ data: 'sábado' }), reg({ unidade: 'asa sul', data: 'domingo', pessoas: 3 })],
     { texto: `Pronto, cancelei seu aviso: Asa Sul, sábado (10/10).\n\nAnotado: Asa Sul, domingo (11/10), 3 pessoas. ${FIM}`,
-      acoes: [{ tipo: 'cancelar', avisoId: 'a1' }, registrar(AS, '2026-10-11', 3)] }, { avisos: [SAB_AS] }),
+      acoes: [cancelada('a1', CANC_A1), registrar(AS, '2026-10-11', 3)] }, { avisos: [SAB_AS] }),
   c('m03', 'qual o endereço da asa norte? vou sábado lá', SEG_14H, [h('endereco', 'asa norte'), reg({ unidade: 'asa norte', data: 'sábado' })],
     { contem: ['A unidade Asa Norte fica em SCLN 302 Bloco B, Asa Norte, Brasília/DF.'], pergunta: true }),
   c('m04', 'que horas abre sábado? vou lá com 4', SEG_14H, [h('horario_dia', null, 'sábado'), reg({ data: 'sábado', pessoas: 4 })], { texto: null, lista: true }),

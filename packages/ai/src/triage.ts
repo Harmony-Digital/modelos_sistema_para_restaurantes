@@ -76,7 +76,8 @@ const itemV3Schema = z.object({
   unidade: cortar(120),
   data: cortar(60),
   tema: cortar(120),
-  pessoas: z.number().int().min(1).max(60).nullable(),
+  // acima de 60 passa: o core responde o limite (aviso_pessoas_invalido) em vez de virar saída inválida
+  pessoas: z.number().int().min(1).max(1000).nullable(),
   horario: cortar(40),
 })
 const triageV3Schema = z.object({

@@ -10,7 +10,7 @@ import { agoraLocal, somarDias, type DataIso } from '../s1/tempo.ts'
 import type { ContextoS1, ItemExtraido, UnidadeS1 } from '../s1/tipos.ts'
 import { normalizarHorario } from './horario.ts'
 import { MAX_PESSOAS, MIN_PESSOAS } from './pessoas.ts'
-import type { AcaoS2, AvisoAtivoS2, ResultadoS2 } from './tipos.ts'
+import type { AcaoS2, AvisoAtivoS2, PerguntaPessoas, ResultadoS2 } from './tipos.ts'
 
 /** Avisos só de hoje até hoje + 30 dias (fuso do restaurante). */
 export const DIAS_AVISO = 30
@@ -74,7 +74,8 @@ export function resolverItensS2(
   const acoes: AcaoS2[] = []
   const pendenteUnidade: ItemExtraido[] = []
   const cancelados = new Set<string>()
-  let perguntarPessoas: ItemExtraido | null = null
+  let perguntarPessoas: PerguntaPessoas | null = null
+  const trechoDaAcao = new Map<AcaoS2, number>() // registrar repetido na mesma mensagem troca o trecho junto com a ação
   let validos = 0
   let respondidos = 0
 
@@ -127,20 +128,30 @@ export function resolverItensS2(
     }
     if (n === null) {
       // guarda com unidade e data resolvidas: a resposta curta ("4") reaproveita o item; conta quando responder
-      perguntarPessoas ??= { ...item, unidade: u.nome, data }
+      // o id da unidade vai junto: a resposta curta não depende de achar a unidade pelo nome de novo
+      perguntarPessoas ??= { item: { ...item, unidade: u.nome, data }, unitId: u.id }
       return
     }
     const anterior = acoes.findIndex((a) => a.tipo === 'registrar' && a.unitId === u.id && a.data === data)
     const atualiza = avisos.some((a) => a.unitId === u.id && a.data === data)
     const acao: AcaoS2 = { tipo: 'registrar', unitId: u.id, data, pessoas: n, horarioAprox: h.hhmm ?? h.livre, atualiza }
-    if (anterior >= 0) acoes[anterior] = acao
-    else acoes.push(acao)
     validos++
     respondidos++
     const horario = h.hhmm ? `, por volta ${dasHora(h.hhmm)}` : h.livre ? `, ${h.livre}` : ''
-    trechos.push(m(atualiza ? 'aviso_atualizado' : 'aviso_registrado', {
+    const trecho = m(atualiza ? 'aviso_atualizado' : 'aviso_registrado', {
       unidade: u.nome, quando: minuscula(rotulo(data)), pessoas: textoPessoas(n), horario,
-    }))
+    })
+    if (anterior >= 0) {
+      // "em 4; digo, em 6": só o que será gravado aparece na resposta
+      const i = trechoDaAcao.get(acoes[anterior]!)!
+      trechoDaAcao.delete(acoes[anterior]!)
+      acoes[anterior] = acao
+      trechos[i] = trecho
+      trechoDaAcao.set(acao, i)
+    } else {
+      acoes.push(acao)
+      trechoDaAcao.set(acao, trechos.push(trecho) - 1)
+    }
   }
 
   function cancelar(item: ItemExtraido): void {
@@ -157,10 +168,11 @@ export function resolverItensS2(
       const a = candidatos[0]!
       if (cancelados.has(a.id)) return // repetido na mesma mensagem
       cancelados.add(a.id)
-      acoes.push({ tipo: 'cancelar', avisoId: a.id })
+      const texto = m('aviso_cancelado', { unidade: nomeDe(a.unitId), quando: minuscula(rotulo(a.data)) })
+      acoes.push({ tipo: 'cancelar', avisoId: a.id, texto, textoSeFalhar: m('aviso_nao_encontrado') })
       validos++
       respondidos++
-      trechos.push(m('aviso_cancelado', { unidade: nomeDe(a.unitId), quando: minuscula(rotulo(a.data)) }))
+      trechos.push(texto)
       return
     }
     validos++

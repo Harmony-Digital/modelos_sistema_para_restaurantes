@@ -24,6 +24,9 @@ describe('lerPessoas', () => {
     ['60', 60],
     ['1', 1],
     ['uns 4', 4],
+    ['eu, meu marido e minha filha', 3],
+    ['eu e meu irmão', 2],
+    ['eu e ela', 2],
   ])('%s ⇒ %s', (texto, esperado) => {
     expect(lerPessoas(texto)).toBe(esperado)
   })
@@ -36,13 +39,30 @@ describe('lerPessoas', () => {
     'talvez 3',
     'eu e meus filhos',
     '0',
-    '61',
-    '100',
+    'eu e a família',
+    'eu e minha família',
+    'eu e o pessoal',
+    'eu e a galera',
+    'eu e a turma',
+    'dia 12',
+    '2 da tarde',
+    'amanhã às 8',
+    'às 20',
+    '20h',
+    '8 hs',
+    'sábado 4',
+    'hoje 3',
+    '10/10',
+    '19:30',
     '',
     'oi',
     'vou sim',
     '4 adultos e 2 crianças',
   ])('ambíguo ou inválido: %s ⇒ null', (texto) => {
     expect(lerPessoas(texto)).toBeNull()
+  })
+
+  it.each(['61', '100', 'somos 80', 'eu e mais 70'])('número claro acima de 60: %s ⇒ fora', (texto) => {
+    expect(lerPessoas(texto)).toBe('fora')
   })
 })

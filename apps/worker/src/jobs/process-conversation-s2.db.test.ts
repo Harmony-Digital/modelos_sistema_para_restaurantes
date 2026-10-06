@@ -162,6 +162,59 @@ describe('S2 no worker', () => {
     })
   })
 
+  it('"somos 80" ao "Para quantas pessoas?": responde o limite sem LLM e não guarda pendente', async () => {
+    const { restaurantId } = await setup()
+    const conv = await receive(restaurantId, 'vou hoje')
+    const { llm, calls } = fakeLlm([triagem(av())])
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    await receive(restaurantId, 'somos 80')
+    await processConversation(deps(llm, wa), conv)
+    expect(calls).toHaveLength(1)
+    expect(ultimoTexto(wa)).toBe('Consigo anotar avisos de 1 a 60 pessoas. Para grupos maiores, fale com a nossa equipe.')
+    expect(await avisos()).toHaveLength(0)
+    expect((await conversa(conv)).pendente).toBeNull()
+  })
+
+  it('triagem com 80 pessoas: responde o limite (não vira saída inválida nem handoff)', async () => {
+    const { restaurantId } = await setup()
+    const conv = await receive(restaurantId, 'vamos em 80 hoje')
+    const { llm, calls } = fakeLlm([triagem(av({ pessoas: 80 }))])
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    expect(calls).toHaveLength(1)
+    expect(ultimoTexto(wa)).toBe('Consigo anotar avisos de 1 a 60 pessoas. Para grupos maiores, fale com a nossa equipe.')
+    expect((await conversa(conv)).estado).toBe('ia')
+    expect(await avisos()).toHaveLength(0)
+  })
+
+  it.each(['eu e a família', 'dia 12', '2 da tarde'])('"%s" ao "Para quantas pessoas?" vai à triagem, sem gravar número', async (resposta) => {
+    const { restaurantId } = await setup()
+    const conv = await receive(restaurantId, 'vou hoje')
+    const { llm, calls } = fakeLlm([triagem(av()), triagem(av())])
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    await receive(restaurantId, resposta)
+    await processConversation(deps(llm, wa), conv)
+    expect(calls).toHaveLength(2)
+    expect(await avisos()).toHaveLength(0)
+  })
+
+  it('resposta de pessoas usa o id da unidade guardado (unidade renomeada no meio não reabre a lista)', async () => {
+    const { restaurantId, ids } = await setup(4)
+    const conv = await receive(restaurantId, 'vou na asa norte hoje')
+    const { llm, calls } = fakeLlm([triagem(av({ unidade: 'asa norte' }))])
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    expect((await conversa(conv)).pendente).toMatchObject({ tipo: 'pessoas', unitId: ids['Asa Norte'] })
+    await db.update(schema.units).set({ nome: 'Plano Piloto' }).where(eq(schema.units.id, ids['Asa Norte']!))
+    await receive(restaurantId, '4')
+    await processConversation(deps(llm, wa), conv)
+    expect(calls).toHaveLength(1)
+    expect(ultimoTexto(wa)).toMatch(/^Anotado: Plano Piloto, hoje, 4 pessoas\./)
+    expect(await ativos()).toMatchObject([{ unitId: ids['Asa Norte'], pessoas: 4 }])
+  })
+
   it('"uns 4 ou 5" não é resposta curta: chama a triagem e não registra lixo', async () => {
     const { restaurantId } = await setup()
     const conv = await receive(restaurantId, 'vou hoje')
@@ -276,6 +329,8 @@ describe('S2 no worker', () => {
     await receive(restaurantId, 'cancela o aviso', null, 'bia')
     await processConversation(deps(fakeLlm([triagem(cancelar())]).llm, wa), convB)
     expect(await ativos()).toMatchObject([{ id: avisoA!.id, status: 'ativo' }])
+    // a resposta reflete o que o banco fez: nada foi cancelado
+    expect(ultimoTexto(wa)).toBe('Não encontrei nenhum aviso ativo seu.')
     expect((await acoesAudit()).map((a) => a.acao)).toEqual(['aviso.registrado'])
   })
 

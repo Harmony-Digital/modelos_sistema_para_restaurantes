@@ -62,7 +62,7 @@ describe('resolverAtendimento', () => {
       CONTEXTO, SEG_14H, [],
     )
     expect(r.texto).toBe(`${AS_SABADO}\n\nPara quantas pessoas?`)
-    expect(r.perguntarPessoas).toMatchObject({ unidade: 'Asa Sul', data: '2026-10-10' })
+    expect(r.perguntarPessoas).toMatchObject({ item: { unidade: 'Asa Sul', data: '2026-10-10' }, unitId: 'u-asa-sul' })
     expect(r.acoesS2).toEqual([])
   })
 

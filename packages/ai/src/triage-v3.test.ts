@@ -48,9 +48,9 @@ describe('parseTriageV3', () => {
     const cancelar = { servico: 'aviso_presenca', tipo: 'cancelar', ...base }
     expect(parseTriageV3({ itens: [aviso, cancelar, s1], fora_escopo: false }).itens).toEqual([aviso, cancelar, s1])
   })
-  it('pessoas: inteiro de 1 a 60 ou null', () => {
-    for (const pessoas of [1, 60, null]) expect(() => parseTriageV3({ itens: [{ ...aviso, pessoas }], fora_escopo: false })).not.toThrow()
-    for (const pessoas of [0, 61, -1, 2.5, '4']) expect(() => parseTriageV3({ itens: [{ ...aviso, pessoas }], fora_escopo: false })).toThrow()
+  it('pessoas: inteiro de 1 a 1000 ou null (acima de 60 o core responde o limite)', () => {
+    for (const pessoas of [1, 60, 61, 80, 1000, null]) expect(() => parseTriageV3({ itens: [{ ...aviso, pessoas }], fora_escopo: false })).not.toThrow()
+    for (const pessoas of [0, 1001, -1, 2.5, '4']) expect(() => parseTriageV3({ itens: [{ ...aviso, pessoas }], fora_escopo: false })).toThrow()
   })
   it('horario: corta em 40 caracteres; limita a 5 itens', () => {
     const r = parseTriageV3({ itens: Array.from({ length: 7 }, () => ({ ...aviso, horario: 'x'.repeat(100) })), fora_escopo: false })
