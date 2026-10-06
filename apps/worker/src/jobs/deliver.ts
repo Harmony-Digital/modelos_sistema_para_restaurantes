@@ -78,6 +78,32 @@ export async function deliver(deps: DeliverDeps, conversationId: string): Promis
   }
 }
 
+/**
+ * Job `conversation.deliver` (resposta do atendente). Falha temporária lança para o pg-boss tentar de novo; na última
+ * tentativa, as respostas humanas ainda pendentes viram `falhou:temporaria` (o painel mostra "Não enviada" e oferece
+ * "Tentar de novo") em vez de ficarem "Enviando…" para sempre na DLQ.
+ */
+export async function entregarRespostaHumana(
+  deps: DeliverDeps,
+  conversationId: string,
+  opts: { ultimaTentativa: boolean },
+): Promise<'entregue' | 'desistiu'> {
+  try {
+    await deliver(deps, conversationId)
+    return 'entregue'
+  } catch (err) {
+    if (!opts.ultimaTentativa) throw err
+    const marcadas = await deps.db.update(messages).set({ statusEnvio: 'falhou:temporaria' })
+      .where(and(
+        eq(messages.conversationId, conversationId), eq(messages.direcao, 'out'), eq(messages.autor, 'humano'),
+        eq(messages.statusEnvio, 'pendente'),
+      ))
+      .returning({ id: messages.id })
+    deps.log.warn({ conversationId, mensagens: marcadas.length }, 'entrega esgotou as tentativas; respostas humanas marcadas como falha')
+    return 'desistiu'
+  }
+}
+
 async function entregarUma(deps: DeliverDeps, tx: Tx, conversationId: string, to: string | null, m: Pendente) {
   const marcar = (statusEnvio: string) => tx.update(messages).set({ statusEnvio }).where(eq(messages.id, m.id))
   // I5: com humano no controle, respostas da IA ainda pendentes são canceladas; as do sistema e do atendente seguem

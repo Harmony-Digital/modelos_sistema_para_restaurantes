@@ -6,7 +6,7 @@ import { abrirSimulacao, encerrarConversa, ingestInbound, schema, type Enqueue }
 import { getTestDb, resetDb, seedRestaurant, seedStaff } from '@atd/db/test-utils'
 import type { SendResult } from '@atd/whatsapp'
 import { createLogger } from '../logger.ts'
-import { deliver, type DeliverDeps } from './deliver.ts'
+import { deliver, entregarRespostaHumana, type DeliverDeps } from './deliver.ts'
 import { comMidiaProibida, storageProibido } from './midia-fake.ts'
 
 const { db, sql } = getTestDb()
@@ -83,6 +83,27 @@ describe('deliver: resposta humana', () => {
     const wa = fakeWa(() => ({ ok: false, retryable: true, code: 130429, message: 'rate' }))
     await expect(deliver(deps(wa), c.conversationId)).rejects.toThrow(/temporária/)
     expect((await saidas(c.conversationId))[0]!.statusEnvio).toBe('pendente')
+  })
+
+  it('falha temporária na última tentativa do job ⇒ humanas pendentes viram falhou:temporaria (sem lançar)', async () => {
+    const c = await conversaReal()
+    await pendente({ ...c, autor: 'sistema', texto: 'Vou passar você para alguém da nossa equipe.' })
+    await pendente({ ...c, autor: 'humano', texto: 'Oi!' })
+    await pendente({ ...c, autor: 'humano', texto: 'Tudo bem?' })
+    const wa = fakeWa(() => ({ ok: false, retryable: true, code: 130429, message: 'rate' }))
+    await expect(entregarRespostaHumana(deps(wa), c.conversationId, { ultimaTentativa: false })).rejects.toThrow(/temporária/)
+    expect((await saidas(c.conversationId)).map((m) => m.statusEnvio)).toEqual(['pendente', 'pendente', 'pendente'])
+    expect(await entregarRespostaHumana(deps(wa), c.conversationId, { ultimaTentativa: true })).toBe('desistiu')
+    expect((await saidas(c.conversationId)).map((m) => [m.autor, m.statusEnvio])).toEqual([
+      ['sistema', 'pendente'], ['humano', 'falhou:temporaria'], ['humano', 'falhou:temporaria'],
+    ])
+  })
+
+  it('última tentativa que dá certo ⇒ entregue normalmente', async () => {
+    const c = await conversaReal()
+    await pendente({ ...c, autor: 'humano', texto: 'Oi!' })
+    expect(await entregarRespostaHumana(deps(fakeWa()), c.conversationId, { ultimaTentativa: true })).toBe('entregue')
+    expect((await saidas(c.conversationId))[0]!.statusEnvio).toBe('enviado')
   })
 
   it('conversa simulada ⇒ simulado, sem chamar a Meta', async () => {
