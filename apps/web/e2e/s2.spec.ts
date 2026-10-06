@@ -74,7 +74,7 @@ async function perguntar(page: Page, texto: string) {
   await page.keyboard.press('Enter')
 }
 
-const previsaoDaUnidade = (page: Page) => page.goto(`/previsao?unidade=${unitId}`)
+const previsaoDaUnidade = (page: Page) => page.goto(`/agenda?aba=previsao&unidade=${unitId}`)
 
 test('simulador anota o aviso, mas a previsão de hoje não mostra aviso simulado', async ({ page }) => {
   await entrarComoGestor(page)
@@ -86,7 +86,7 @@ test('simulador anota o aviso, mas a previsão de hoje não mostra aviso simulad
   expect(gravados).toEqual([{ pessoas: 4, simulado: true, origem: 'ia' }])
 
   await previsaoDaUnidade(page)
-  await expect(page.getByRole('heading', { level: 1, name: 'Previsão' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Agenda' })).toBeVisible()
   await expect(page.getByText('Nenhum aviso para hoje')).toBeVisible()
   await expect(page.getByText('4 pessoas')).toHaveCount(0)
 })
@@ -135,8 +135,8 @@ test('atendente vê a previsão, sem "Novo aviso" nem cancelar', async ({ page }
   const { email, senha } = await criarMembro('atendente')
   await entrar(page, email, senha)
   await expect(page.getByRole('heading', { level: 1, name: 'Início' })).toBeVisible()
-  await page.getByRole('link', { name: 'Previsão', exact: true }).click()
-  await expect(page.getByRole('heading', { level: 1, name: 'Previsão' })).toBeVisible()
+  await page.getByRole('link', { name: 'Agenda', exact: true }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Agenda' })).toBeVisible()
   await expect(page.getByRole('listitem').filter({ hasText: NOME_ATENDENTE })).toContainText('2 pessoas')
   await expect(page.getByRole('button', { name: 'Novo aviso' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: /^Cancelar aviso/ })).toHaveCount(0)

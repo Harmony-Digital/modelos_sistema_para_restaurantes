@@ -1,0 +1,1972 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > c01: quero fazer uma festa 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": {
+    "botao": "Ver unidades",
+    "corpo": "Para qual unidade é o evento? Toque em "Ver unidades" e escolha.",
+    "opcoes": [
+      {
+        "descricao": "Asa Sul · Brasília",
+        "id": "u-asa-sul",
+        "titulo": "Asa Sul",
+      },
+      {
+        "descricao": "Asa Norte · Brasília",
+        "id": "u-asa-norte",
+        "titulo": "Asa Norte",
+      },
+      {
+        "descricao": "Lago Sul · Brasília",
+        "id": "u-lago-sul",
+        "titulo": "Lago Sul",
+      },
+      {
+        "descricao": "Águas Claras · Brasília",
+        "id": "u-aguas-claras",
+        "titulo": "Águas Claras",
+      },
+    ],
+  },
+  "localizacoes": [],
+  "pendente": [
+    {
+      "convidados": null,
+      "data": null,
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": null,
+      "unidade": null,
+    },
+  ],
+  "perguntarEvento": {
+    "campo": "unidade",
+    "item": {
+      "convidados": null,
+      "data": null,
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": null,
+      "unidade": null,
+    },
+    "unitId": null,
+  },
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": null,
+  "validos": 0,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > c02: quero fazer uma festa na asa sul 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": {
+    "campo": "data",
+    "item": {
+      "convidados": null,
+      "data": null,
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": null,
+      "unidade": "Asa Sul",
+    },
+    "unitId": "u-asa-sul",
+  },
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Para qual data é o evento?",
+  "validos": 0,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > c03: festa na asa sul sábado 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": {
+    "campo": "convidados",
+    "item": {
+      "convidados": null,
+      "data": "2026-10-10",
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": null,
+      "unidade": "Asa Sul",
+    },
+    "unitId": "u-asa-sul",
+  },
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Para quantos convidados?",
+  "validos": 0,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > c04: festa na asa sul sábado para 40 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": {
+    "campo": "tipo",
+    "item": {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": null,
+      "unidade": "Asa Sul",
+    },
+    "unitId": "u-asa-sul",
+  },
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Qual o tipo do evento? (aniversário, casamento, corporativo, confraternização…)",
+  "validos": 0,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > c05: qualquer dia 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": {
+    "campo": "data",
+    "item": {
+      "convidados": null,
+      "data": null,
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": null,
+      "unidade": "Asa Sul",
+    },
+    "unitId": "u-asa-sul",
+  },
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Para qual data é o evento?",
+  "validos": 0,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > c06: festa para zero pessoas 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": {
+    "campo": "convidados",
+    "item": {
+      "convidados": null,
+      "data": "2026-10-10",
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": null,
+      "unidade": "Asa Sul",
+    },
+    "unitId": "u-asa-sul",
+  },
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Consigo registrar eventos de 1 a 1000 convidados. Para quantos convidados?",
+  "validos": 0,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > c07: festa para 5000 pessoas 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": {
+    "campo": "convidados",
+    "item": {
+      "convidados": null,
+      "data": "2026-10-10",
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": null,
+      "unidade": "Asa Sul",
+    },
+    "unitId": "u-asa-sul",
+  },
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Consigo registrar eventos de 1 a 1000 convidados. Para quantos convidados?",
+  "validos": 0,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > c08: a ordem vale: sem data, convidados inválidos 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": {
+    "campo": "data",
+    "item": {
+      "convidados": 0,
+      "data": null,
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": null,
+      "unidade": "Asa Sul",
+    },
+    "unitId": "u-asa-sul",
+  },
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Para qual data é o evento?",
+  "validos": 0,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > c09: unidade escolhida na lista 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "aniversario",
+      "tipoTexto": null,
+      "unitId": "u-asa-norte",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Norte, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > c10: item guardado volta completo (data já em ISO) 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "aniversario",
+      "tipoTexto": null,
+      "unitId": "u-asa-sul",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > c11: unidade que não existe 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": {
+    "botao": "Ver unidades",
+    "corpo": "Para qual unidade é o evento? Toque em "Ver unidades" e escolha.",
+    "opcoes": [
+      {
+        "descricao": "Asa Sul · Brasília",
+        "id": "u-asa-sul",
+        "titulo": "Asa Sul",
+      },
+      {
+        "descricao": "Asa Norte · Brasília",
+        "id": "u-asa-norte",
+        "titulo": "Asa Norte",
+      },
+      {
+        "descricao": "Lago Sul · Brasília",
+        "id": "u-lago-sul",
+        "titulo": "Lago Sul",
+      },
+      {
+        "descricao": "Águas Claras · Brasília",
+        "id": "u-aguas-claras",
+        "titulo": "Águas Claras",
+      },
+    ],
+  },
+  "localizacoes": [],
+  "pendente": [
+    {
+      "convidados": null,
+      "data": null,
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": null,
+      "unidade": "lua",
+    },
+  ],
+  "perguntarEvento": {
+    "campo": "unidade",
+    "item": {
+      "convidados": null,
+      "data": null,
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": null,
+      "unidade": "lua",
+    },
+    "unitId": null,
+  },
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": null,
+  "validos": 0,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > c12: só uma unidade ativa: assume 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "aniversario",
+      "tipoTexto": null,
+      "unitId": "u-asa-norte",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Norte, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > c13: nenhuma unidade ativa 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Ainda não tenho essa informação; vou verificar com a equipe.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > c14: resposta ao espaço depois da capacidade 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "aniversario",
+      "tipoTexto": null,
+      "unitId": "u-asa-sul",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > c15: festa para 40 na asa sul sábado (tipo "festa" é genérico) 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": {
+    "campo": "tipo",
+    "item": {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": null,
+      "unidade": "Asa Sul",
+    },
+    "unitId": "u-asa-sul",
+  },
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Qual o tipo do evento? (aniversário, casamento, corporativo, confraternização…)",
+  "validos": 0,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > c16: um evento para 40 na asa sul sábado 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": {
+    "campo": "tipo",
+    "item": {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": null,
+      "unidade": "Asa Sul",
+    },
+    "unitId": "u-asa-sul",
+  },
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Qual o tipo do evento? (aniversário, casamento, corporativo, confraternização…)",
+  "validos": 0,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > m01: endereço da asa norte e quais espaços tem lá 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [
+    {
+      "endereco": "SCLN 302 Bloco B, Asa Norte, Brasília/DF",
+      "lat": -15.7801,
+      "lng": -47.8829,
+      "nome": "Asa Norte",
+    },
+  ],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 2,
+  "texto": "A unidade Asa Norte fica em SCLN 302 Bloco B, Asa Norte, Brasília/DF.
+
+Espaços para eventos:
+• Mezanino (Asa Norte) — 15 a 40 pessoas. Área no andar de cima.
+• Salão Jardim (Asa Norte) — 40 a 120 pessoas.",
+  "validos": 2,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > m02: vou hoje na asa norte em 2 e quero festa 1`] = `
+{
+  "acoesS2": [
+    {
+      "atualiza": false,
+      "data": "2026-10-05",
+      "horarioAprox": null,
+      "pessoas": 2,
+      "tipo": "registrar",
+      "unitId": "u-asa-norte",
+    },
+  ],
+  "acoesS3": [
+    {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "aniversario",
+      "tipoTexto": null,
+      "unitId": "u-asa-sul",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 2,
+  "texto": "Anotado: Asa Norte, hoje, 2 pessoas. Se mudar de ideia, é só me avisar.
+
+Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
+  "validos": 2,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > m03: horário da asa sul sábado e festa sem data 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": {
+    "campo": "data",
+    "item": {
+      "convidados": null,
+      "data": null,
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": null,
+      "unidade": "Asa Sul",
+    },
+    "unitId": "u-asa-sul",
+  },
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Sábado (10/10), a unidade Asa Sul abre das 11h30 às 15h e das 18h às 2h.
+
+Para qual data é o evento?",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > m04: que horas abre sábado? e quero uma festa na asa sul 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": {
+    "botao": "Ver unidades",
+    "corpo": "De qual unidade você quer saber? Toque em "Ver unidades" e escolha.",
+    "opcoes": [
+      {
+        "descricao": "Asa Sul · Brasília",
+        "id": "u-asa-sul",
+        "titulo": "Asa Sul",
+      },
+      {
+        "descricao": "Asa Norte · Brasília",
+        "id": "u-asa-norte",
+        "titulo": "Asa Norte",
+      },
+      {
+        "descricao": "Lago Sul · Brasília",
+        "id": "u-lago-sul",
+        "titulo": "Lago Sul",
+      },
+      {
+        "descricao": "Águas Claras · Brasília",
+        "id": "u-aguas-claras",
+        "titulo": "Águas Claras",
+      },
+    ],
+  },
+  "localizacoes": [],
+  "pendente": [
+    {
+      "convidados": null,
+      "data": "sábado",
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "horario_unidades",
+      "tema": null,
+      "tipo": "horario_dia",
+      "tipoEvento": null,
+      "unidade": null,
+    },
+  ],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": null,
+  "validos": 0,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > m05: cancela o evento confirmado e fala o endereço da asa sul 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": true,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [
+    {
+      "endereco": "SCLS 404 Bloco C, Asa Sul, Brasília/DF",
+      "lat": -15.8136,
+      "lng": -47.896,
+      "nome": "Asa Sul",
+    },
+  ],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "A unidade Asa Sul fica em SCLS 404 Bloco C, Asa Sul, Brasília/DF.
+
+Esse evento já foi confirmado pela equipe. Vou chamar um atendente para te ajudar.",
+  "validos": 2,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > m06: festa e cardápio 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "aniversario",
+      "tipoTexto": null,
+      "unitId": "u-asa-sul",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Sobre o cardápio, ainda estou aprendendo e em breve vou conseguir responder por aqui.
+
+Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > m07: festa e falar com humano 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "aniversario",
+      "tipoTexto": null,
+      "unitId": "u-asa-sul",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > m08: cancela o evento e o aviso 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "pedidoId": "p-sab",
+      "texto": "Pronto, cancelei seu pedido de evento: Asa Sul, sábado (10/10).",
+      "textoSeFalhar": "Não encontrei pedido de evento seu em andamento.",
+      "tipo": "cancelar_evento",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Não encontrei nenhum aviso ativo seu.
+
+Pronto, cancelei seu pedido de evento: Asa Sul, sábado (10/10).",
+  "validos": 2,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > m09: aviso sem pessoas e festa sem data: pergunta de pessoas vem antes 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": {
+    "item": {
+      "convidados": null,
+      "data": "2026-10-05",
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "aviso_presenca",
+      "tema": null,
+      "tipo": "registrar",
+      "tipoEvento": null,
+      "unidade": "Asa Norte",
+    },
+    "unitId": "u-asa-norte",
+  },
+  "respondidos": 0,
+  "texto": "Para quantas pessoas?",
+  "validos": 0,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p01: festa de aniversário para 40 na asa sul sábado 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "aniversario",
+      "tipoTexto": null,
+      "unitId": "u-asa-sul",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.
+
+Espaços para eventos:
+• Salão Principal (Asa Sul) — 30 a 80 pessoas. Salão climatizado com som. Consumação mínima por pessoa.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p02: casamento para 100 na asa norte dia 17 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 100,
+      "data": "2026-10-17",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "casamento",
+      "tipoTexto": null,
+      "unitId": "u-asa-norte",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de casamento para 100 convidados na unidade Asa Norte, sábado (17/10). Nossa equipe vai entrar em contato para confirmar.
+
+Espaços para eventos:
+• Salão Jardim (Asa Norte) — 40 a 120 pessoas.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p03: aniversário no salão principal da asa sul sábado, 40 pessoas 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "observacoes": null,
+      "spaceId": "e-as-salao",
+      "tipo": "registrar_evento",
+      "tipoEvento": "aniversario",
+      "tipoTexto": null,
+      "unitId": "u-asa-sul",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10), no espaço Salão Principal. Nossa equipe vai entrar em contato para confirmar.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p04: pode ser qualquer espaço 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "aniversario",
+      "tipoTexto": null,
+      "unitId": "u-asa-sul",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p05: quero a varanda para 40 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": {
+    "campo": "espaco",
+    "item": {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": "aniversário",
+      "unidade": "Asa Sul",
+    },
+    "unitId": "u-asa-sul",
+  },
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "O espaço Varanda recebe de 10 a 30 pessoas. Para 40 pessoas, sugiro: Salão Principal. Qual espaço prefere? Se tanto faz, diga "pode ser qualquer um".",
+  "validos": 0,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p06: quero a varanda para 100 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": {
+    "campo": "espaco",
+    "item": {
+      "convidados": 100,
+      "data": "2026-10-10",
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": "aniversário",
+      "unidade": "Asa Sul",
+    },
+    "unitId": "u-asa-sul",
+  },
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "O espaço Varanda recebe de 10 a 30 pessoas. Qual espaço prefere? Se tanto faz, diga "pode ser qualquer um".",
+  "validos": 0,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p07: mezanino na asa sul 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "aniversario",
+      "tipoTexto": null,
+      "unitId": "u-asa-sul",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.
+
+Espaços para eventos:
+• Salão Principal (Asa Sul) — 30 a 80 pessoas. Salão climatizado com som. Consumação mínima por pessoa.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p08: no terraço da asa sul 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "aniversario",
+      "tipoTexto": null,
+      "unitId": "u-asa-sul",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.
+
+Espaços para eventos:
+• Salão Principal (Asa Sul) — 30 a 80 pessoas. Salão climatizado com som. Consumação mínima por pessoa.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p09: jantar íntimo para 1 pessoa 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 1,
+      "data": "2026-10-10",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "outro",
+      "tipoTexto": "chá de bebê",
+      "unitId": "u-asa-sul",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de evento para 1 convidado na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p10: formatura para 50 na asa norte dia 17 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 50,
+      "data": "2026-10-17",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "outro",
+      "tipoTexto": "formatura",
+      "unitId": "u-asa-norte",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de evento para 50 convidados na unidade Asa Norte, sábado (17/10). Nossa equipe vai entrar em contato para confirmar.
+
+Espaços para eventos:
+• Salão Jardim (Asa Norte) — 40 a 120 pessoas.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p11: niver de 15 na asa sul sábado 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 15,
+      "data": "2026-10-10",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "aniversario",
+      "tipoTexto": null,
+      "unitId": "u-asa-sul",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de aniversário para 15 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.
+
+Espaços para eventos:
+• Sala Privativa (Asa Sul) — 8 a 20 pessoas.
+• Varanda (Asa Sul) — 10 a 30 pessoas.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p12: confraternização da empresa para 60 no lago sul sábado 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 60,
+      "data": "2026-10-10",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "confraternizacao",
+      "tipoTexto": null,
+      "unitId": "u-lago-sul",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de confraternização para 60 convidados na unidade Lago Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p13: aniversário para 40 na asa sul dia 19 (segunda, a unidade fecha) 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 40,
+      "data": "2026-10-19",
+      "observacoes": "Unidade fechada nesse dia pelo horário cadastrado",
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "aniversario",
+      "tipoTexto": null,
+      "unitId": "u-asa-sul",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, segunda-feira (19/10). Nossa equipe vai entrar em contato para confirmar.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p14: festa para 30 na AC sexta 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 30,
+      "data": "2026-10-09",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "aniversario",
+      "tipoTexto": null,
+      "unitId": "u-aguas-claras",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de aniversário para 30 convidados na unidade Águas Claras, sexta-feira (09/10). Nossa equipe vai entrar em contato para confirmar.
+
+Espaços para eventos:
+• Espaço Gourmet (Águas Claras) — 10 a 40 pessoas.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p15: é para hoje 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": {
+    "campo": "data",
+    "item": {
+      "convidados": 40,
+      "data": null,
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": "aniversário",
+      "unidade": "Asa Sul",
+    },
+    "unitId": "u-asa-sul",
+  },
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Consigo registrar pedidos de evento de amanhã até 05/10/2027. Qual data você prefere?",
+  "validos": 0,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p16: amanhã mesmo 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 40,
+      "data": "2026-10-06",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "aniversario",
+      "tipoTexto": null,
+      "unitId": "u-asa-sul",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, amanhã. Nossa equipe vai entrar em contato para confirmar.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p17: no natal 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 40,
+      "data": "2026-12-25",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "aniversario",
+      "tipoTexto": null,
+      "unitId": "u-asa-norte",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Norte, sexta-feira (25/12, Natal). Nossa equipe vai entrar em contato para confirmar.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p18: a mesma festa duas vezes na mensagem 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "aniversario",
+      "tipoTexto": null,
+      "unitId": "u-asa-sul",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p19: festa na asa sul sábado e outra na asa norte dia 17 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "aniversario",
+      "tipoTexto": null,
+      "unitId": "u-asa-sul",
+    },
+    {
+      "convidados": 30,
+      "data": "2026-10-17",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "aniversario",
+      "tipoTexto": null,
+      "unitId": "u-asa-norte",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 2,
+  "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.
+
+Recebemos seu pedido de aniversário para 30 convidados na unidade Asa Norte, sábado (17/10). Nossa equipe vai entrar em contato para confirmar.",
+  "validos": 2,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p20: daqui a mais de um ano 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": {
+    "campo": "data",
+    "item": {
+      "convidados": 40,
+      "data": null,
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tema": null,
+      "tipo": "pedido",
+      "tipoEvento": "aniversário",
+      "unidade": "Asa Sul",
+    },
+    "unitId": "u-asa-sul",
+  },
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Consigo registrar pedidos de evento de amanhã até 05/10/2027. Qual data você prefere?",
+  "validos": 0,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p21: tipo "reserva confirmada" não é ecoado 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "convidados": 40,
+      "data": "2026-10-10",
+      "observacoes": null,
+      "spaceId": null,
+      "tipo": "registrar_evento",
+      "tipoEvento": "outro",
+      "tipoTexto": "reserva confirmada",
+      "unitId": "u-asa-sul",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de evento para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.
+
+Espaços para eventos:
+• Salão Principal (Asa Sul) — 30 a 80 pessoas. Salão climatizado com som. Consumação mínima por pessoa.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p22: repete o pedido que já fez (sábado na asa sul) 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Já temos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > p23: quero o salão principal (pedido de sábado já em contato) 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Já temos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > s01: quais espaços a asa sul tem? 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Espaços para eventos:
+• Sala Privativa (Asa Sul) — 8 a 20 pessoas.
+• Salão Principal (Asa Sul) — 30 a 80 pessoas. Salão climatizado com som. Consumação mínima por pessoa.
+• Varanda (Asa Sul) — 10 a 30 pessoas.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > s02: quais espaços vocês têm? 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": {
+    "botao": "Ver unidades",
+    "corpo": "Para qual unidade é o evento? Toque em "Ver unidades" e escolha.",
+    "opcoes": [
+      {
+        "descricao": "Asa Sul · Brasília",
+        "id": "u-asa-sul",
+        "titulo": "Asa Sul",
+      },
+      {
+        "descricao": "Asa Norte · Brasília",
+        "id": "u-asa-norte",
+        "titulo": "Asa Norte",
+      },
+      {
+        "descricao": "Lago Sul · Brasília",
+        "id": "u-lago-sul",
+        "titulo": "Lago Sul",
+      },
+      {
+        "descricao": "Águas Claras · Brasília",
+        "id": "u-aguas-claras",
+        "titulo": "Águas Claras",
+      },
+    ],
+  },
+  "localizacoes": [],
+  "pendente": [
+    {
+      "convidados": null,
+      "data": null,
+      "espaco": null,
+      "horario": null,
+      "pessoas": null,
+      "servico": "evento",
+      "tema": null,
+      "tipo": "espacos",
+      "tipoEvento": null,
+      "unidade": null,
+    },
+  ],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": null,
+  "validos": 0,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > s03: quais espaços vocês têm? (2 unidades) 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Espaços para eventos:
+• Sala Privativa (Asa Sul) — 8 a 20 pessoas.
+• Salão Principal (Asa Sul) — 30 a 80 pessoas. Salão climatizado com som. Consumação mínima por pessoa.
+• Varanda (Asa Sul) — 10 a 30 pessoas.
+• Mezanino (Asa Norte) — 15 a 40 pessoas. Área no andar de cima.
+• Salão Jardim (Asa Norte) — 40 a 120 pessoas.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > s04: tem espaço para 80 na asa norte? 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Espaços para eventos:
+• Salão Jardim (Asa Norte) — 40 a 120 pessoas.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > s05: tem espaço para 500 na asa norte? 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Espaços para eventos:
+• Mezanino (Asa Norte) — 15 a 40 pessoas. Área no andar de cima.
+• Salão Jardim (Asa Norte) — 40 a 120 pessoas.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > s06: espaços da asa norte (nenhum cadastrado) 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [
+    {
+      "chave": "eventos:espacos",
+      "unitId": "u-asa-norte",
+    },
+  ],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Ainda não tenho essa informação; vou verificar com a equipe.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > s07: espaços na unidade escolhida na lista 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Espaços para eventos:
+• Adega (Lago Sul) — 6 a 12 pessoas. Taxa de rolha.
+• Terraço (Lago Sul) — 15 a 50 pessoas.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > s08: espaço para 20 na asa sul 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Espaços para eventos:
+• Sala Privativa (Asa Sul) — 8 a 20 pessoas.
+• Varanda (Asa Sul) — 10 a 30 pessoas.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > x01: cancela meu pedido de evento 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Não encontrei pedido de evento seu em andamento.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > x02: cancela o pedido (só há um) 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "pedidoId": "p-sab",
+      "texto": "Pronto, cancelei seu pedido de evento: Asa Sul, sábado (10/10).",
+      "textoSeFalhar": "Não encontrei pedido de evento seu em andamento.",
+      "tipo": "cancelar_evento",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Pronto, cancelei seu pedido de evento: Asa Sul, sábado (10/10).",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > x03: cancela (vários, sem alvo) 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Você tem estes pedidos:
+• Asa Sul — sábado (10/10), 40 convidados, aniversário
+• Asa Norte — sábado (17/10), 40 convidados, aniversário
+Para cancelar, mande por exemplo: "cancela o pedido de evento de sábado na unidade Asa Sul".",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > x04: cancela o da asa norte 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "pedidoId": "p-17",
+      "texto": "Pronto, cancelei seu pedido de evento: Asa Norte, sábado (17/10).",
+      "textoSeFalhar": "Não encontrei pedido de evento seu em andamento.",
+      "tipo": "cancelar_evento",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Pronto, cancelei seu pedido de evento: Asa Norte, sábado (17/10).",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > x05: cancela o de dia 17 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "pedidoId": "p-17",
+      "texto": "Pronto, cancelei seu pedido de evento: Asa Norte, sábado (17/10).",
+      "textoSeFalhar": "Não encontrei pedido de evento seu em andamento.",
+      "tipo": "cancelar_evento",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Pronto, cancelei seu pedido de evento: Asa Norte, sábado (17/10).",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > x06: cancela o da lua 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Você tem estes pedidos:
+• Asa Sul — sábado (10/10), 40 convidados, aniversário
+• Asa Norte — sábado (17/10), 40 convidados, aniversário
+Para cancelar, mande por exemplo: "cancela o pedido de evento de sábado na unidade Asa Sul".",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > x07: cancela o confirmado 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": true,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Esse evento já foi confirmado pela equipe. Vou chamar um atendente para te ajudar.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > x08: pedido de data passada não conta 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Não encontrei pedido de evento seu em andamento.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > x09: tipo outro aparece como "evento" 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Você tem estes pedidos:
+• Asa Sul — sábado (10/10), 40 convidados, evento
+• Asa Norte — sábado (17/10), 40 convidados, evento
+Para cancelar, mande por exemplo: "cancela o pedido de evento de sábado na unidade Asa Sul".",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > x10: cancela duas vezes o mesmo pedido 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "pedidoId": "p-sab",
+      "texto": "Pronto, cancelei seu pedido de evento: Asa Sul, sábado (10/10).",
+      "textoSeFalhar": "Não encontrei pedido de evento seu em andamento.",
+      "tipo": "cancelar_evento",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Pronto, cancelei seu pedido de evento: Asa Sul, sábado (10/10).",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > x11: cancela o confirmado entre vários 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "handoff": true,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Esse evento já foi confirmado pela equipe. Vou chamar um atendente para te ajudar.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > x12: cancela com a unidade escolhida na lista 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [
+    {
+      "pedidoId": "p-17",
+      "texto": "Pronto, cancelei seu pedido de evento: Asa Norte, sábado (17/10).",
+      "textoSeFalhar": "Não encontrei pedido de evento seu em andamento.",
+      "tipo": "cancelar_evento",
+    },
+  ],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 1,
+  "texto": "Pronto, cancelei seu pedido de evento: Asa Norte, sábado (17/10).",
+  "validos": 1,
+}
+`;

@@ -8,6 +8,13 @@ describe('modelos na tela', () => {
   it('todo modelo tem título e explicação', () => {
     expect(Object.keys(ROTULOS_MODELO).sort()).toEqual(Object.keys(MODELOS_S1).sort())
   })
+  it('modelos de evento têm título próprio, único e em português', () => {
+    const titulos = Object.values(ROTULOS_MODELO).map((r) => r.titulo)
+    for (const [chave, r] of Object.entries(ROTULOS_MODELO).filter(([c]) => c.startsWith('evento_'))) {
+      expect(r.titulo.length, chave).toBeGreaterThan(10)
+      expect(titulos.filter((t) => t === r.titulo), chave).toHaveLength(1)
+    }
+  })
   it('prévia usa os dados reais da unidade', () => {
     expect(previaModelo('endereco', MODELOS_S1.endereco.texto, unidade)).toBe('A unidade Lago Sul fica em SHIS QI 11 Bloco A, Lago Sul, Brasília/DF.')
     expect(previaModelo('aberto_sim', 'Aberta! {unidade} fecha {fecha}.', unidade)).toBe('Aberta! Lago Sul fecha às 23h.')

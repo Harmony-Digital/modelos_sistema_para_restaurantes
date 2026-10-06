@@ -1,7 +1,7 @@
 'use server'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { carregarUnidadesPainel, removerExcecao, salvarExcecao, salvarHorarios, salvarUnidade } from '@atd/db'
+import { carregarUnidadesPainel, removerExcecao, salvarEspaco, salvarExcecao, salvarHorarios, salvarUnidade } from '@atd/db'
 import { actionErrorFromZod, type ActionResult } from '@/lib/action-result'
 import { requireStaff } from '@/lib/dal'
 import { coordenadasDoLink } from '@/lib/maps-link'
@@ -9,6 +9,7 @@ import { resultadoDoPainel } from '@/lib/painel-erros'
 import {
   dadosUnidadeSchema, excecaoSchema, horariosSchema, type DadosUnidadeForm, type ExcecaoForm, type HorariosForm,
 } from '@/lib/schemas/unidades'
+import { espacoSchema, type EspacoForm } from '@/lib/schemas/espacos'
 import { getDb } from '@/lib/server/db'
 
 const GESTAO: ['dono', 'gerente'] = ['dono', 'gerente']
@@ -91,5 +92,27 @@ export async function removerExcecaoAction(unitId: string, data: string): Promis
   if (!idValido(unitId) || !/^\d{4}-\d{2}-\d{2}$/.test(data)) return NAO_ENCONTRADA
   const r = await removerExcecao(getDb(), s.claims, s.restaurantId, unitId, data)
   if (r.ok) revalidarUnidade(unitId)
+  return resultadoDoPainel(r)
+}
+
+const MSG_ESPACO_REPETIDO = 'Já existe um espaço com esse nome nesta unidade.'
+const MSG_CAPACIDADE = 'Confira as capacidades: de 1 a 1000, com o mínimo não maior que o máximo.'
+
+/** `espacoId` nulo cria; senão edita. Desativar é editar com `ativo: false`. */
+export async function salvarEspacoAction(unitId: string, espacoId: string | null, input: EspacoForm): Promise<ActionResult<{ id: string }>> {
+  const s = await requireStaff(GESTAO)
+  if (!idValido(unitId) || (espacoId !== null && !idValido(espacoId))) return NAO_ENCONTRADA
+  const p = espacoSchema.safeParse(input)
+  if (!p.success) return actionErrorFromZod(p.error)
+  const r = await salvarEspaco(getDb(), s.claims, espacoId, {
+    unitId, nome: p.data.nome, capacidadeMin: p.data.capacidadeMin, capacidadeMax: p.data.capacidadeMax,
+    descricao: nulo(p.data.descricao), condicoes: nulo(p.data.condicoes), ativo: p.data.ativo,
+  })
+  if (r.ok) {
+    revalidarUnidade(unitId)
+    return { ok: true, data: r.valor }
+  }
+  if (r.erro === 'nome_duplicado') return { ok: false, fieldErrors: { nome: MSG_ESPACO_REPETIDO } }
+  if (r.erro === 'capacidade_invalida') return { ok: false, formError: MSG_CAPACIDADE }
   return resultadoDoPainel(r)
 }

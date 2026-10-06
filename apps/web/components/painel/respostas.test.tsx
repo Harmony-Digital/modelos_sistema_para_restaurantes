@@ -62,6 +62,14 @@ describe('SemResposta', () => {
     expect(screen.getByText('tem área kids?', { selector: 'li' })).toBeInTheDocument()
   })
 
+  it('lacuna de espaços leva à aba Espaços da primeira unidade, ou à lista sem unidade', () => {
+    const { rerender } = render(<SemResposta lacunas={[lacuna('eventos:espacos')]} unidades={unidades} somenteLeitura={false} />)
+    expect(screen.getByText('Espaços de evento não cadastrados')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Cadastrar espaços' })).toHaveAttribute('href', `/unidades/${unidades[0]!.id}?aba=espacos`)
+    rerender(<SemResposta lacunas={[lacuna('eventos:espacos')]} unidades={[]} somenteLeitura={false} />)
+    expect(screen.getByRole('link', { name: 'Cadastrar espaços' })).toHaveAttribute('href', '/unidades')
+  })
+
   it('sem lacunas: estado vazio que explica', () => {
     render(<SemResposta lacunas={[]} unidades={unidades} somenteLeitura={false} />)
     expect(screen.getByText('Nenhuma pergunta sem resposta')).toBeInTheDocument()

@@ -15,8 +15,8 @@ describe('previsão: datas e links', () => {
     expect(dataDaUrl('2027-01-01', '2026-10-05')).toBe('2026-11-04')
   })
   it('href omite o que é padrão', () => {
-    expect(hrefPrevisao({ data: '2026-10-05', hoje: '2026-10-05' })).toBe('/previsao')
-    expect(hrefPrevisao({ data: '2026-10-06', hoje: '2026-10-05', unidade: 'u1', cancelados: true })).toBe('/previsao?data=2026-10-06&unidade=u1&cancelados=1')
+    expect(hrefPrevisao({ data: '2026-10-05', hoje: '2026-10-05' })).toBe('/agenda?aba=previsao')
+    expect(hrefPrevisao({ data: '2026-10-06', hoje: '2026-10-05', unidade: 'u1', cancelados: true })).toBe('/agenda?aba=previsao&data=2026-10-06&unidade=u1&cancelados=1')
   })
   it('rótulo do dia em dd/mm/aaaa', () => {
     expect(rotuloDoDia('2026-10-05', '2026-10-05')).toBe('Hoje · Segunda-feira, 05/10/2026')

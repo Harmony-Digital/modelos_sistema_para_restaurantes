@@ -162,6 +162,27 @@
       "when": 1791248591868,
       "tag": "0022_avisos_insert_coluna",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791253040396,
+      "tag": "0023_eventos",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791253047817,
+      "tag": "0024_eventos_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791253856348,
+      "tag": "0025_eventos_anonimizado_fk",
+      "breakpoints": true
     }
   ]
 }

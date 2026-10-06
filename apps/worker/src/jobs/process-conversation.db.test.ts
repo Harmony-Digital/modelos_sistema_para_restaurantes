@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm'
 import { encryptPhone, keyFromBase64 } from '@atd/core'
 import { ingestInbound, schema, type Enqueue } from '@atd/db'
 import { getTestDb, resetDb, seedRestaurant } from '@atd/db/test-utils'
-import type { LlmClient, TriageV3 } from '@atd/ai'
+import type { LlmClient, TriageV4 } from '@atd/ai'
 import type { SendResult } from '@atd/whatsapp'
 import { createLogger } from '../logger.ts'
 import { processConversation, type ProcessDeps } from './process-conversation.ts'
@@ -47,12 +47,12 @@ async function receive(restaurantId: string, msgs: Msg[]) {
   return conversationId
 }
 
-type Scripted = TriageV3 | 'erro_temporario'
+type Scripted = TriageV4 | 'erro_temporario'
 const item = (servico: string, tipo: string | null = null) =>
-  ({ servico, tipo, unidade: null, data: null, tema: null, pessoas: null, horario: null }) as TriageV3['itens'][number]
-const FORA: TriageV3 = { itens: [], fora_escopo: true }
-const LISTA: TriageV3 = { itens: [item('horario_unidades', 'lista_unidades')], fora_escopo: false }
-const CARDAPIO: TriageV3 = { itens: [item('cardapio')], fora_escopo: false }
+  ({ servico, tipo, unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null }) as TriageV4['itens'][number]
+const FORA: TriageV4 = { itens: [], fora_escopo: true }
+const LISTA: TriageV4 = { itens: [item('horario_unidades', 'lista_unidades')], fora_escopo: false }
+const CARDAPIO: TriageV4 = { itens: [item('cardapio')], fora_escopo: false }
 function fakeLlm(script: Scripted[]) {
   const calls: { user: string }[] = []
   const llm: LlmClient = {
@@ -142,7 +142,7 @@ describe('processConversation', () => {
     expect(wa.sent.at(-1)!.text).toMatch(/só consigo ajudar com assuntos do Casa Teste/)
     const runs = await db.select().from(schema.aiRuns)
     expect(runs.map((r) => [r.etapa, r.intent, r.costUsd, r.promptVersion])).toEqual([
-      ['triagem', 'fora_escopo', '0.000200', 'triage-v3'],
+      ['triagem', 'fora_escopo', '0.000200', 'triage-v4'],
     ])
     const counters = await db.select().from(schema.budgetCounters).orderBy(schema.budgetCounters.periodo)
     expect(counters.map((c) => [c.reservado, c.gasto])).toEqual([
@@ -198,6 +198,19 @@ describe('processConversation', () => {
     const [c] = await db.select().from(schema.conversations)
     expect(c!.estado).toBe('aguardando_humano')
     expect((await db.select().from(schema.auditLog)).map((a) => a.acao)).toEqual(['conversa.handoff_pedido'])
+  })
+
+  it.each(['humano', 'lgpd'])('triagem pede %s: resposta de handoff entregue (não cancelada) e conversa aguardando humano', async (servico) => {
+    const rid = await setup()
+    const conv = await receive(rid, ['quero resolver um problema com meu pedido de ontem'])
+    const { llm } = fakeLlm([{ itens: [item(servico)], fora_escopo: false }])
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    const handoff = (await outMessages()).find((m) => m.replyKey === 'handoff')
+    expect(handoff).toMatchObject({ autor: 'sistema', statusEnvio: 'enviado' })
+    expect(wa.sent.map((s) => s.text)).toContain(handoff!.texto)
+    const [c] = await db.select().from(schema.conversations)
+    expect(c!.estado).toBe('aguardando_humano')
   })
 
   it('pedido LGPD de exclusão vira data_subject_request', async () => {

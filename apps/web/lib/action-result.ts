@@ -1,3 +1,4 @@
+import { unstable_rethrow } from 'next/navigation'
 import type { z } from 'zod'
 
 export type ActionResult<T = void> =
@@ -22,11 +23,12 @@ export function actionErrorFromZod(err: z.ZodError): { ok: false; fieldErrors: R
 
 export const ERRO_AO_SALVAR = 'Não foi possível salvar. Tente de novo.'
 
-/** Chama a Server Action; exceção (rede, servidor fora) vira erro geral do formulário em vez de sumir. */
+/** Chama a Server Action; exceção (rede, servidor fora) vira erro geral do formulário em vez de sumir. Navegação do Next (redirect/notFound) é repropagada. */
 export async function chamarAcao<T>(acao: () => Promise<ActionResult<T>>): Promise<ActionResult<T>> {
   try {
     return await acao()
-  } catch {
+  } catch (e) {
+    unstable_rethrow(e)
     return { ok: false, formError: ERRO_AO_SALVAR }
   }
 }

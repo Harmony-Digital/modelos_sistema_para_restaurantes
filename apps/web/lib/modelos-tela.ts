@@ -18,9 +18,9 @@ export const ROTULOS_MODELO: Record<ChaveModelo, { titulo: string; quando: strin
   escolher_unidade: { titulo: 'Pedir a unidade', quando: 'Texto da lista enviada quando há mais de 3 unidades.' },
   escolher_unidade_aviso: { titulo: 'Pedir a unidade do aviso', quando: 'Texto da lista enviada quando o cliente avisa que vai e não diz a unidade.' },
   data_nao_entendida: { titulo: 'Data não entendida', quando: 'A IA não entendeu o dia da pergunta.' },
-  lista_expirada: { titulo: 'Lista vencida', quando: 'O cliente toca numa lista antiga (mais de 30 minutos).' },
+  lista_expirada: { titulo: 'Lista vencida', quando: 'O cliente toca numa lista antiga (mais de 30 minutos; 60 na lista de um pedido de evento).' },
   lacuna: { titulo: 'Ainda não sabe responder', quando: 'Não há informação cadastrada; a pergunta vai para "Sem resposta".' },
-  em_breve: { titulo: 'Serviço em breve', quando: 'Pergunta sobre cardápio ou eventos (próximas etapas).' },
+  em_breve: { titulo: 'Serviço em breve', quando: 'Pergunta sobre o cardápio (próxima etapa).' },
   aviso_registrado: { titulo: 'Aviso anotado', quando: 'O cliente avisa que vai a uma unidade e o aviso é registrado.' },
   aviso_atualizado: { titulo: 'Aviso atualizado', quando: 'O cliente já tinha aviso na mesma unidade e dia, e ele foi atualizado.' },
   aviso_pessoas: { titulo: 'Perguntar quantas pessoas', quando: 'O cliente avisou que vai, mas não disse para quantas pessoas.' },
@@ -32,6 +32,21 @@ export const ROTULOS_MODELO: Record<ChaveModelo, { titulo: string; quando: strin
   aviso_cancelado: { titulo: 'Aviso cancelado', quando: 'O cliente pede para cancelar o aviso.' },
   aviso_nao_encontrado: { titulo: 'Nenhum aviso para cancelar', quando: 'O cliente pede para cancelar, mas não tem aviso ativo.' },
   aviso_qual_cancelar: { titulo: 'Qual aviso cancelar', quando: 'O cliente tem vários avisos e não disse qual cancelar. {exemplo} é uma frase de cancelamento com o primeiro aviso da lista.' },
+  // eventos (Etapa 04)
+  evento_registrado: { titulo: 'Pedido de evento recebido', quando: 'O cliente pede um evento e o pedido é registrado para a equipe.' },
+  evento_ja_registrado: { titulo: 'Pedido de evento já recebido', quando: 'O cliente pede de novo um evento que já tem pedido em andamento na mesma unidade e data: não duplica.' },
+  evento_pergunta_unidade: { titulo: 'Pedir a unidade do evento', quando: 'Texto da lista enviada quando o cliente pede um evento e não diz a unidade.' },
+  evento_pergunta_data: { titulo: 'Perguntar a data do evento', quando: 'Falta a data do evento.' },
+  evento_pergunta_convidados: { titulo: 'Perguntar quantos convidados', quando: 'Falta o número de convidados.' },
+  evento_pergunta_tipo: { titulo: 'Perguntar o tipo do evento', quando: 'Falta o tipo do evento.' },
+  evento_data_fora: { titulo: 'Data do evento fora do prazo', quando: 'O evento é para hoje, para antes ou para depois de 1 ano.' },
+  evento_convidados_invalido: { titulo: 'Convidados fora do limite', quando: 'O evento é para menos de 1 ou mais de 1000 convidados.' },
+  evento_espaco_capacidade: { titulo: 'Espaço não comporta o grupo', quando: 'O espaço escolhido não comporta o número de convidados.' },
+  evento_espacos: { titulo: 'Espaços para eventos', quando: 'O cliente pergunta quais espaços existem.' },
+  evento_cancelado: { titulo: 'Pedido de evento cancelado', quando: 'O cliente pede para cancelar o pedido de evento.' },
+  evento_nao_encontrado: { titulo: 'Nenhum pedido de evento para cancelar', quando: 'O cliente pede para cancelar, mas não tem pedido em andamento.' },
+  evento_qual_cancelar: { titulo: 'Qual pedido de evento cancelar', quando: 'O cliente tem vários pedidos e não disse qual cancelar. {exemplo} é uma frase de cancelamento com o primeiro pedido da lista.' },
+  evento_confirmado_humano: { titulo: 'Evento já confirmado', quando: 'O cliente quer cancelar um evento confirmado: um atendente assume.' },
 }
 
 const LINHAS: Partial<Record<ChaveModelo, (nome: string, endereco: string) => string>> = {
@@ -41,11 +56,13 @@ const LINHAS: Partial<Record<ChaveModelo, (nome: string, endereco: string) => st
   endereco_varias: (n, e) => `• ${n}: ${e}\n• Outra unidade: …`,
   lista_unidades: (n) => `• ${n}\n• Outra unidade`,
   aviso_qual_cancelar: (n) => `• ${n} — hoje, 2 pessoas\n• Outra unidade — domingo (11/10), 4 pessoas`,
+  evento_espacos: (n) => `• Salão (${n}) — 20 a 80 pessoas.\n• Varanda (${n}) — 10 a 30 pessoas.`,
+  evento_qual_cancelar: (n) => `• ${n} — sábado (10/10), 40 convidados, aniversário\n• Outra unidade — sexta-feira (20/11), 25 convidados, evento corporativo`,
 }
 
 // {quando} no início da frase ("Domingo (11/10), a unidade…") ou no meio ("Anotado: …, domingo (11/10)")
 const QUANDO_INICIO: readonly ChaveModelo[] = ['horario_dia', 'horario_dia_fechado', 'horario_varias', 'aviso_unidade_fechada', 'aviso_horario_fora']
-const QUANDO_MEIO: readonly ChaveModelo[] = ['aviso_registrado', 'aviso_atualizado', 'aviso_cancelado']
+const QUANDO_MEIO: readonly ChaveModelo[] = ['aviso_registrado', 'aviso_atualizado', 'aviso_cancelado', 'evento_registrado', 'evento_ja_registrado', 'evento_cancelado']
 
 export function exemploDeVariaveis(chave: ChaveModelo, u: UnidadeExemplo | null): Record<string, string> {
   const nome = u?.nome ?? 'Asa Sul'
@@ -62,8 +79,14 @@ export function exemploDeVariaveis(chave: ChaveModelo, u: UnidadeExemplo | null)
     servico: 'o cardápio',
     pessoas: '4 pessoas',
     horario: ', por volta das 20h',
-    limite: '04/11',
-    exemplo: `cancela o aviso de hoje na unidade ${nome}`,
+    limite: chave === 'evento_data_fora' ? '05/10/2027' : '04/11',
+    exemplo: chave === 'evento_qual_cancelar' ? `cancela o pedido de evento de sábado na unidade ${nome}` : `cancela o aviso de hoje na unidade ${nome}`,
+    tipo: 'aniversário',
+    convidados: '40 convidados',
+    espaco: chave === 'evento_espaco_capacidade' ? 'Varanda' : ', no espaço Salão',
+    min: '10',
+    max: '30',
+    sugestoes: ' Para 40 pessoas, sugiro: Salão.',
   }
 }
 

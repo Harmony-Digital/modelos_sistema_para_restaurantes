@@ -4,10 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const push = vi.fn()
 const refresh = vi.fn()
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh }), usePathname: () => '/previsao' }))
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh }), usePathname: () => '/agenda' }))
 const criarAvisoAction = vi.fn()
 const cancelarAvisoAction = vi.fn()
-vi.mock('@/app/(painel)/previsao/actions', () => ({ criarAvisoAction, cancelarAvisoAction }))
+vi.mock('@/app/(painel)/agenda/actions', () => ({ criarAvisoAction, cancelarAvisoAction }))
 
 const { Previsao } = await import('./previsao')
 const { AvisoForm } = await import('./aviso-form')
@@ -36,7 +36,7 @@ describe('Previsao', () => {
     expect(screen.getByText('Painel')).toBeInTheDocument()
     expect(screen.getByText('· 20:00')).toBeInTheDocument()
     expect(screen.getByText('Nenhum aviso nesta unidade.')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Lago Sul' })).toHaveAttribute('href', `/previsao?unidade=${U2}`)
+    expect(screen.getByRole('link', { name: 'Lago Sul' })).toHaveAttribute('href', `/agenda?aba=previsao&unidade=${U2}`)
     expect(screen.getByText('Hoje · Segunda-feira, 05/10/2026')).toBeInTheDocument()
   })
 
@@ -69,7 +69,7 @@ describe('Previsao', () => {
     render(<Previsao {...base} mostrarCancelados unidades={[{ ...unidades[0]!, avisos: [aviso(), cancelado] }]} />)
     expect(screen.getByText('Cancelado')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Cancelar aviso de Bia/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Ocultar cancelados' })).toHaveAttribute('href', '/previsao')
+    expect(screen.getByRole('link', { name: 'Ocultar cancelados' })).toHaveAttribute('href', '/agenda?aba=previsao')
   })
 
   it('estado vazio ensina; dia diferente mostra a data', () => {
@@ -83,15 +83,15 @@ describe('Previsao', () => {
 
   it('seletor de dia: de 30 dias atrás a 30 à frente, limites e input leva à URL', () => {
     const { rerender } = render(<Previsao {...base} />)
-    expect(screen.getByRole('link', { name: 'Dia anterior' })).toHaveAttribute('href', '/previsao?data=2026-10-04')
-    expect(screen.getByRole('link', { name: 'Próximo dia' })).toHaveAttribute('href', '/previsao?data=2026-10-06')
+    expect(screen.getByRole('link', { name: 'Dia anterior' })).toHaveAttribute('href', '/agenda?aba=previsao&data=2026-10-04')
+    expect(screen.getByRole('link', { name: 'Próximo dia' })).toHaveAttribute('href', '/agenda?aba=previsao&data=2026-10-06')
     expect(screen.getByLabelText('Escolher o dia')).toHaveAttribute('min', '2026-09-05')
     expect(screen.getByLabelText('Escolher o dia')).toHaveAttribute('max', '2026-11-04')
     fireEvent.change(screen.getByLabelText('Escolher o dia'), { target: { value: '2026-10-10' } })
-    expect(push).toHaveBeenCalledWith('/previsao?data=2026-10-10')
+    expect(push).toHaveBeenCalledWith('/agenda?aba=previsao&data=2026-10-10')
     rerender(<Previsao {...base} data="2026-11-04" />)
     expect(screen.queryByRole('link', { name: 'Próximo dia' })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Dia anterior' })).toHaveAttribute('href', '/previsao?data=2026-11-03')
+    expect(screen.getByRole('link', { name: 'Dia anterior' })).toHaveAttribute('href', '/agenda?aba=previsao&data=2026-11-03')
     rerender(<Previsao {...base} data="2026-09-05" />)
     expect(screen.queryByRole('link', { name: 'Dia anterior' })).not.toBeInTheDocument()
   })

@@ -11,7 +11,7 @@ function fakeLlm(data: unknown): LlmClient & { calls: Parameters<LlmClient['comp
     }) as LlmClient['completeJson'],
   }
 }
-const base = { unidade: null, data: null, tema: null, pessoas: null, horario: null }
+const base = { unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null }
 const aviso = { servico: 'aviso_presenca', tipo: 'registrar', ...base, unidade: 'asa sul', data: 'sábado', pessoas: 4, horario: '20h' }
 const s1 = { servico: 'horario_unidades', tipo: 'horario_dia', ...base, unidade: 'asa sul', data: 'domingo' }
 
@@ -51,9 +51,17 @@ describe('parseTriageV3', () => {
     const cancelar = { servico: 'aviso_presenca', tipo: 'cancelar', ...base }
     expect(parseTriageV3({ itens: [aviso, cancelar, s1], fora_escopo: false }).itens).toEqual([aviso, cancelar, s1])
   })
+  it('v3 não extrai eventos: convidados, tipoEvento e espaco saem null (o modelo não os envia)', () => {
+    const semEvento = { servico: 'aviso_presenca', tipo: 'registrar', unidade: 'asa sul', data: 'sábado', tema: null, pessoas: 4, horario: '20h' }
+    expect(parseTriageV3({ itens: [semEvento], fora_escopo: false }).itens[0]).toEqual(aviso)
+    expect(aviso).toMatchObject({ convidados: null, tipoEvento: null, espaco: null })
+  })
   it('pessoas: inteiro de 1 a 1000 ou null (acima de 60 o core responde o limite)', () => {
     for (const pessoas of [1, 60, 61, 80, 1000, null]) expect(() => parseTriageV3({ itens: [{ ...aviso, pessoas }], fora_escopo: false })).not.toThrow()
-    for (const pessoas of [0, 1001, -1, 2.5, '4']) expect(() => parseTriageV3({ itens: [{ ...aviso, pessoas }], fora_escopo: false })).toThrow()
+    for (const pessoas of [1001, 2.5, '4']) expect(() => parseTriageV3({ itens: [{ ...aviso, pessoas }], fora_escopo: false })).toThrow()
+  })
+  it('pessoas 0 ou negativo vira null (o core pergunta de novo) em vez de derrubar a triagem', () => {
+    for (const pessoas of [0, -1, -40]) expect(parseTriageV3({ itens: [{ ...aviso, pessoas }], fora_escopo: false }).itens[0]!.pessoas).toBeNull()
   })
   it('horario: corta em 40 caracteres; limita a 5 itens', () => {
     const r = parseTriageV3({ itens: Array.from({ length: 7 }, () => ({ ...aviso, horario: 'x'.repeat(100) })), fora_escopo: false })

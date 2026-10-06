@@ -14,7 +14,7 @@ const GESTAO: ['dono', 'gerente'] = ['dono', 'gerente']
 const INDISPONIVEL = { ok: false as const, formError: 'Esse aviso não está mais disponível.' }
 
 function revalidar() {
-  revalidatePath('/previsao')
+  revalidatePath('/agenda')
   revalidatePath('/')
 }
 

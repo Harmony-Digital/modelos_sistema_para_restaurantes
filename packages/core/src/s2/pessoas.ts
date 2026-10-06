@@ -23,22 +23,25 @@ const HORA_OU_DATA = new RegExp(
   + 'segunda|terca|quarta|quinta|sexta|sabado|domingo|feriado|semana|mes)\\b',
 )
 
-/** `'fora'`: número claro fora de 1–60 ("somos 80"): o worker responde o limite sem chamar o modelo. */
+/** `'fora'`: número claro acima do limite ("somos 80"): o worker responde o limite sem chamar o modelo. */
 export type LeituraPessoas = number | 'fora' | null
 
-const valor = (token: string): number | null =>
-  /^\d{1,3}$/.test(token) ? Number(token) : (POR_EXTENSO[token] ?? (UM.has(token) ? 1 : null))
-
-const noIntervalo = (n: number | null): LeituraPessoas => {
-  if (n === null || !Number.isInteger(n) || n < MIN_PESSOAS) return null
-  return n > MAX_PESSOAS ? 'fora' : n
-}
+/** Faixa aceita: avisos (S2) 1–60; convidados de evento (S3) 1–1000. */
+export type LimitesPessoas = { min: number; max: number }
 
 /**
  * Lê a quantidade de pessoas de uma resposta curta ("4", "somos 5", "quatro", "eu e minha esposa").
- * Ambíguo, zero ou com hora/data no meio ⇒ null (nunca chuta); acima de 60 ⇒ `'fora'`.
+ * Ambíguo, zero ou com hora/data no meio ⇒ null (nunca chuta); acima do máximo (padrão 60) ⇒ `'fora'`.
  */
-export function lerPessoas(texto: string): LeituraPessoas {
+export function lerPessoas(texto: string, limites: LimitesPessoas = { min: MIN_PESSOAS, max: MAX_PESSOAS }): LeituraPessoas {
+  // até 3 dígitos ("100" ⇒ 'fora' num aviso) ou os do máximo (1000 ⇒ 4): "2026" não vira 'fora' num aviso
+  const digitos = new RegExp(`^\\d{1,${Math.max(3, String(limites.max).length)}}$`)
+  const valor = (token: string): number | null =>
+    digitos.test(token) ? Number(token) : (POR_EXTENSO[token] ?? (UM.has(token) ? 1 : null))
+  const noIntervalo = (n: number | null): LeituraPessoas => {
+    if (n === null || !Number.isInteger(n) || n < limites.min) return null
+    return n > limites.max ? 'fora' : n
+  }
   if (/[/:]/.test(texto)) return null // "10/10", "19:30"
   const t = normalizeText(texto)
   if (!t || DUVIDA.test(t) || HORA_OU_DATA.test(t)) return null

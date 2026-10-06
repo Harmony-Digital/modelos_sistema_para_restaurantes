@@ -1,5 +1,6 @@
 import type { ItemExtraido, ResultadoS1 } from '../s1/tipos.ts'
 import type { DataIso } from '../s1/tempo.ts'
+import type { AcaoS3, PerguntaEvento } from '../s3/tipos.ts'
 
 /** Aviso ativo do próprio cliente (lido pelo worker antes de resolver). */
 export type AvisoAtivoS2 = { id: string; unitId: string; data: DataIso; pessoas: number; horarioAprox: string | null }
@@ -24,4 +25,12 @@ export type ResultadoS2 = {
   respondidos: number
 }
 
-export type ResultadoAtendimento = ResultadoS1 & { acoesS2: AcaoS2[]; perguntarPessoas: PerguntaPessoas | null }
+export type ResultadoAtendimento = ResultadoS1 & {
+  acoesS2: AcaoS2[]
+  perguntarPessoas: PerguntaPessoas | null
+  acoesS3: AcaoS3[]
+  /** pedido de evento esperando um campo; `campo === 'unidade'` coincide com a lista pendente */
+  perguntarEvento: PerguntaEvento | null
+  /** pedido de evento confirmado que o cliente quer cancelar: a equipe assume */
+  handoff: boolean
+}

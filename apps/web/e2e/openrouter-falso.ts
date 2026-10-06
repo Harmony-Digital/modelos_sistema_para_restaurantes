@@ -11,13 +11,22 @@ export type TriagemFalsa = {
     // triagem v3 (Etapa 03): campos obrigatórios, null quando não se aplicam
     pessoas: number | null
     horario: string | null
+    // triagem v4 (Etapa 04): opcionais aqui; o servidor falso completa com null
+    convidados?: number | null
+    tipoEvento?: string | null
+    espaco?: string | null
   }[]
   fora_escopo: boolean
 }
 
-/** Servidor local no formato do OpenRouter: responde a triagem por regras fixas e nunca cobra. */
-export async function iniciarOpenRouterFalso(responder: (mensagem: string) => TriagemFalsa) {
+/**
+ * Servidor local no formato do OpenRouter: responde a triagem por regras fixas e nunca cobra.
+ * `responder` recebe a mensagem do cliente e o `user` inteiro (com `<pergunta_pendente>`, quando houver).
+ */
+export async function iniciarOpenRouterFalso(responder: (mensagem: string, user: string) => TriagemFalsa) {
   const chamadas: string[] = []
+  /** `user` completo de cada chamada, na mesma ordem de `chamadas`. */
+  const entradas: string[] = []
   const servidor = createServer((req, res) => {
     let corpo = ''
     req.on('data', (c: Buffer) => { corpo += c.toString() })
@@ -42,9 +51,15 @@ export async function iniciarOpenRouterFalso(responder: (mensagem: string) => Tr
       const user = body.messages.find((m) => m.role === 'user')?.content ?? ''
       const mensagem = /<mensagem_cliente>\n([\s\S]*)\n<\/mensagem_cliente>/.exec(user)?.[1] ?? user
       chamadas.push(mensagem)
+      entradas.push(user)
+      const r = responder(mensagem, user)
+      const triagem = {
+        ...r,
+        itens: r.itens.map((i) => ({ convidados: null, tipoEvento: null, espaco: null, ...i })),
+      }
       return responderJson(200, {
         model: 'e2e/falso',
-        choices: [{ message: { role: 'assistant', content: JSON.stringify(responder(mensagem)) } }],
+        choices: [{ message: { role: 'assistant', content: JSON.stringify(triagem) } }],
         usage: { prompt_tokens: 10, completion_tokens: 5, cost: 0 },
       })
     })
@@ -54,6 +69,7 @@ export async function iniciarOpenRouterFalso(responder: (mensagem: string) => Tr
   return {
     url: `http://127.0.0.1:${port}`,
     chamadas,
+    entradas,
     fechar: () => new Promise<void>((ok) => servidor.close(() => ok())),
   }
 }

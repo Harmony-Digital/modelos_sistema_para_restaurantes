@@ -69,11 +69,18 @@ jobs:
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY_EVALS }}
           AI_TRIAGE_MODELS: ${{ vars.AI_TRIAGE_MODELS }}
-        run: node evals/s1/extracao.ts --teto 0.30
+        run: node evals/s1/extracao.ts --triagem v4 --teto 0.30
       - name: Evals de extração S2 (custo real, teto US$ 0,30)
         if: steps.mudou.outputs.sim == '1' && steps.chave.outputs.tem == '1'
         working-directory: packages/ai
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY_EVALS }}
           AI_TRIAGE_MODELS: ${{ vars.AI_TRIAGE_MODELS }}
-        run: node evals/s2/extracao.ts --teto 0.30
+        run: node evals/s2/extracao.ts --triagem v4 --teto 0.30
+      - name: Evals de extração S3 (custo real, teto US$ 0,30)
+        if: steps.mudou.outputs.sim == '1' && steps.chave.outputs.tem == '1'
+        working-directory: packages/ai
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY_EVALS }}
+          AI_TRIAGE_MODELS: ${{ vars.AI_TRIAGE_MODELS }}
+        run: node evals/s3/extracao.ts --teto 0.30

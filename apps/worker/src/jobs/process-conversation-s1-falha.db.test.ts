@@ -40,7 +40,7 @@ describe('S1 no worker: falha ao resolver depois da triagem paga', () => {
       async completeJson(p) {
         return {
           ok: true as const,
-          data: p.parse({ itens: [{ servico: 'horario_unidades', tipo: 'horario_dia', unidade: null, data: 'domingo', tema: null, pessoas: null, horario: null }], fora_escopo: false }),
+          data: p.parse({ itens: [{ servico: 'horario_unidades', tipo: 'horario_dia', unidade: null, data: 'domingo', tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null }], fora_escopo: false }),
           model: 'fake/m', usage: { tokensIn: 100, tokensOut: 20, tokensCache: 0, costUsd: '0.000200' }, latencyMs: 10,
         }
       },

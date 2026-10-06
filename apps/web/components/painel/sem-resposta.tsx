@@ -22,7 +22,7 @@ export type LacunaTela = {
   ultimaVez: string
 }
 
-const LINK = {
+const LINK: Record<'horarios' | 'endereco' | 'unidades', (l: LacunaTela) => { href: string; rotulo: string }> = {
   horarios: (l: LacunaTela) => l.unitId
     ? { href: `/unidades/${l.unitId}?aba=horarios`, rotulo: `Cadastrar horários da ${l.unidade}` }
     : { href: '/unidades', rotulo: 'Cadastrar horários' },
@@ -31,6 +31,11 @@ const LINK = {
     : { href: '/unidades', rotulo: 'Cadastrar endereço' },
   unidades: () => ({ href: '/unidades', rotulo: 'Cadastrar unidades' }),
 }
+
+/** Espaços são por unidade: a lacuna leva à primeira unidade (ou à lista, sem nenhuma). */
+export const linkDeEspacos = (unidades: { id: string }[]) => unidades[0]
+  ? { href: `/unidades/${unidades[0].id}?aba=espacos`, rotulo: 'Cadastrar espaços' }
+  : { href: '/unidades', rotulo: 'Cadastrar espaços' }
 
 export function SemResposta(props: { lacunas: LacunaTela[]; unidades: { id: string; nome: string }[]; somenteLeitura: boolean }) {
   const [respondendo, setRespondendo] = useState<{ lacuna: LacunaTela; inicial: ValoresFato } | null>(null)
@@ -50,6 +55,7 @@ export function SemResposta(props: { lacunas: LacunaTela[]; unidades: { id: stri
       <ul className="flex flex-col gap-3">
         {props.lacunas.map((l) => {
           const acao = acaoDaLacuna(l.chave)
+          const alvo = acao === 'fato' ? null : acao === 'espacos' ? linkDeEspacos(props.unidades) : LINK[acao](l)
           const titulo = tituloDaLacuna(l.chave)
           return (
             <li key={l.id} className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
@@ -63,7 +69,7 @@ export function SemResposta(props: { lacunas: LacunaTela[]; unidades: { id: stri
               </div>
               {!props.somenteLeitura && (
                 <div className="flex flex-wrap gap-2">
-                  {acao === 'fato' ? (
+                  {acao === 'fato' || !alvo ? (
                     <Button
                       aria-label={`Responder: ${titulo}`}
                       onClick={() => setRespondendo({
@@ -75,7 +81,7 @@ export function SemResposta(props: { lacunas: LacunaTela[]; unidades: { id: stri
                     </Button>
                   ) : (
                     <Button asChild>
-                      <Link href={LINK[acao](l).href}>{LINK[acao](l).rotulo}</Link>
+                      <Link href={alvo.href}>{alvo.rotulo}</Link>
                     </Button>
                   )}
                   <Button variant="outline" onClick={() => setIgnorando(l)}>{acao === 'fato' ? 'Ignorar' : 'Já resolvi'}</Button>

@@ -52,6 +52,33 @@ export const MODELOS_S1 = {
     texto: 'Você tem estes avisos:\n{linhas}\nPara cancelar, mande por exemplo: "{exemplo}".',
     variaveis: ['linhas', 'exemplo'],
   },
+  // S3 — eventos (Etapa 04). Nunca "reservado"/"confirmado": a confirmação é sempre humana.
+  evento_registrado: {
+    texto: 'Recebemos seu pedido de {tipo} para {convidados} na unidade {unidade}, {quando}{espaco}. Nossa equipe vai entrar em contato para confirmar.',
+    variaveis: ['tipo', 'convidados', 'unidade', 'quando', 'espaco'],
+  },
+  evento_ja_registrado: {
+    texto: 'Já temos seu pedido de {tipo} para {convidados} na unidade {unidade}, {quando}. Nossa equipe vai entrar em contato para confirmar.',
+    variaveis: ['tipo', 'convidados', 'unidade', 'quando'],
+  },
+  evento_pergunta_unidade: { texto: 'Para qual unidade é o evento? Toque em "Ver unidades" e escolha.', variaveis: [] },
+  evento_pergunta_data: { texto: 'Para qual data é o evento?', variaveis: [] },
+  evento_pergunta_convidados: { texto: 'Para quantos convidados?', variaveis: [] },
+  evento_pergunta_tipo: { texto: 'Qual o tipo do evento? (aniversário, casamento, corporativo, confraternização…)', variaveis: [] },
+  evento_data_fora: { texto: 'Consigo registrar pedidos de evento de amanhã até {limite}. Qual data você prefere?', variaveis: ['limite'] },
+  evento_convidados_invalido: { texto: 'Consigo registrar eventos de 1 a 1000 convidados. Para quantos convidados?', variaveis: [] },
+  evento_espaco_capacidade: {
+    texto: 'O espaço {espaco} recebe de {min} a {max} pessoas.{sugestoes} Qual espaço prefere? Se tanto faz, diga "pode ser qualquer um".',
+    variaveis: ['espaco', 'min', 'max', 'sugestoes'],
+  },
+  evento_espacos: { texto: 'Espaços para eventos:\n{linhas}', variaveis: ['linhas'] },
+  evento_cancelado: { texto: 'Pronto, cancelei seu pedido de evento: {unidade}, {quando}.', variaveis: ['unidade', 'quando'] },
+  evento_nao_encontrado: { texto: 'Não encontrei pedido de evento seu em andamento.', variaveis: [] },
+  evento_qual_cancelar: {
+    texto: 'Você tem estes pedidos:\n{linhas}\nPara cancelar, mande por exemplo: "{exemplo}".',
+    variaveis: ['linhas', 'exemplo'],
+  },
+  evento_confirmado_humano: { texto: 'Esse evento já foi confirmado pela equipe. Vou chamar um atendente para te ajudar.', variaveis: [] },
 } as const satisfies Record<string, { texto: string; variaveis: readonly string[] }>
 
 export type ChaveModelo = keyof typeof MODELOS_S1
@@ -110,6 +137,8 @@ export const ddmm = (d: DataIso) => {
   const { dia, mes } = partesDaData(d)
   return `${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}`
 }
+
+export const ddmmaaaa = (d: DataIso) => `${ddmm(d)}/${partesDaData(d).ano}`
 
 /** "Hoje", "Amanhã", "Domingo (11/10)", "Segunda-feira (12/10, Nossa Senhora Aparecida)" */
 export function rotuloDoDia(data: DataIso, hoje: DataIso, feriado: string | null): string {

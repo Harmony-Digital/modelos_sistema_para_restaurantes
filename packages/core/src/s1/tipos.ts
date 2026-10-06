@@ -12,18 +12,26 @@ export type TipoS1 = (typeof TIPOS_S1)[number]
 export const TIPOS_S2 = ['registrar', 'cancelar'] as const
 export type TipoS2 = (typeof TIPOS_S2)[number]
 
+export const TIPOS_S3 = ['pedido', 'cancelar', 'espacos'] as const
+export type TipoS3 = (typeof TIPOS_S3)[number]
+
 /**
  * Um pedido extraído da mensagem pela triagem. Textos como o cliente escreveu.
  * `pessoas`/`horario` só vêm em avisos de presença (triage-v3); a v2 preenche null.
+ * `convidados`/`tipoEvento`/`espaco` só vêm em eventos (triage-v4); v2/v3 preenchem null.
+ * `espaco === '*'`: o cliente disse que tanto faz o espaço ("pode ser qualquer um").
  */
 export type ItemExtraido = {
   servico: Servico
-  tipo: TipoS1 | TipoS2 | null
+  tipo: TipoS1 | TipoS2 | TipoS3 | null
   unidade: string | null
   data: string | null
   tema: string | null
   pessoas: number | null
   horario: string | null
+  convidados: number | null
+  tipoEvento: string | null
+  espaco: string | null
 }
 
 export type UnidadeS1 = AgendaUnidade & {

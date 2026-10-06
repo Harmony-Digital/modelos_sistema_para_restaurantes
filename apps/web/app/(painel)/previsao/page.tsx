@@ -1,26 +1,12 @@
-import { previsaoDoDia } from '@atd/db'
-import { Previsao } from '@/components/painel/previsao'
-import { TopBar } from '@/components/shell/top-bar'
-import { requireStaff } from '@/lib/dal'
-import { dataDaUrl, hojeLocal } from '@/lib/previsao'
-import { getDb } from '@/lib/server/db'
+import { redirect } from 'next/navigation'
 
-export const dynamic = 'force-dynamic'
-
-export default async function PrevisaoPage(props: { searchParams: Promise<{ data?: string; unidade?: string; cancelados?: string }> }) {
-  const s = await requireStaff()
+// a Previsão virou uma aba da Agenda; links antigos continuam funcionando (preservam dia, unidade e cancelados)
+export default async function PrevisaoRedireciona(props: { searchParams: Promise<{ data?: string; unidade?: string; cancelados?: string }> }) {
   const q = await props.searchParams
-  const hoje = hojeLocal(new Date())
-  const data = dataDaUrl(q.data, hoje)
-  const mostrarCancelados = q.cancelados === '1'
-  const unidades = await previsaoDoDia(getDb(), s.claims, { data, incluirCancelados: mostrarCancelados })
-  const filtro = unidades.some((u) => u.unitId === q.unidade) ? (q.unidade ?? null) : null
-  return (
-    <>
-      <TopBar title="Previsão" subtitle="Quem avisou que vai ao restaurante" />
-      <main className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-6">
-        <Previsao data={data} hoje={hoje} unidades={unidades} filtro={filtro} mostrarCancelados={mostrarCancelados} podeEditar={s.role !== 'atendente'} />
-      </main>
-    </>
-  )
+  const p = new URLSearchParams({ aba: 'previsao' })
+  for (const k of ['data', 'unidade', 'cancelados'] as const) {
+    const v = q[k]
+    if (typeof v === 'string' && v) p.set(k, v)
+  }
+  redirect(`/agenda?${p.toString()}`)
 }

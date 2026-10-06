@@ -48,7 +48,7 @@ describe('previsão: actions', () => {
   it('cria o aviso com valores normalizados e revalida', async () => {
     expect(await criarAvisoAction(form())).toEqual({ ok: true, data: { id: 'a1' } })
     expect(criarAvisoPainel).toHaveBeenCalledWith('db', { sub: 'u' }, { unitId: U, data: '2026-10-06', pessoas: 4, horarioAprox: '20:00', nome: 'Ana' })
-    expect(revalidatePath).toHaveBeenCalledWith('/previsao')
+    expect(revalidatePath).toHaveBeenCalledWith('/agenda')
     expect(revalidatePath).toHaveBeenCalledWith('/')
     await criarAvisoAction(form({ horario: '', nome: '' }))
     expect(criarAvisoPainel).toHaveBeenLastCalledWith('db', { sub: 'u' }, expect.objectContaining({ horarioAprox: null, nome: null }))
@@ -94,7 +94,7 @@ describe('previsão: actions', () => {
     const id = crypto.randomUUID()
     expect(await cancelarAvisoAction(id)).toEqual({ ok: true, data: null })
     expect(cancelarAvisoPainel).toHaveBeenCalledWith('db', { sub: 'u' }, id)
-    expect(revalidatePath).toHaveBeenCalledWith('/previsao')
+    expect(revalidatePath).toHaveBeenCalledWith('/agenda')
     cancelarAvisoPainel.mockResolvedValue({ ok: false, erro: 'nao_encontrada' })
     expect(await cancelarAvisoAction(id)).toEqual({ ok: false, formError: 'Esse aviso não está mais disponível.' })
   })

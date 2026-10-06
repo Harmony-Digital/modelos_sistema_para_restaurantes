@@ -28,7 +28,7 @@ export function hrefPrevisao(p: { data: DataIso; hoje: DataIso; unidade?: string
   if (p.unidade) q.set('unidade', p.unidade)
   if (p.cancelados) q.set('cancelados', '1')
   const s = q.toString()
-  return s ? `/previsao?${s}` : '/previsao'
+  return s ? `/agenda?aba=previsao&${s}` : '/agenda?aba=previsao'
 }
 
 export function dataBr(d: DataIso): string {
