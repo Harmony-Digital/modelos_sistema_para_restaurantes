@@ -2,7 +2,7 @@ import { hostname } from 'node:os'
 import { createLlmClient } from '@atd/ai'
 import { loadEnv, workerEnvSchema } from '@atd/config'
 import { keyFromBase64 } from '@atd/core'
-import { createBoss, createDb, ensureQueues, QUEUES, type ConviteJob, type DeliverJob, type IngestJob, type ProcessJob } from '@atd/db'
+import { createBoss, createDb, enqueueIngestPasso, ensureQueues, QUEUES, type ConviteJob, type DeliverJob, type IngestJob, type ProcessJob } from '@atd/db'
 import { createWhatsAppClient } from '@atd/whatsapp'
 import { CONCORRENCIA, POOL_DRIZZLE_WORKER } from './concorrencia.ts'
 import { createAuthAdmin, processarConvite } from './jobs/convite.ts'
@@ -92,13 +92,15 @@ try {
   })
 
   if (!env.AI_INGEST_MODELS) log.warn('AI_INGEST_MODELS vazio: importação de cardápio por IA desligada (só CSV)')
+  // importação em lotes: um lote por job; o seguinte vai para a fila com singletonKey `importacaoId:passo`
+  const reenfileirar = enqueueIngestPasso(boss)
   await boss.work<IngestJob>(QUEUES.ingest, { localConcurrency: CONCORRENCIA.ingest }, async (jobs) => {
     for (const job of jobs) {
       try {
-        const outcome = await ingestDocument({ db, llm, storage, ingestModels: env.AI_INGEST_MODELS, log }, job.data.importacaoId)
+        const outcome = await ingestDocument({ db, llm, storage, ingestModels: env.AI_INGEST_MODELS, log, reenfileirar }, job.data.importacaoId)
         log.info({ importacaoId: job.data.importacaoId, outcome }, 'importação processada')
       } catch (err) {
-        // só falha antes de marcar `processando` chega aqui (depois disso o job grava `erro` e não lança)
+        // só chega aqui falha antes de marcar `processando` ou ao enfileirar o lote seguinte (a repetição segue de lote_atual)
         log.error({ err, importacaoId: job.data.importacaoId }, 'falha ao processar importação')
         Sentry.captureException(err, { extra: { importacaoId: job.data.importacaoId } })
         throw sanitizeJobError(err)

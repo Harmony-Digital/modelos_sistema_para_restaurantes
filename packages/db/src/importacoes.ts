@@ -359,12 +359,13 @@ export async function marcarProcessando(
 /**
  * Resultado da leitura (só de `processando`), validado pelo schema do alvo/modo da importação: rascunho válido e não
  * vazio ⇒ `rascunho`; falha, rascunho fora do schema ou vazio ⇒ `erro` com mensagem amigável (até 300 caracteres;
- * nunca detalhe técnico nem conteúdo do documento). O parcial dos lotes some. Devolve o status gravado.
+ * nunca detalhe técnico nem conteúdo do documento). O parcial dos lotes some (salvo `manterParcial`). Devolve o status gravado.
  */
 export async function concluirIngestao(
   db: Db | Tx,
   id: string,
-  r: { ok: true; draft: unknown } | { ok: false; erro: string },
+  /** `manterParcial`: erro no meio dos lotes (Etapa 07) guarda o que já foi lido e o lote em que parou */
+  r: { ok: true; draft: unknown } | { ok: false; erro: string; manterParcial?: boolean },
 ): Promise<'rascunho' | 'erro'> {
   const [doc] = await db
     .select({ alvo: knowledgeDocuments.alvo, modo: knowledgeDocuments.modo })
@@ -377,7 +378,8 @@ export async function concluirIngestao(
   const set = d !== null && !vazio
     ? { status: 'rascunho' as const, draft: d.draft, erro: null, draftParcial: null }
     : {
-        status: 'erro' as const, draft: null, draftParcial: null,
+        status: 'erro' as const, draft: null,
+        ...(!r.ok && r.manterParcial ? {} : { draftParcial: null }),
         erro: (vazio ? mensagemVazio(alvo, modo) : r.ok ? ERRO_RASCUNHO_INVALIDO : r.erro).slice(0, 300),
       }
   await db

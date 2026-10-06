@@ -64,6 +64,7 @@ Atendimento ao cliente final de um restaurante com várias unidades, feito **do 
 | IA | **Produção: OpenAI direto** (`AI_PROVIDER=openai`); **desenvolvimento local: OpenRouter** (`AI_PROVIDER=openrouter`, padrão). Clientes finos próprios (`fetch` + Zod) sobre as APIs REST, em `packages/ai`, atrás da mesma interface `LlmClient` | OpenRouter: fallback de modelos (`models`), `provider: { data_collection: 'deny', zdr: true, require_parameters: true }`, `usage.cost` por chamada. OpenAI: `/chat/completions` com `store: false`, `json_schema` estrito, PDF como parte `file`, custo calculado por tabela de preços em código (modelo sem preço ⇒ worker não sobe). Sem dependência dos nomes de campo do SDK, testável com `fetch` injetado (decisões de 05/10/2026 e de 06/10/2026, ver Adendo) |
 | WhatsApp | Cliente próprio fino (fetch + Zod) em `packages/whatsapp` | Superfície pequena; HMAC sob nosso controle; menos supply chain |
 | Validação | Zod 4 | Env, webhook, Server Actions, saída do LLM |
+| PDF (importação) | **pdf-lib**, só no worker (Etapa 07) | Divide o PDF em lotes de 5 páginas em memória (`copyPages`) para ler um lote por job, sem serviço externo nem binário nativo |
 | UI | Tailwind v4 + shadcn/ui; **design system definido na Etapa 02** | |
 | Observabilidade | Sentry (web + worker), logs JSON com PII mascarada, heartbeat do worker | |
 | Testes | Vitest, Playwright, evals de IA | |

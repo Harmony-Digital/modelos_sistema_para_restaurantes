@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { PgBoss } from 'pg-boss'
-import { createBoss, enqueueDeliver, enqueueIngest, QUEUES } from './queue.ts'
+import { createBoss, enqueueDeliver, enqueueIngest, enqueueIngestPasso, QUEUES } from './queue.ts'
 import { getTestBoss, getTestDb, resetDb, WEB_URL } from './test-utils.ts'
 
 const { sql } = getTestDb()
@@ -25,6 +25,17 @@ describe('fila document.ingest', () => {
       { name: QUEUES.ingest, dead_letter: QUEUES.ingestDlq },
       { name: QUEUES.ingestDlq, dead_letter: null },
     ])
+  })
+
+  it('passo seguinte da leitura em lotes: chave importação:passo, sem duplicar o mesmo passo, com o job atual na fila', async () => {
+    const id = randomUUID()
+    await enqueueIngest(boss)(id)
+    await enqueueIngestPasso(boss)(id, '1')
+    await enqueueIngestPasso(boss)(id, '1')
+    await enqueueIngestPasso(boss)(id, '1a')
+    const js = await jobs()
+    expect(js.map((j) => j.singleton_key).sort()).toEqual([id, `${id}:1`, `${id}:1a`])
+    expect(js.every((j) => j.data.importacaoId === id)).toBe(true)
   })
 
   it('o web (web_app) consegue enfileirar', async () => {

@@ -19,10 +19,13 @@
     "@atd/whatsapp": "workspace:*",
     "@sentry/node": "^11.4.0",
     "drizzle-orm": "^0.45.3",
+    "pdf-lib": "^1.17.1",
     "pg-boss": "^12.36.0",
     "pino": "^10.4.0",
     "postgres": "^3.4.9",
     "zod": "^4.6.5"
   },
-  "devDependencies": { "esbuild": "^0.28.2" }
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
 }

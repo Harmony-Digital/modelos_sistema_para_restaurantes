@@ -102,6 +102,16 @@ export function enqueueIngest(boss: PgBoss): (importacaoId: string) => Promise<u
     boss.send(QUEUES.ingest, { importacaoId } satisfies IngestJob, { singletonKey: importacaoId })
 }
 
+/**
+ * Reenfileira a leitura no passo seguinte (Etapa 07: um lote por execução). `passo` = índice do próximo lote, ou o
+ * lote com a metade (`3a`/`3b`) quando a saída foi cortada. A chave única por passo deixa o próximo job na fila
+ * enquanto o atual ainda está ativo (stately) e não duplica o mesmo passo.
+ */
+export function enqueueIngestPasso(boss: PgBoss): (importacaoId: string, passo: string) => Promise<unknown> {
+  return (importacaoId, passo) =>
+    boss.send(QUEUES.ingest, { importacaoId } satisfies IngestJob, { singletonKey: `${importacaoId}:${passo}` })
+}
+
 /** Enfileira a entrega da resposta humana (Server Action, depois do commit de `responderConversa`/`reenviarMensagem`). */
 export function enqueueDeliver(boss: PgBoss): (conversationId: string) => Promise<unknown> {
   return (conversationId) =>
