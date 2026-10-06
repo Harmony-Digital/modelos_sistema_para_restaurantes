@@ -1,14 +1,15 @@
 import Link from 'next/link'
-import { contarPedidosNovos, getPanelStatus, listAwaitingHuman, resumoInicio, totalPrevistoHoje } from '@atd/db'
+import { contarPedidosNovos, getPanelStatus, listAwaitingHuman, resumoInicio, tempoAteAssumirHoje, totalPrevistoHoje } from '@atd/db'
 import { AwaitingHuman } from '@/components/conversations/awaiting-human'
 import { PerguntasSemResposta } from '@/components/home/perguntas-sem-resposta'
 import { SpendCard } from '@/components/home/spend-card'
 import { StatCard } from '@/components/home/stat-card'
 import { TopBar } from '@/components/shell/top-bar'
 import { requireStaff } from '@/lib/dal'
+import { formatarEspera } from '@/lib/conversas'
 import { percentual } from '@/lib/inicio'
 import { getDb } from '@/lib/server/db'
-import { returnToAiAction } from './actions'
+import { devolverAction } from './conversas/actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,6 +22,7 @@ export default async function InicioPage() {
   const previstos = await totalPrevistoHoje(getDb(), session.claims)
   const pedidosNovos = await contarPedidosNovos(getDb(), session.claims)
   const resumo = gestao ? await resumoInicio(getDb(), session.claims) : null
+  const espera = gestao ? await tempoAteAssumirHoje(getDb(), session.claims) : null
   const online = s.workerLastSeen !== null && Date.now() - s.workerLastSeen.getTime() < ONLINE_MS
   return (
     <>
@@ -49,6 +51,18 @@ export default async function InicioPage() {
               </Link>
             }
           />
+          {gestao && (
+            <StatCard
+              label="Tempo até assumir (hoje)"
+              value={formatarEspera(espera)}
+              hint={espera === null ? 'Ninguém foi assumido hoje' : 'Mediana da espera por um atendente'}
+              action={
+                <Link href="/conversas" className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 [@media(hover:hover)]:hover:underline">
+                  Ver conversas
+                </Link>
+              }
+            />
+          )}
           {resumo && (
             <StatCard
               label="Respondido pela IA hoje"
@@ -59,7 +73,7 @@ export default async function InicioPage() {
         </div>
         {resumo && <PerguntasSemResposta lacunas={resumo.lacunas} />}
         {gestao && <SpendCard gastos={s.gastos} />}
-        <AwaitingHuman itens={await listAwaitingHuman(getDb(), session.claims)} action={returnToAiAction} />
+        <AwaitingHuman itens={await listAwaitingHuman(getDb(), session.claims)} action={devolverAction} />
       </main>
     </>
   )

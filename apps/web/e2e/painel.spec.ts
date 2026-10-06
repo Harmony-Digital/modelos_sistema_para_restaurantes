@@ -25,7 +25,7 @@ test('tema: cookie claro chega na primeira resposta e a troca funciona', async (
 test('navegação inferior leva às 5 seções', async ({ page }) => {
   const { email, senha } = await criarMembro('atendente')
   await entrar(page, email, senha)
-  for (const [link, titulo] of [['Agenda', 'Agenda'], ['Unidades', 'Unidades'], ['Conteúdo', 'Conteúdo'], ['Mais', 'Mais'], ['Início', 'Início']] as const) {
+  for (const [link, titulo] of [['Conversas', 'Conversas'], ['Agenda', 'Agenda'], ['Conteúdo', 'Conteúdo'], ['Mais', 'Mais'], ['Início', 'Início']] as const) {
     await page.getByRole('link', { name: link, exact: true }).click()
     await expect(page.getByRole('heading', { level: 1, name: titulo })).toBeVisible()
   }

@@ -1,6 +1,8 @@
-import { getSingleRestaurantId, schema } from '@atd/db'
+import { acessoInbox, contarAguardando, getSingleRestaurantId, schema } from '@atd/db'
 import { eq } from 'drizzle-orm'
+import { Avisos } from '@/components/conversas/avisos'
 import { AppShell } from '@/components/shell/app-shell'
+import { topicosInbox } from '@/lib/conversas'
 import { SimulatorLauncher } from '@/components/simulator/launcher'
 import { requireStaff } from '@/lib/dal'
 import { getDb } from '@/lib/server/db'
@@ -27,5 +29,8 @@ export default async function PainelLayout({ children }: { children: React.React
   const simulador = session.role === 'atendente'
     ? null
     : <SimulatorLauncher restaurante={r?.nome ?? 'Restaurante'} timezone={r?.timezone ?? 'America/Sao_Paulo'} acoes={acoes} />
-  return <AppShell floating={simulador}>{children}</AppShell>
+  // contador de Aguardando (barra e título) e tópicos privados do Realtime que a pessoa pode escutar
+  const [aguardando, acesso] = await Promise.all([contarAguardando(db, session.claims), acessoInbox(db, session.claims)])
+  const avisos = <Avisos aguardando={aguardando} topicos={acesso ? topicosInbox(acesso) : []} />
+  return <AppShell floating={simulador} avisos={avisos} aguardando={aguardando}>{children}</AppShell>
 }
