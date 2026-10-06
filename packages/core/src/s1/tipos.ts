@@ -9,8 +9,22 @@ export const TIPOS_S1 = [
 ] as const
 export type TipoS1 = (typeof TIPOS_S1)[number]
 
-/** Um pedido extraído da mensagem pela triagem (triage-v2). Textos como o cliente escreveu. */
-export type ItemExtraido = { servico: Servico; tipo: TipoS1 | null; unidade: string | null; data: string | null; tema: string | null }
+export const TIPOS_S2 = ['registrar', 'cancelar'] as const
+export type TipoS2 = (typeof TIPOS_S2)[number]
+
+/**
+ * Um pedido extraído da mensagem pela triagem. Textos como o cliente escreveu.
+ * `pessoas`/`horario` só vêm em avisos de presença (triage-v3); a v2 preenche null.
+ */
+export type ItemExtraido = {
+  servico: Servico
+  tipo: TipoS1 | TipoS2 | null
+  unidade: string | null
+  data: string | null
+  tema: string | null
+  pessoas: number | null
+  horario: string | null
+}
 
 export type UnidadeS1 = AgendaUnidade & {
   id: string

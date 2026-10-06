@@ -127,6 +127,41 @@
       "when": 1791237007236,
       "tag": "0017_simulador_cliente",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1791244065248,
+      "tag": "0018_avisos_presenca",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791244066901,
+      "tag": "0019_avisos_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791244328897,
+      "tag": "0020_avisos_grants_coluna",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791246877384,
+      "tag": "0021_avisos_mfa",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791248591868,
+      "tag": "0022_avisos_insert_coluna",
+      "breakpoints": true
     }
   ]
 }

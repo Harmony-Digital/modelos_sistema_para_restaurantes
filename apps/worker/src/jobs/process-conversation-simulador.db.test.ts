@@ -3,7 +3,7 @@ import { asc, eq } from 'drizzle-orm'
 import { keyFromBase64, periodStarts } from '@atd/core'
 import { abrirSimulacao, enviarMensagemSimulada, schema, type Enqueue } from '@atd/db'
 import { getTestDb, resetDb, seedRestaurant, seedStaff } from '@atd/db/test-utils'
-import type { LlmClient, TriageV2 } from '@atd/ai'
+import type { LlmClient, TriageV3 } from '@atd/ai'
 import { createLogger } from '../logger.ts'
 import { agoraDaConversa, processConversation, type ProcessDeps } from './process-conversation.ts'
 
@@ -18,11 +18,11 @@ const SEG_14H = new Date('2026-10-05T14:00:00-03:00')
 const DOM_12H = new Date('2026-10-11T12:00:00-03:00')
 
 const item = (tipo: string) =>
-  ({ servico: 'horario_unidades', tipo, unidade: null, data: null, tema: null }) as TriageV2['itens'][number]
+  ({ servico: 'horario_unidades', tipo, unidade: null, data: null, tema: null, pessoas: null, horario: null }) as TriageV3['itens'][number]
 const servico = (s: string) =>
-  ({ servico: s, tipo: null, unidade: null, data: null, tema: null }) as TriageV2['itens'][number]
+  ({ servico: s, tipo: null, unidade: null, data: null, tema: null, pessoas: null, horario: null }) as TriageV3['itens'][number]
 
-function fakeLlm(script: TriageV2[]) {
+function fakeLlm(script: TriageV3[]) {
   let n = 0
   const llm: LlmClient = {
     async completeJson(p) {

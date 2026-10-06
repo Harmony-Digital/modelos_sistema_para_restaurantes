@@ -10,7 +10,7 @@ const TEMA = `estacionamento e2e ${SUFIXO}`
 const RESPOSTA = `Temos estacionamento conveniado no subsolo (${SUFIXO}).`
 
 const item = (servico: string, tipo: string | null, extra: Partial<TriagemFalsa['itens'][number]> = {}) =>
-  ({ servico, tipo, unidade: null, data: null, tema: null, ...extra })
+  ({ servico, tipo, unidade: null, data: null, tema: null, pessoas: null, horario: null, ...extra })
 
 function triagem(mensagem: string): TriagemFalsa {
   const m = mensagem.toLowerCase()

@@ -12,8 +12,8 @@ export type Espera = {
 export type Caso = { id: string; mensagem: string; agora: string; itens: ItemExtraido[]; espera: Espera; contexto?: 'pequeno' }
 
 const h = (tipo: TipoS1, unidade: string | null = null, data: string | null = null, tema: string | null = null): ItemExtraido =>
-  ({ servico: 'horario_unidades', tipo, unidade, data, tema })
-const o = (servico: Exclude<Servico, 'horario_unidades'>): ItemExtraido => ({ servico, tipo: null, unidade: null, data: null, tema: null })
+  ({ servico: 'horario_unidades', tipo, unidade, data, tema, pessoas: null, horario: null })
+const o = (servico: Exclude<Servico, 'horario_unidades'>): ItemExtraido => ({ servico, tipo: null, unidade: null, data: null, tema: null, pessoas: null, horario: null })
 const c = (id: string, mensagem: string, agora: string, itens: ItemExtraido[], espera: Espera, contexto?: 'pequeno'): Caso =>
   ({ id, mensagem, agora, itens, espera, ...(contexto ? { contexto } : {}) })
 
@@ -169,7 +169,7 @@ export const CASOS: Caso[] = [
 
   // ---- outros serviços (S2–S4 ainda "em breve"), humano e LGPD
   c('v01', 'quero ver o cardápio', SEG_14H, [o('cardapio')], { texto: CARD }),
-  c('v02', 'vou na asa sul hoje com 6 pessoas', SEG_14H, [o('aviso_presenca')], { texto: 'Sobre avisos de presença, ainda estou aprendendo e em breve vou conseguir responder por aqui.' }),
+  c('v02', 'vou na asa sul hoje com 6 pessoas', SEG_14H, [o('aviso_presenca')], { texto: null }),
   c('v03', 'quero fazer uma festa de aniversário aí', SEG_14H, [o('evento')], { texto: 'Sobre eventos, ainda estou aprendendo e em breve vou conseguir responder por aqui.' }),
   c('v04', 'tem feijoada no sábado? e a asa sul abre sábado?', SEG_14H, [o('cardapio'), h('horario_dia', 'asa sul', 'sábado')], { texto: `${CARD}\n\n${AS_SABADO}` }),
   c('v05', 'estou muito insatisfeito, quero fazer uma reclamação', SEG_14H, [o('humano')], { texto: null }),

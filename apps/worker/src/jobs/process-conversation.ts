@@ -1,14 +1,17 @@
 import { and, asc, count, eq, gt, gte, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import {
-  decryptPhone, escolhaDeUnidade, prefilter, redactPii, renderModelo, renderReply, resolverS1, SERVICOS, TIPOS_S1,
-  type InboundItem, type Lacuna, type ListaUnidades, type Localizacao, type ReplyKey, type ResultadoS1,
+  agoraLocal, decryptPhone, escolhaDeUnidade, lerPessoas, MAX_PESSOAS, prefilter, redactPii, renderModelo, renderReply, resolverAtendimento,
+  SERVICOS, TIPOS_S1, TIPOS_S2,
+  type AcaoS2, type InboundItem, type Lacuna, type ListaUnidades, type Localizacao, type ReplyKey,
+  type ResultadoAtendimento,
 } from '@atd/core'
 import {
-  carregarContextoS1, registrarLacunas, releaseBudget, reserveBudget, schema, settleBudget, type Db, type Reservation,
+  avisosAtivosDoCliente, cancelarAvisoDoCliente, carregarContextoS1, registrarAviso, registrarLacunas, releaseBudget, reserveBudget,
+  schema, settleBudget, type Db, type Reservation,
 } from '@atd/db'
 import {
-  TRIAGE_BUDGET_ESTIMATE_USD, TRIAGE_V2_PROMPT_VERSION, triageV2, type JsonCallResult, type LlmClient, type TriageV2,
+  TRIAGE_BUDGET_ESTIMATE_USD, TRIAGE_V3_PROMPT_VERSION, triageV3, type JsonCallResult, type LlmClient, type TriageV3,
 } from '@atd/ai'
 import type { WhatsAppClient } from '@atd/whatsapp'
 import type { Logger } from '../logger.ts'
@@ -40,17 +43,31 @@ type Saida =
 
 const itemSchema = z.object({
   servico: z.enum(SERVICOS),
-  tipo: z.enum(TIPOS_S1).nullable(),
+  tipo: z.enum([...TIPOS_S1, ...TIPOS_S2]).nullable(),
   unidade: z.string().nullable(),
   data: z.string().nullable(),
   tema: z.string().nullable(),
+  // avisos de presença (Etapa 03): pendentes antigos não têm os campos
+  // até 1000 como na triagem v3: acima de 60 o core responde o limite (o item precisa sobreviver no pendente de unidade)
+  pessoas: z.number().int().min(1).max(1000).nullable().default(null),
+  horario: z.string().max(40).nullable().default(null),
 })
-const pendenteSchema = z.object({
+// pendente antigo (sem `tipo`) é lido como 'unidade'
+const pendenteUnidadeSchema = z.object({
+  tipo: z.literal('unidade').default('unidade'),
   pergunta: z.string().max(300).default(''),
   itens: z.array(itemSchema).min(1).max(5),
   opcoes: z.array(z.string()).min(1).max(10),
   expiraEm: z.iso.datetime(),
 })
+const pendentePessoasSchema = z.object({
+  tipo: z.literal('pessoas'),
+  pergunta: z.string().max(300).default(''),
+  item: itemSchema,
+  unitId: z.string(),
+  expiraEm: z.iso.datetime(),
+})
+const pendenteSchema = z.union([pendentePessoasSchema, pendenteUnidadeSchema])
 type Pendente = z.infer<typeof pendenteSchema>
 const localizacaoPayload = z.object({ lat: z.number(), lng: z.number(), nome: z.string(), endereco: z.string() })
 const listaPayload = z.object({
@@ -77,6 +94,7 @@ type Decision = {
   saidas?: Saida[]
   lacunas?: Lacuna[]
   pergunta?: string
+  avisos?: AcaoS2[]
   contagem?: { validos: number; respondidos: number }
   /** undefined = não mexe; null = limpa; objeto = grava */
   pendente?: Pendente | null
@@ -196,6 +214,8 @@ async function classify(deps: ProcessDeps, ctx: Ctx, pending: Pending[], now: Da
   if (pre.kind === 'pass') {
     const daLista = await respostaDaLista(deps, ctx, pending, now)
     if (daLista) return daLista
+    const pessoas = await respostaDePessoas(deps, ctx, pending, now)
+    if (pessoas) return pessoas
   }
   switch (pre.kind) {
     case 'handoff':
@@ -218,13 +238,23 @@ function lerPendente(v: unknown): Pendente | null {
   return r.success ? r.data : null
 }
 
+/** Contexto do S1 + avisos ativos do cliente de hoje (relógio da conversa) em diante. */
+async function carregarAtendimento(deps: ProcessDeps, ctx: Ctx, now: Date) {
+  const s1 = await carregarContextoS1(deps.db, ctx.restaurant.id, now)
+  const avisos = await avisosAtivosDoCliente(deps.db, {
+    restaurantId: ctx.restaurant.id, customerId: ctx.customer.id, aPartirDe: agoraLocal(now, s1.timezone).data,
+  })
+  return { s1, avisos }
+}
+
 /** Cliente escolheu a unidade na lista (ou digitou o nome): responde os itens guardados sem chamar o LLM. */
 async function respostaDaLista(deps: ProcessDeps, ctx: Ctx, pending: Pending[], now: Date): Promise<Decision | null> {
   if (pending.length !== 1) return null
   const ultimo = pending[0]!
   const lido = interativoSchema.safeParse(ultimo.payload)
   const idLista = lido.success ? lido.data.interativoId : null
-  const p = lerPendente(ctx.conv.pendente)
+  const lidoPendente = lerPendente(ctx.conv.pendente)
+  const p = lidoPendente?.tipo === 'unidade' ? lidoPendente : null
   if (!p || new Date(p.expiraEm) <= now) {
     // toque numa lista que já não vale: avisa sem gastar o modelo
     if (!idLista) return null
@@ -237,25 +267,47 @@ async function respostaDaLista(deps: ProcessDeps, ctx: Ctx, pending: Pending[], 
   }
   const texto = ultimo.texto?.trim() ?? ''
   if (!idLista && (!texto || texto.split(/\s+/).length > MAX_PALAVRAS_ESCOLHA)) return null
-  const s1 = await carregarContextoS1(deps.db, ctx.restaurant.id, now)
+  const { s1, avisos } = await carregarAtendimento(deps, ctx, now)
   const opcoes = s1.unidades.filter((u) => p.opcoes.includes(u.id))
   const escolhida = idLista ? opcoes.find((u) => u.id === idLista) : escolhaDeUnidade(texto, opcoes)
   if (!escolhida) return null
-  const r = resolverS1(p.itens, s1, now, escolhida.id)
+  const r = resolverAtendimento(p.itens, s1, now, avisos, escolhida.id)
   const run: AiRunRow = {
     etapa: 'resposta', modelo: 'deterministico', promptVersion: 's1-lista', costUsd: '0', intent: 'escolha_unidade', resultado: 'ok',
   }
-  return { ...decisaoS1(r, now, p.pergunta), pendente: null, runs: [run] }
+  // o pendente da decisão vale: o aviso escolhido sem pessoas passa a esperar "Para quantas pessoas?"
+  return { ...decisaoAtendimento(r, now, p.pergunta), runs: [run] }
 }
 
-function decisaoS1(r: ResultadoS1, now: Date, pergunta: string): Decision {
+/** Resposta curta ("4", "só eu") ao "Para quantas pessoas?": registra o aviso guardado sem chamar o LLM. */
+async function respostaDePessoas(deps: ProcessDeps, ctx: Ctx, pending: Pending[], now: Date): Promise<Decision | null> {
+  if (pending.length !== 1 || pending[0]!.tipo !== 'texto') return null
+  const p = lerPendente(ctx.conv.pendente)
+  if (p?.tipo !== 'pessoas' || new Date(p.expiraEm) <= now) return null
+  const n = lerPessoas(pending[0]!.texto ?? '')
+  if (n === null) return null // resposta ambígua: a triagem decide (e substitui o pendente)
+  const { s1, avisos } = await carregarAtendimento(deps, ctx, now)
+  // "somos 80": o core responde o limite (aviso_pessoas_invalido) e não guarda pendente ⇒ sem laço
+  const pessoas = n === 'fora' ? MAX_PESSOAS + 1 : n
+  // unidade pelo id guardado: não reabre a lista nem confunde nomes parecidos
+  const r = resolverAtendimento([{ ...p.item, pessoas }], s1, now, avisos, p.unitId)
+  const run: AiRunRow = {
+    etapa: 'resposta', modelo: 'deterministico', promptVersion: 's2-pessoas', costUsd: '0', intent: 'resposta_pessoas', resultado: 'ok',
+  }
+  return { ...decisaoAtendimento(r, now, p.pergunta), runs: [run] }
+}
+
+function decisaoAtendimento(r: ResultadoAtendimento, now: Date, pergunta: string): Decision {
   const saidas: Saida[] = []
   if (r.texto) saidas.push({ tipo: 'texto', texto: r.texto })
   for (const l of r.localizacoes) saidas.push({ tipo: 'localizacao', texto: `${l.nome}: ${l.endereco}`, payload: l })
   if (r.lista) saidas.push({ tipo: 'lista', texto: r.lista.corpo, payload: { botao: r.lista.botao, opcoes: r.lista.opcoes } })
+  const expiraEm = new Date(now.getTime() + PENDENTE_MIN * 60_000).toISOString()
   const pendente: Pendente | null = r.lista && r.pendente.length
-    ? { pergunta, itens: r.pendente, opcoes: r.lista.opcoes.map((o) => o.id), expiraEm: new Date(now.getTime() + PENDENTE_MIN * 60_000).toISOString() }
-    : null
+    ? { tipo: 'unidade', pergunta, itens: r.pendente, opcoes: r.lista.opcoes.map((o) => o.id), expiraEm }
+    : r.perguntarPessoas
+      ? { tipo: 'pessoas', pergunta, item: r.perguntarPessoas.item, unitId: r.perguntarPessoas.unitId, expiraEm }
+      : null
   return {
     replies: saidas.length ? [] : ['foraEscopo'],
     saidas,
@@ -265,6 +317,7 @@ function decisaoS1(r: ResultadoS1, now: Date, pergunta: string): Decision {
     pergunta,
     contagem: { validos: r.validos, respondidos: r.respondidos },
     pendente,
+    avisos: r.acoesS2,
   }
 }
 
@@ -275,23 +328,23 @@ const RESERVE_USD = fmt(2 * ESTIMATE_MICROS)
 
 // Custo desconhecido (null) de chamada possivelmente cobrada é contabilizado pela estimativa;
 // falha sem uso reportado (502, rede) não custa nada.
-function runCostMicros(r: JsonCallResult<TriageV2>): number {
+function runCostMicros(r: JsonCallResult<TriageV3>): number {
   if (r.usage?.costUsd != null) return micros(r.usage.costUsd)
   const maybeBilled = r.ok || r.usage !== null
   return maybeBilled ? ESTIMATE_MICROS : 0
 }
 
 
-function resumoItens(t: TriageV2): string {
+function resumoItens(t: TriageV3): string {
   if (t.itens.length === 0) return 'fora_escopo'
   return [...new Set(t.itens.map((i) => (i.tipo ? `${i.servico}:${i.tipo}` : i.servico)))].join(',')
 }
 
-function toRun(r: JsonCallResult<TriageV2>, fallbackModel: string): AiRunRow {
+function toRun(r: JsonCallResult<TriageV3>, fallbackModel: string): AiRunRow {
   return {
     etapa: 'triagem',
     modelo: r.model ?? fallbackModel,
-    promptVersion: TRIAGE_V2_PROMPT_VERSION,
+    promptVersion: TRIAGE_V3_PROMPT_VERSION,
     tokensIn: r.usage?.tokensIn ?? 0,
     tokensOut: r.usage?.tokensOut ?? 0,
     tokensCache: r.usage?.tokensCache ?? 0,
@@ -316,10 +369,10 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, now: Da
     return { replies: ['modoEconomico'], autor: 'sistema', novoEstado: 'aguardando_humano', audit: 'orcamento.sem_saldo' }
   }
 
-  let result: JsonCallResult<TriageV2>
+  let result: JsonCallResult<TriageV3>
   const runs: AiRunRow[] = []
   try {
-    const call = () => triageV2(deps.llm, { models: deps.triageModels, restaurante: ctx.restaurant.nome, text })
+    const call = () => triageV3(deps.llm, { models: deps.triageModels, restaurante: ctx.restaurant.nome, text })
     const fallbackModel = deps.triageModels[0]!
     result = await call()
     runs.push(toRun(result, fallbackModel))
@@ -348,8 +401,8 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, now: Da
   }
   if (itens.length === 0) return { replies: ['foraEscopo'], autor: 'ia', falhas: 'zerar', runs, budget, pendente: null }
   try {
-    const s1 = await carregarContextoS1(db, ctx.restaurant.id, now)
-    return { ...decisaoS1(resolverS1(itens, s1, now), now, perguntaMascarada(text)), runs, budget }
+    const { s1, avisos } = await carregarAtendimento(deps, ctx, now)
+    return { ...decisaoAtendimento(resolverAtendimento(itens, s1, now, avisos), now, perguntaMascarada(text)), runs, budget }
   } catch (err) {
     await compensate(deps, reservation, spentMicros, ctx.conv.id)
     throw err
@@ -391,6 +444,22 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outc
       return 'human_state'
     }
 
+    // avisos de presença: na mesma transação da resposta; com humano no controle, nada é gravado (acima)
+    let saidas = d.saidas ?? []
+    for (const a of d.avisos ?? []) {
+      if (a.tipo === 'registrar') {
+        const r = await registrarAviso(tx, {
+          restaurantId, customerId: ctx.customer.id, unitId: a.unitId, data: a.data, pessoas: a.pessoas,
+          horarioAprox: a.horarioAprox, nome: ctx.customer.nomePerfil, simulado: ctx.conv.simulada,
+        })
+        await tx.insert(auditLog).values({ restaurantId, atorTipo: 'ia', acao: r.atualizado ? 'aviso.atualizado' : 'aviso.registrado', entidade: 'attendance_notice', entidadeId: r.id })
+      } else {
+        const ok = await cancelarAvisoDoCliente(tx, { restaurantId, customerId: ctx.customer.id, avisoId: a.avisoId })
+        if (ok) await tx.insert(auditLog).values({ restaurantId, atorTipo: 'ia', acao: 'aviso.cancelado', entidade: 'attendance_notice', entidadeId: a.avisoId })
+        else saidas = trocarTrecho(saidas, a.texto, a.textoSeFalhar) // a resposta diz o que o banco fez
+      }
+    }
+
     for (const key of d.replies) {
       const isNotice = key === 'avisoPrivacidade'
       await tx.insert(messages).values({
@@ -406,7 +475,7 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outc
       })
     }
 
-    for (const s of d.saidas ?? []) {
+    for (const s of saidas) {
       await tx.insert(messages).values({
         restaurantId,
         conversationId,
@@ -439,7 +508,17 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outc
     if (d.audit) {
       await tx.insert(auditLog).values({ restaurantId, atorTipo: d.autor, acao: d.audit, entidade: 'conversation', entidadeId: conversationId })
     }
-    return d.replies.length + (d.saidas?.length ?? 0) > 0 ? 'replied' : 'nothing'
+    return d.replies.length + saidas.length > 0 ? 'replied' : 'nothing'
+  })
+}
+
+/** Troca um trecho (parágrafo) do texto composto; o substituto aparece uma vez só. */
+function trocarTrecho(saidas: Saida[], de: string, para: string): Saida[] {
+  return saidas.map((s) => {
+    if (s.tipo !== 'texto' || !s.texto.split('\n\n').includes(de)) return s
+    const partes = s.texto.split('\n\n').map((p) => (p === de ? para : p))
+    const texto = partes.filter((p, i) => p !== para || partes.indexOf(para) === i).join('\n\n')
+    return { ...s, texto }
   })
 }
 

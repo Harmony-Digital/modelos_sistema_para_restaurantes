@@ -1,7 +1,7 @@
 import { AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-export function StatCard(props: { label: string; value: string; hint?: string; tone?: 'neutro' | 'ok' | 'alerta' }) {
+export function StatCard(props: { label: string; value: string; hint?: string; action?: React.ReactNode; tone?: 'neutro' | 'ok' | 'alerta' }) {
   const tone = props.tone ?? 'neutro'
   return (
     <div role="group" aria-label={`${props.label}: ${props.value}`} className="flex min-w-0 flex-col gap-1 rounded-lg border border-border bg-card p-4">
@@ -13,6 +13,7 @@ export function StatCard(props: { label: string; value: string; hint?: string; t
         <span className="min-w-0 break-words">{props.value}</span>
       </span>
       {props.hint && <span className="text-sm text-muted-foreground">{props.hint}</span>}
+      {props.action}
     </div>
   )
 }

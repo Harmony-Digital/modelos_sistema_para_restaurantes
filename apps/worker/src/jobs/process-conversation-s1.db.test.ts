@@ -5,7 +5,7 @@ import { encryptPhone, keyFromBase64 } from '@atd/core'
 import { ingestInbound, schema, type Enqueue } from '@atd/db'
 import { getTestDb, resetDb, seedRestaurant } from '@atd/db/test-utils'
 import type * as DbModule from '@atd/db'
-import type { LlmClient, TriageV2 } from '@atd/ai'
+import type { LlmClient, TriageV3 } from '@atd/ai'
 import type { SendResult } from '@atd/whatsapp'
 import { createLogger } from '../logger.ts'
 import { processConversation, type ProcessDeps } from './process-conversation.ts'
@@ -35,7 +35,7 @@ const log = createLogger('silent')
 const SEG_14H = new Date('2026-10-05T14:00:00-03:00')
 
 const h = (tipo: string, extra: Record<string, string | null> = {}) =>
-  ({ servico: 'horario_unidades', tipo, unidade: null, data: null, tema: null, ...extra }) as TriageV2['itens'][number]
+  ({ servico: 'horario_unidades', tipo, unidade: null, data: null, tema: null, pessoas: null, horario: null, ...extra }) as TriageV3['itens'][number]
 
 async function setup(nUnidades: 1 | 4 = 1) {
   const { restaurantId, unitId } = await seedRestaurant(db)
@@ -70,7 +70,7 @@ async function receive(restaurantId: string, texto: string, interativoId: string
   return r.conversationId
 }
 
-function fakeLlm(script: TriageV2[]) {
+function fakeLlm(script: TriageV3[]) {
   const calls: string[] = []
   const llm: LlmClient = {
     async completeJson(p) {
@@ -111,7 +111,7 @@ describe('S1 no worker', () => {
       'Domingo (11/10), a unidade Asa Sul abre das 11h30 às 16h.',
     ])
     const [run] = await db.select().from(schema.aiRuns)
-    expect(run).toMatchObject({ promptVersion: 'triage-v2', itensValidos: 1, itensRespondidos: 1, simulado: false, intent: 'horario_unidades:horario_dia' })
+    expect(run).toMatchObject({ promptVersion: 'triage-v3', itensValidos: 1, itensRespondidos: 1, simulado: false, intent: 'horario_unidades:horario_dia' })
   })
 
   it('endereço sai como texto e como localização, nessa ordem', async () => {
@@ -351,7 +351,7 @@ describe('S1 no worker', () => {
   it('item humano em qualquer posição ⇒ handoff', async () => {
     const { restaurantId } = await setup()
     const conv = await receive(restaurantId, 'abre domingo? quero reclamar')
-    const { llm } = fakeLlm([{ itens: [h('horario_dia', { data: 'domingo' }), { servico: 'humano', tipo: null, unidade: null, data: null, tema: null }], fora_escopo: false }])
+    const { llm } = fakeLlm([{ itens: [h('horario_dia', { data: 'domingo' }), { servico: 'humano', tipo: null, unidade: null, data: null, tema: null, pessoas: null, horario: null }], fora_escopo: false }])
     await processConversation(deps(llm, fakeWa()), conv)
     expect((await conversa(conv)).estado).toBe('aguardando_humano')
   })

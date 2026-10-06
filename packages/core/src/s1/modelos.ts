@@ -23,6 +23,35 @@ export const MODELOS_S1 = {
   lista_expirada: { texto: 'Essa lista expirou. Pode me mandar a pergunta de novo?', variaveis: [] },
   lacuna: { texto: 'Ainda não tenho essa informação; vou verificar com a equipe.', variaveis: [] },
   em_breve: { texto: 'Sobre {servico}, ainda estou aprendendo e em breve vou conseguir responder por aqui.', variaveis: ['servico'] },
+  // S2 — avisos de presença (Etapa 03)
+  escolher_unidade_aviso: { texto: 'Para qual unidade é o aviso? Toque em "Ver unidades" e escolha.', variaveis: [] },
+  aviso_registrado: {
+    texto: 'Anotado: {unidade}, {quando}, {pessoas}{horario}. Se mudar de ideia, é só me avisar.',
+    variaveis: ['unidade', 'quando', 'pessoas', 'horario'],
+  },
+  aviso_atualizado: { texto: 'Atualizei seu aviso: {unidade}, {quando}, {pessoas}{horario}.', variaveis: ['unidade', 'quando', 'pessoas', 'horario'] },
+  aviso_pessoas: { texto: 'Para quantas pessoas?', variaveis: [] },
+  aviso_pessoas_invalido: {
+    texto: 'Consigo anotar avisos de 1 a 60 pessoas. Para grupos maiores, fale com a nossa equipe.',
+    variaveis: [],
+  },
+  // a triagem não vê o histórico: a pergunta de retorno pede o aviso completo de novo
+  aviso_data_fora: { texto: 'Consigo anotar avisos de hoje até {limite}. Se quiser, mande o aviso de novo com outro dia.', variaveis: ['limite'] },
+  aviso_unidade_fechada: {
+    texto: '{quando}, a unidade {unidade} não abre. Se quiser, mande o aviso de novo para outro dia.',
+    variaveis: ['quando', 'unidade'],
+  },
+  aviso_horario_fora: {
+    texto: '{quando}, a unidade {unidade} funciona {turnos}. Se quiser, mande o aviso de novo com um horário nesse período.',
+    variaveis: ['quando', 'unidade', 'turnos'],
+  },
+  aviso_horario_passado: { texto: 'Esse horário de hoje já passou. Se quiser, mande o aviso de novo com outro horário ou dia.', variaveis: [] },
+  aviso_cancelado: { texto: 'Pronto, cancelei seu aviso: {unidade}, {quando}.', variaveis: ['unidade', 'quando'] },
+  aviso_nao_encontrado: { texto: 'Não encontrei nenhum aviso ativo seu.', variaveis: [] },
+  aviso_qual_cancelar: {
+    texto: 'Você tem estes avisos:\n{linhas}\nPara cancelar, mande por exemplo: "{exemplo}".',
+    variaveis: ['linhas', 'exemplo'],
+  },
 } as const satisfies Record<string, { texto: string; variaveis: readonly string[] }>
 
 export type ChaveModelo = keyof typeof MODELOS_S1
@@ -77,7 +106,7 @@ export function formatarTurnos(turnos: readonly Turno[]): string {
 
 export const DIAS_SEMANA = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'] as const
 
-const ddmm = (d: DataIso) => {
+export const ddmm = (d: DataIso) => {
   const { dia, mes } = partesDaData(d)
   return `${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}`
 }
