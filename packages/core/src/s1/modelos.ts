@@ -44,6 +44,7 @@ export const MODELOS_S1 = {
     texto: '{quando}, a unidade {unidade} funciona {turnos}. Se quiser, mande o aviso de novo com um horário nesse período.',
     variaveis: ['quando', 'unidade', 'turnos'],
   },
+  aviso_horario_passado: { texto: 'Esse horário de hoje já passou. Se quiser, mande o aviso de novo com outro horário ou dia.', variaveis: [] },
   aviso_cancelado: { texto: 'Pronto, cancelei seu aviso: {unidade}, {quando}.', variaveis: ['unidade', 'quando'] },
   aviso_nao_encontrado: { texto: 'Não encontrei nenhum aviso ativo seu.', variaveis: [] },
   aviso_qual_cancelar: {

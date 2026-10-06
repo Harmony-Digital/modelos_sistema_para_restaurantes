@@ -27,6 +27,7 @@ export const ROTULOS_MODELO: Record<ChaveModelo, { titulo: string; quando: strin
   aviso_data_fora: { titulo: 'Dia fora do prazo', quando: 'O aviso é para antes de hoje ou depois de 30 dias.' },
   aviso_unidade_fechada: { titulo: 'Unidade fechada no dia do aviso', quando: 'A unidade não abre no dia em que o cliente avisou que vai.' },
   aviso_horario_fora: { titulo: 'Horário do aviso fora do funcionamento', quando: 'O horário informado não está dentro dos horários do dia.' },
+  aviso_horario_passado: { titulo: 'Horário do aviso já passou', quando: 'O aviso é para hoje num horário que já passou.' },
   aviso_cancelado: { titulo: 'Aviso cancelado', quando: 'O cliente pede para cancelar o aviso.' },
   aviso_nao_encontrado: { titulo: 'Nenhum aviso para cancelar', quando: 'O cliente pede para cancelar, mas não tem aviso ativo.' },
   aviso_qual_cancelar: { titulo: 'Qual aviso cancelar', quando: 'O cliente tem vários avisos e não disse qual cancelar. {exemplo} é uma frase de cancelamento com o primeiro aviso da lista.' },

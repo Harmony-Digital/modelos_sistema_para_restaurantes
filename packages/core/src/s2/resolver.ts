@@ -15,11 +15,12 @@ import type { AcaoS2, AvisoAtivoS2, PerguntaPessoas, ResultadoS2 } from './tipos
 /** Avisos só de hoje até hoje + 30 dias (fuso do restaurante). */
 export const DIAS_AVISO = 30
 
-export type ValidacaoAgenda = { ok: true } | { ok: false; motivo: 'fechada' | 'horario_fora'; turnos?: Turno[] }
+export type ValidacaoAgenda = { ok: true } | { ok: false; motivo: 'fechada' | 'horario_fora' | 'horario_passado'; turnos?: Turno[] }
 
 /**
  * A unidade abre na data e `hhmm` (se houver) cai num turno do dia — turno que cruza a meia-noite
- * vale até o fechamento na madrugada. Compartilhada com o formulário do painel.
+ * vale até o fechamento na madrugada. Com `agora` (data e minuto no fuso do restaurante), recusa
+ * também o horário de hoje que já passou. Compartilhada com o formulário do painel.
  */
 export function validarAvisoNaAgenda(
   unidade: AgendaUnidade,
@@ -27,19 +28,26 @@ export function validarAvisoNaAgenda(
   hhmm: string | null,
   politica: PoliticaFeriado,
   feriados: ReadonlyMap<DataIso, string>,
+  agora?: { data: DataIso; minuto: number },
 ): ValidacaoAgenda {
   const dia = horarioDoDia(unidade, data, politica, feriados)
+  const min = hhmm === null ? null : minutosDe(hhmm)
+  // a madrugada de um turno que cruza a meia-noite ainda está por vir
+  const passou = (turnos: readonly Turno[]) =>
+    !!agora && min !== null && data === agora.data && min < agora.minuto
+    && !turnos.some((t) => cruzaMeiaNoite(t) && min < minutosDe(t.fecha))
+  const PASSOU = { ok: false, motivo: 'horario_passado' } as const
   // sem horário cadastrado não dá para afirmar que está fechada: não bloqueia
-  if (dia.origem === 'semanal' && !temHorarioCadastrado(unidade)) return { ok: true }
+  if (dia.origem === 'semanal' && !temHorarioCadastrado(unidade)) return passou([]) ? PASSOU : { ok: true }
   if (dia.turnos.length === 0) return { ok: false, motivo: 'fechada' }
-  if (hhmm === null) return { ok: true }
-  const min = minutosDe(hhmm)
+  if (min === null) return { ok: true }
   const dentro = dia.turnos.some((t) => {
     const abre = minutosDe(t.abre)
     const fecha = minutosDe(t.fecha)
     return cruzaMeiaNoite(t) ? min >= abre || min < fecha : min >= abre && min < fecha
   })
-  return dentro ? { ok: true } : { ok: false, motivo: 'horario_fora', turnos: dia.turnos }
+  if (!dentro) return { ok: false, motivo: 'horario_fora', turnos: dia.turnos }
+  return passou(dia.turnos) ? PASSOU : { ok: true }
 }
 
 /** Resultado antes da composição: a pergunta de pessoas fica de fora até saber se há lista pendente. */
@@ -122,13 +130,15 @@ export function resolverItensS2(
     }
     const h = normalizarHorario(item.horario)
     // agenda antes de perguntar pessoas: não pergunta para depois dizer que está fechada
-    const v = validarAvisoNaAgenda(u, data, h.hhmm, ctx.politicaFeriado, feriados)
+    const v = validarAvisoNaAgenda(u, data, h.hhmm, ctx.politicaFeriado, feriados, local)
     if (!v.ok) {
       validos++
       trechos.push(
         v.motivo === 'fechada'
           ? m('aviso_unidade_fechada', { quando: rotulo(data), unidade: u.nome })
-          : m('aviso_horario_fora', { quando: rotulo(data), unidade: u.nome, turnos: formatarTurnos(v.turnos ?? []) }),
+          : v.motivo === 'horario_passado'
+            ? m('aviso_horario_passado')
+            : m('aviso_horario_fora', { quando: rotulo(data), unidade: u.nome, turnos: formatarTurnos(v.turnos ?? []) }),
       )
       return
     }

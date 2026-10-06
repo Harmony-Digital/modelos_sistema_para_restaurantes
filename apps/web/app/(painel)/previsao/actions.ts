@@ -1,6 +1,7 @@
 'use server'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { agoraLocal } from '@atd/core/s1'
 import { cancelarAvisoPainel, carregarUnidadesPainel, criarAvisoPainel } from '@atd/db'
 import { actionErrorFromZod, type ActionResult } from '@/lib/action-result'
 import { requireStaff } from '@/lib/dal'
@@ -26,7 +27,7 @@ export async function criarAvisoAction(input: AvisoForm): Promise<ActionResult<{
   // a RLS já esconde unidades fora do acesso; o insert não confere se a unidade está ativa nem aberta
   const unidade = unidades.find((u) => u.id === v.unitId && u.ativo)
   if (!unidade) return { ok: false, fieldErrors: { unitId: 'Escolha uma unidade.' } }
-  const erros = validarAvisoNaUnidade(unidade, v.data, v.horario, restaurante.politicaFeriado, hojeLocal(new Date(), restaurante.timezone))
+  const erros = validarAvisoNaUnidade(unidade, v.data, v.horario, restaurante.politicaFeriado, agoraLocal(new Date(), restaurante.timezone))
   if (erros) return { ok: false, fieldErrors: erros }
   const r = await criarAvisoPainel(getDb(), s.claims, {
     unitId: v.unitId, data: v.data, pessoas: v.pessoas, horarioAprox: v.horario === '' ? null : v.horario, nome: v.nome === '' ? null : v.nome,

@@ -45,19 +45,19 @@ export function resumoUnidade(p: PrevisaoUnidade): { pessoas: string; avisos: st
   return { pessoas: plural(p.totalPessoas, 'pessoa', 'pessoas'), avisos: plural(ativos.length, 'aviso', 'avisos') }
 }
 
-/** Mesma regra do resolver da IA (agenda da unidade, feriado e turnos); devolve erros por campo ou null. */
+/** Mesma regra do resolver da IA (agenda da unidade, feriado, turnos e horário de hoje que já passou); erros por campo ou null. */
 export function validarAvisoNaUnidade(
   unidade: AgendaUnidade,
   data: DataIso,
   horario: string,
   politica: PoliticaFeriado,
-  hoje: DataIso,
+  agora: { data: DataIso; minuto: number },
 ): Record<string, string> | null {
-  const ano = Number(hoje.slice(0, 4))
+  const ano = Number(agora.data.slice(0, 4))
   const feriados = mapaFeriados([...feriadosNacionais(ano), ...feriadosNacionais(ano + 1)])
-  const v = validarAvisoNaAgenda(unidade, data, horario === '' ? null : horario, politica, feriados)
+  const v = validarAvisoNaAgenda(unidade, data, horario === '' ? null : horario, politica, feriados, agora)
   if (v.ok) return null
-  return v.motivo === 'fechada'
-    ? { data: 'A unidade não abre nesse dia.' }
-    : { horario: `Nesse dia a unidade funciona ${formatarTurnos(v.turnos ?? [])}.` }
+  if (v.motivo === 'fechada') return { data: 'A unidade não abre nesse dia.' }
+  if (v.motivo === 'horario_passado') return { horario: 'Esse horário de hoje já passou.' }
+  return { horario: `Nesse dia a unidade funciona ${formatarTurnos(v.turnos ?? [])}.` }
 }

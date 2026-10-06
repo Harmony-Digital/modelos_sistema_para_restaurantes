@@ -142,6 +142,21 @@ describe('resolverS2 — registrar', () => {
     expect(fora.texto).toContain('funciona das 11h30 às 15h e das 18h às 2h')
   })
 
+  it('horário de hoje que já passou: não registra', () => {
+    const PASSOU = 'Esse horário de hoje já passou. Se quiser, mande o aviso de novo com outro horário ou dia.'
+    const r = resolverS2([reg({ unidade: 'asa norte', data: 'hoje', pessoas: 2, horario: '12h' })], CONTEXTO, SEG_14H, [])
+    expect(r.texto).toBe(PASSOU)
+    expect(r.acoes).toEqual([])
+    expect([r.validos, r.respondidos]).toEqual([1, 0])
+    // agora mesmo, mais tarde, amanhã no mesmo horário e horário vago passam
+    expect(resolverS2([reg({ unidade: 'asa norte', pessoas: 2, horario: '14h' })], CONTEXTO, SEG_14H, []).acoes).toHaveLength(1)
+    expect(resolverS2([reg({ unidade: 'asa norte', data: 'amanhã', pessoas: 2, horario: '12h' })], CONTEXTO, SEG_14H, []).acoes).toHaveLength(1)
+    expect(resolverS2([reg({ unidade: 'asa norte', pessoas: 2, horario: 'de manhã' })], CONTEXTO, SEG_14H, []).acoes).toHaveLength(1)
+    // 23h50 de sábado: 20h já passou; 1h30 é a madrugada do turno de hoje, ainda não passou
+    expect(resolverS2([reg({ unidade: 'asa sul', pessoas: 2, horario: '20h' })], CONTEXTO, SAB_2350, []).texto).toBe(PASSOU)
+    expect(resolverS2([reg({ unidade: 'asa sul', pessoas: 2, horario: '1h30' })], CONTEXTO, SAB_2350, []).acoes).toHaveLength(1)
+  })
+
   it('atualiza quando já há aviso ativo do mesmo cliente/unidade/dia', () => {
     const avisos: AvisoAtivoS2[] = [{ id: 'a1', unitId: 'u-asa-sul', data: '2026-10-10', pessoas: 2, horarioAprox: null }]
     const r = resolverS2([reg({ unidade: 'asa sul', data: 'sábado', pessoas: 4, horario: '20h' })], CONTEXTO, SEG_14H, avisos)
@@ -277,6 +292,16 @@ describe('validarAvisoNaAgenda', () => {
     expect(validarAvisoNaAgenda(ASA_SUL, '2026-10-09', '02:00', 'normal', feriados).ok).toBe(false)
     expect(validarAvisoNaAgenda(AGUAS_CLARAS, '2026-10-06', '12:00', 'normal', feriados).ok).toBe(false)
   })
+  it('com o relógio: horário de hoje que já passou', () => {
+    const agora = { data: '2026-10-06', minuto: 20 * 60 }
+    expect(validarAvisoNaAgenda(ASA_SUL, '2026-10-06', '19:00', 'normal', feriados, agora)).toEqual({ ok: false, motivo: 'horario_passado' })
+    expect(validarAvisoNaAgenda(ASA_SUL, '2026-10-06', '20:00', 'normal', feriados, agora)).toEqual({ ok: true })
+    expect(validarAvisoNaAgenda(ASA_SUL, '2026-10-07', '19:00', 'normal', feriados, agora)).toEqual({ ok: true })
+    expect(validarAvisoNaAgenda(ASA_SUL, '2026-10-06', null, 'normal', feriados, agora)).toEqual({ ok: true })
+    // fora do turno continua sendo "fora do turno"
+    expect(validarAvisoNaAgenda(ASA_SUL, '2026-10-06', '16:00', 'normal', feriados, agora)).toMatchObject({ motivo: 'horario_fora' })
+  })
+
   it('unidade sem horário cadastrado: não afirma que está fechada', () => {
     const semHorario = { ...ASA_SUL, semanal: [[], [], [], [], [], [], []], excecoes: {} }
     expect(validarAvisoNaAgenda(semHorario, '2026-10-06', '20:00', 'normal', feriados)).toEqual({ ok: true })
