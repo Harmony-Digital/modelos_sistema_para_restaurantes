@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { getTestDb, resetDb, seedRestaurant, seedStaff } from './test-utils.ts'
 import type { JwtClaims } from './rls.ts'
 import { lerLimites, relatorioMes, resumoGastos, salvarCotacao, salvarLimite } from './painel-gastos.ts'
@@ -86,8 +86,11 @@ describe('resumo de gastos', () => {
     expect(r.hoje).toEqual({ ia: '0.250000', simulacao: '0.900000', whatsapp: '0' })
     expect(r.mes).toEqual({ ia: '3.500000', simulacao: '0', whatsapp: '0' })
     expect(r.alertas).toEqual([
-      { escopo: 'simulacao', periodo: 'dia', nivel: 80, inicioPeriodo: '2026-09-30', usoUsd: '0.900000', limiteUsd: '1.000000', criadoEm: expect.any(Date) },
+      { escopo: 'simulacao', periodo: 'dia', nivel: 80, inicioPeriodo: '2026-09-30', usoUsd: '0.900000', limiteUsd: '1.000000', criadoEm: expect.any(Date), limiteAlteradoDepois: false },
     ])
+    // dono mexe no limite depois do alerta ⇒ a tela sabe que o 100% pode não valer mais
+    await db.update(budgetLimits).set({ limiteUsd: '2', updatedAt: new Date(Date.now() + 60_000) }).where(and(eq(budgetLimits.escopo, 'simulacao'), eq(budgetLimits.periodo, 'dia')))
+    expect((await resumoGastos(db, as(c.gerente), agora)).alertas[0]).toMatchObject({ limiteUsd: '2.000000', limiteAlteradoDepois: true })
     const at = await resumoGastos(db, as(c.atendente, 'aal1'), agora)
     expect(at).toEqual({ hoje: { ia: '0', simulacao: '0', whatsapp: '0' }, mes: { ia: '0', simulacao: '0', whatsapp: '0' }, alertas: [] })
   })

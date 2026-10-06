@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { mediaPorConversa, mesDaBusca, pctDoLimite, textoAlerta, ultimosMeses, usdParaCampo } from './gastos-tela'
+import { emModoEconomico, mediaPorConversa, mesDaBusca, pctDoLimite, textoAlerta, ultimosMeses, usdParaCampo } from './gastos-tela'
 
 const alerta = (over = {}) => ({
   escopo: 'ia' as const, periodo: 'dia' as const, nivel: 80 as const, inicioPeriodo: '2026-10-06', usoUsd: '1.640000', limiteUsd: '2.000000',
-  criadoEm: new Date(), ...over,
+  criadoEm: new Date(), limiteAlteradoDepois: false, ...over,
 })
 
 describe('pctDoLimite', () => {
@@ -26,6 +26,17 @@ describe('textoAlerta', () => {
   })
   it('alerta de 100% nunca mostra menos que 100% (uso liquidado abaixo da reserva)', () => {
     expect(textoAlerta(alerta({ nivel: 100, usoUsd: '1.9' }))).toBe('IA: 100% do limite do dia')
+    expect(emModoEconomico(alerta({ nivel: 100, usoUsd: '1.9' }))).toBe(true)
+  })
+  it('dono aumentou o limite depois do alerta de 100%: mostra o % atual e sai do modo econômico', () => {
+    const a = alerta({ nivel: 100, usoUsd: '2', limiteUsd: '4', limiteAlteradoDepois: true })
+    expect(textoAlerta(a)).toBe('IA: 50% do limite do dia')
+    expect(emModoEconomico(a)).toBe(false)
+    // aumentou, mas ainda abaixo do uso: continua parado
+    const b = alerta({ nivel: 100, usoUsd: '2', limiteUsd: '1.5', limiteAlteradoDepois: true })
+    expect(textoAlerta(b)).toBe('IA: 133% do limite do dia')
+    expect(emModoEconomico(b)).toBe(true)
+    expect(emModoEconomico(alerta())).toBe(false)
   })
 })
 

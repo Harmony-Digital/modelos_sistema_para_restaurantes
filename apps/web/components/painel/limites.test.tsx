@@ -38,6 +38,8 @@ describe('Limites', () => {
     expect(within(sim).getByLabelText(/^Limite do mês/)).toHaveValue('10,00')
     expect(screen.getByRole('group', { name: 'WhatsApp' })).toBeInTheDocument()
     expect(screen.getByLabelText(/^Cotação do dólar/)).toHaveValue('5,00')
+    // "Usado" é o já gasto; o aviso de % também conta respostas em andamento (reservas): a tela explica a diferença
+    expect(screen.getByText(/aviso de % também conta as respostas em andamento/)).toBeInTheDocument()
   })
 
   it('o dono salva um limite com vírgula', async () => {

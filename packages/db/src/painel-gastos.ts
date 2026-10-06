@@ -18,6 +18,8 @@ export type AlertaPainel = {
   usoUsd: string
   limiteUsd: string
   criadoEm: Date
+  /** o limite foi mudado depois do alerta (o 100% pode não valer mais: a tela mostra o % atual) */
+  limiteAlteradoDepois: boolean
 }
 export type LinhasRelatorio = {
   porDia: { dia: string; realUsd: string; simulacaoUsd: string }[]
@@ -144,9 +146,11 @@ export function resumoGastos(
 
     const alertas = await tx.execute<{
       escopo: Escopo; periodo: PeriodoGasto; nivel: number; inicio_periodo: string; uso: string; limite: string | null; criado_em: string
+      alterado_depois: boolean
     }>(sql`
       select a.escopo, a.periodo, a.nivel, to_char(a.inicio_periodo, 'YYYY-MM-DD') as inicio_periodo,
-             coalesce(c.gasto + c.reservado, 0)::numeric(12, 6)::text as uso, l.limite_usd::text as limite, a.created_at as criado_em
+             coalesce(c.gasto + c.reservado, 0)::numeric(12, 6)::text as uso, l.limite_usd::text as limite, a.created_at as criado_em,
+             coalesce(l.updated_at > a.created_at, false) as alterado_depois
         from public.budget_alerts a
         left join public.budget_counters c
           on c.restaurant_id = a.restaurant_id and c.escopo = a.escopo and c.periodo = a.periodo and c.inicio_periodo = a.inicio_periodo
@@ -163,7 +167,7 @@ export function resumoGastos(
       vistos.add(chave)
       lista.push({
         escopo: a.escopo, periodo: a.periodo, nivel: a.nivel as 80 | 100, inicioPeriodo: a.inicio_periodo, usoUsd: a.uso,
-        limiteUsd: a.limite ?? '0', criadoEm: new Date(a.criado_em),
+        limiteUsd: a.limite ?? '0', criadoEm: new Date(a.criado_em), limiteAlteradoDepois: a.alterado_depois === true,
       })
     }
     return { hoje, mes, alertas: lista }

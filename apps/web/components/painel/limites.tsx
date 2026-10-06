@@ -99,6 +99,9 @@ export function Limites(props: { limites: Limite[]; uso: Uso; cotacao: string; a
   return (
     <div className="flex flex-col gap-4">
       {props.somenteLeitura && <p className="text-sm text-muted-foreground">Só o dono altera os limites e a cotação.</p>}
+      <p className="text-sm text-muted-foreground">
+        “Usado” é o que já foi gasto; o aviso de % também conta as respostas em andamento, por isso pode aparecer um pouco antes.
+      </p>
       {ESCOPOS_GASTO.map((escopo) => (
         <fieldset key={escopo} aria-label={NOME_ESCOPO[escopo]} className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4">
           <legend className="px-1 font-semibold text-foreground">{NOME_ESCOPO[escopo]}</legend>

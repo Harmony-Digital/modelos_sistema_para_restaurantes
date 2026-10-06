@@ -1,4 +1,4 @@
-import { acessoInbox, contarAguardando, getSingleRestaurantId, resumoGastos, schema } from '@atd/db'
+import { acessoInbox, contarAguardando, getSingleRestaurantId, schema } from '@atd/db'
 import { eq } from 'drizzle-orm'
 import { Avisos } from '@/components/conversas/avisos'
 import { FaixaAlertaGastos } from '@/components/painel/alerta-gastos'
@@ -7,6 +7,7 @@ import { topicosInbox } from '@/lib/conversas'
 import { SimulatorLauncher } from '@/components/simulator/launcher'
 import { requireStaff } from '@/lib/dal'
 import { getDb } from '@/lib/server/db'
+import { resumoGastosDoRequest } from '@/lib/server/gastos'
 import {
   abrirSimuladorAction, buscarSimuladorAction, detalhesSimuladorAction, enviarSimuladorAction, novoClienteSimuladorAction,
   relogioSimuladorAction,
@@ -35,7 +36,7 @@ export default async function PainelLayout({ children }: { children: React.React
     contarAguardando(db, session.claims),
     acessoInbox(db, session.claims),
     // alertas de gasto do período corrente: só dono e gerente
-    session.role === 'atendente' ? null : resumoGastos(db, session.claims, new Date()),
+    session.role === 'atendente' ? null : resumoGastosDoRequest(session.claims),
   ])
   const avisos = <Avisos aguardando={aguardando} topicos={acesso ? topicosInbox(acesso) : []} />
   const faixa = gastos ? <FaixaAlertaGastos alertas={gastos.alertas} /> : null

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { AlertTriangle } from 'lucide-react'
 import type { AlertaPainel } from '@atd/db'
-import { textoAlerta } from '@/lib/gastos-tela'
+import { emModoEconomico, textoAlerta } from '@/lib/gastos-tela'
 
 const LINK = 'inline-flex min-h-11 shrink-0 items-center text-sm font-medium text-link underline-offset-4 [@media(hover:hover)]:hover:underline'
 
@@ -18,7 +18,7 @@ export function FaixaAlertaGastos(props: { alertas: AlertaPainel[] }) {
         <AlertTriangle aria-hidden="true" className="size-5 shrink-0 text-warning" />
         <p className="min-w-0 flex-1 text-sm text-foreground">
           <strong className="font-semibold">{textoAlerta(principal!)}</strong>
-          {principal!.nivel === 100 && <span> — modo econômico até o próximo período ou até aumentar o limite.</span>}
+          {emModoEconomico(principal!) && <span> — modo econômico até o próximo período ou até aumentar o limite.</span>}
           {outros.length > 0 && <span className="text-muted-foreground"> (e mais {outros.length} {outros.length === 1 ? 'alerta' : 'alertas'})</span>}
         </p>
         <Link href="/mais/gastos" className={LINK}>Ajustar limites</Link>
@@ -39,7 +39,7 @@ export function CartaoAlertasGastos(props: { alertas: AlertaPainel[] }) {
         {porGravidade(props.alertas).map((a) => (
           <li key={`${a.escopo}:${a.periodo}`}>
             {textoAlerta(a)}
-            {a.nivel === 100 && <span className="text-muted-foreground"> — modo econômico até o próximo período ou até aumentar o limite</span>}
+            {emModoEconomico(a) && <span className="text-muted-foreground"> — modo econômico até o próximo período ou até aumentar o limite</span>}
           </li>
         ))}
       </ul>

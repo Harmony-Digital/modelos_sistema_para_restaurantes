@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { CartaoAlertasGastos, FaixaAlertaGastos } from './alerta-gastos'
 
-const a80 = { escopo: 'ia' as const, periodo: 'dia' as const, nivel: 80 as const, inicioPeriodo: '2026-10-06', usoUsd: '1.64', limiteUsd: '2', criadoEm: new Date() }
+const a80 = { escopo: 'ia' as const, periodo: 'dia' as const, nivel: 80 as const, inicioPeriodo: '2026-10-06', usoUsd: '1.64', limiteUsd: '2', criadoEm: new Date(), limiteAlteradoDepois: false }
 const a100 = { ...a80, escopo: 'simulacao' as const, periodo: 'mes' as const, nivel: 100 as const, inicioPeriodo: '2026-10-01', usoUsd: '10', limiteUsd: '10' }
 
 describe('FaixaAlertaGastos', () => {
@@ -25,6 +25,15 @@ describe('FaixaAlertaGastos', () => {
     expect(screen.getByText('IA: 82% do limite do dia')).toBeInTheDocument()
     expect(screen.queryByText(/modo econômico/)).toBeNull()
     expect(screen.queryByText(/e mais/)).toBeNull()
+  })
+})
+
+describe('limite aumentado depois do alerta de 100%', () => {
+  it('faixa e cartão mostram o % atual, sem "modo econômico"', () => {
+    const subiu = { ...a100, limiteUsd: '20', limiteAlteradoDepois: true }
+    render(<><FaixaAlertaGastos alertas={[subiu]} /><CartaoAlertasGastos alertas={[subiu]} /></>)
+    expect(screen.getAllByText(/Simulação: 50% do limite do mês/)).toHaveLength(2)
+    expect(screen.queryByText(/modo econômico/)).toBeNull()
   })
 })
 

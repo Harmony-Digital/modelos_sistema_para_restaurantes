@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import {
-  contarPedidosNovos, getPanelStatus, lerLimites, listAwaitingHuman, listarPedidosTitular, resumoGastos, resumoInicio, tempoAteAssumirHoje, totalPrevistoHoje,
+  contarPedidosNovos, getPanelStatus, lerLimites, listAwaitingHuman, listarPedidosTitular, resumoInicio, tempoAteAssumirHoje, totalPrevistoHoje,
 } from '@atd/db'
 import { AwaitingHuman } from '@/components/conversations/awaiting-human'
 import { CartaoPrazoLgpd } from '@/components/home/cartao-prazo-lgpd'
@@ -14,6 +14,7 @@ import { formatarEspera } from '@/lib/conversas'
 import { percentual } from '@/lib/inicio'
 import { rotuloProvedorIa } from '@/lib/provedor-ia'
 import { getDb } from '@/lib/server/db'
+import { resumoGastosDoRequest } from '@/lib/server/gastos'
 import { devolverAction } from './conversas/actions'
 
 export const dynamic = 'force-dynamic'
@@ -29,7 +30,7 @@ export default async function InicioPage() {
   const resumo = gestao ? await resumoInicio(getDb(), session.claims) : null
   const espera = gestao ? await tempoAteAssumirHoje(getDb(), session.claims) : null
   const [limites, gastos] = gestao
-    ? await Promise.all([lerLimites(getDb(), session.claims), resumoGastos(getDb(), session.claims, new Date())])
+    ? await Promise.all([lerLimites(getDb(), session.claims), resumoGastosDoRequest(session.claims)])
     : [null, null]
   const pedidosLgpd = gestao ? await listarPedidosTitular(getDb(), session.claims, { status: ['aberto', 'em_andamento'] }) : []
   const online = s.workerLastSeen !== null && Date.now() - s.workerLastSeen.getTime() < ONLINE_MS

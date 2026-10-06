@@ -13,10 +13,22 @@ export function pctDoLimite(uso: string, limite: string): number {
   }
 }
 
-/** "IA: 82% do limite do dia". Alerta de 100% nunca mostra menos de 100%. */
-export function textoAlerta(a: { escopo: EscopoGasto; periodo: PeriodoGasto; nivel: 80 | 100; usoUsd: string; limiteUsd: string }): string {
+type AlertaTela = {
+  escopo: EscopoGasto; periodo: PeriodoGasto; nivel: 80 | 100; usoUsd: string; limiteUsd: string; limiteAlteradoDepois: boolean
+}
+
+/**
+ * A IA desse escopo está parada (modo econômico): alerta de 100%, a menos que o dono tenha mudado o limite depois e o uso
+ * esteja abaixo dele. Sem mudança no limite, o 100% vale mesmo com o uso um pouco abaixo (a reserva seguinte não coube).
+ */
+export function emModoEconomico(a: AlertaTela): boolean {
+  return a.nivel === 100 && !(a.limiteAlteradoDepois && pctDoLimite(a.usoUsd, a.limiteUsd) < 100)
+}
+
+/** "IA: 82% do limite do dia". Em modo econômico nunca mostra menos de 100%; com o limite aumentado, o % atual. */
+export function textoAlerta(a: AlertaTela): string {
   const pct = pctDoLimite(a.usoUsd, a.limiteUsd)
-  return `${CURTO[a.escopo]}: ${a.nivel === 100 ? Math.max(pct, 100) : pct}% do limite ${PERIODO[a.periodo]}`
+  return `${CURTO[a.escopo]}: ${emModoEconomico(a) ? Math.max(pct, 100) : pct}% do limite ${PERIODO[a.periodo]}`
 }
 
 /** numeric do banco ("2.000000") → texto do campo ("2,00"): pelo menos 2 casas, sem zeros sobrando. */
