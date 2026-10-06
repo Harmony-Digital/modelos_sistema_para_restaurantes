@@ -59,6 +59,38 @@ describe('Realtime: broadcast por trigger, sem conteúdo', () => {
     }
   })
 
+  it('mudança de status de entrega emite só em conversa:, sem conteúdo; mesmo status não emite', async () => {
+    const c = await cenario()
+    const [m] = await withRole(db, 'worker_app', (tx) =>
+      tx.insert(messages).values({ restaurantId: c.restaurantId, conversationId: c.sul, direcao: 'out', autor: 'humano', tipo: 'texto', texto: 'Olá Maria', statusEnvio: 'pendente' }).returning())
+    await withRole(db, 'worker_app', (tx) => tx.update(messages).set({ statusEnvio: 'enviado', wamid: 'w1' }).where(eq(messages.id, m!.id)))
+    const doStatus = (ls: Linha[]) => ls.filter((l) => l.payload.evento === 'messages_update')
+    const conv = doStatus(await doTopico(`conversa:${c.sul}`))
+    expect(conv).toHaveLength(1)
+    expect(conv[0]).toMatchObject({ event: 'mudou', private: true, extension: 'broadcast' })
+    expect(Object.keys(conv[0]!.payload).sort()).toEqual(['conversation_id', 'evento', 'id'])
+    expect(JSON.stringify(conv[0]!.payload)).not.toMatch(/Maria|enviado|w1/)
+    expect(doStatus(await doTopico(`inbox:r:${c.restaurantId}`))).toHaveLength(0)
+    expect(doStatus(await doTopico(`inbox:u:${c.unitId}`))).toHaveLength(0)
+    // mesmo status de novo e outras colunas: nada
+    await withRole(db, 'worker_app', (tx) => tx.update(messages).set({ statusEnvio: 'enviado' }).where(eq(messages.id, m!.id)))
+    await withRole(db, 'worker_app', (tx) => tx.update(messages).set({ texto: 'x' }).where(eq(messages.id, m!.id)))
+    expect(doStatus(await doTopico(`conversa:${c.sul}`))).toHaveLength(1)
+  })
+
+  it('troca de unidade avisa também a unidade antiga', async () => {
+    const c = await cenario()
+    await db.update(conversations).set({ unidadeContextoId: c.u2 }).where(eq(conversations.id, c.sul))
+    const daConv = (ls: Linha[]) => ls.filter((l) => l.payload.conversation_id === c.sul && l.payload.evento === 'conversations_update')
+    expect(daConv(await doTopico(`inbox:u:${c.unitId}`))).toHaveLength(1)
+    expect(daConv(await doTopico(`inbox:u:${c.u2}`))).toHaveLength(1)
+    // sem unidade antes: só a nova
+    await db.update(conversations).set({ unidadeContextoId: c.unitId }).where(eq(conversations.id, c.sem))
+    const r = await sql<{ topic: string }[]>`select topic from realtime.messages
+      where payload ->> 'conversation_id' = ${c.sem} and payload ->> 'evento' = 'conversations_update' and topic like 'inbox:u:%'`
+    expect(r.map((x) => x.topic)).toEqual([`inbox:u:${c.unitId}`])
+  })
+
   it('conversa sem unidade não emite em inbox:u; atualização sem mudança relevante não emite', async () => {
     const c = await cenario()
     const antes = (await doTopico(`conversa:${c.sem}`)).length

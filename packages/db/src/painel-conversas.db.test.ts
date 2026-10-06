@@ -80,17 +80,23 @@ describe('listarInbox', () => {
     expect(soSul.itens.map((i) => i.nome)).toEqual(['Nova'])
   })
 
-  it('Comigo, Com a IA e Encerradas (30 dias), última mensagem primeiro', async () => {
+  it('Em atendimento (todas em humano visíveis, as minhas primeiro), Com a IA e Encerradas (30 dias)', async () => {
     const c = await cenario()
-    await conversa({ restaurantId: c.restaurantId, unitId: c.unitId, nome: 'Minha', estado: 'humano', atendenteId: c.atendente })
-    await conversa({ restaurantId: c.restaurantId, unitId: c.unitId, nome: 'Da Bia', estado: 'humano', atendenteId: c.atendente2 })
+    await conversa({ restaurantId: c.restaurantId, unitId: c.unitId, nome: 'Minha', estado: 'humano', atendenteId: c.atendente, lastMessageAt: minutos(30) })
+    await conversa({ restaurantId: c.restaurantId, unitId: c.unitId, nome: 'Da Bia', estado: 'humano', atendenteId: c.atendente2, lastMessageAt: minutos(1) })
+    await conversa({ restaurantId: c.restaurantId, unitId: c.unitId, nome: 'Da Bia velha', estado: 'humano', atendenteId: c.atendente2, lastMessageAt: minutos(40) })
+    await conversa({ restaurantId: c.restaurantId, unitId: c.u2, nome: 'Do Norte', estado: 'humano', atendenteId: c.dono })
     await conversa({ restaurantId: c.restaurantId, unitId: c.unitId, nome: 'IA velha', estado: 'ia', lastMessageAt: minutos(50) })
     await conversa({ restaurantId: c.restaurantId, unitId: c.unitId, nome: 'IA nova', estado: 'ia', lastMessageAt: minutos(5) })
     await conversa({ restaurantId: c.restaurantId, unitId: c.unitId, nome: 'Fechada', estado: 'encerrada', lastMessageAt: minutos(60) })
     await conversa({ restaurantId: c.restaurantId, unitId: c.unitId, nome: 'Antiquíssima', estado: 'encerrada', lastMessageAt: minutos(60 * 24 * 31) })
     const eu = as(c.atendente, 'aal1')
-    const comigo = await listarInbox(db, eu, { aba: 'em_atendimento' })
-    expect(comigo.itens.map((i) => [i.nome, i.atendente])).toEqual([['Minha', 'Ana']])
+    const emAtendimento = await listarInbox(db, eu, { aba: 'em_atendimento' })
+    expect(emAtendimento.itens.map((i) => [i.nome, i.atendente, i.atendenteId])).toEqual([
+      ['Minha', 'Ana', c.atendente], ['Da Bia', 'Bia', c.atendente2], ['Da Bia velha', 'Bia', c.atendente2],
+    ])
+    expect((await listarInbox(db, as(c.dono), { aba: 'em_atendimento' })).itens.map((i) => i.nome))
+      .toEqual(['Do Norte', 'Da Bia', 'Minha', 'Da Bia velha'])
     expect((await listarInbox(db, eu, { aba: 'ia' })).itens.map((i) => i.nome)).toEqual(['IA nova', 'IA velha'])
     expect((await listarInbox(db, eu, { aba: 'encerradas' })).itens.map((i) => i.nome)).toEqual(['Fechada'])
   })
@@ -109,6 +115,15 @@ describe('listarInbox', () => {
     const q1 = await listarInbox(db, as(c.dono), { aba: 'ia' })
     const q2 = await listarInbox(db, as(c.dono), { aba: 'ia', cursor: q1.proximo! })
     expect([...q1.itens, ...q2.itens].map((i) => i.nome)).toEqual(Array.from({ length: 55 }, (_, i) => `I${i}`))
+    // em atendimento: as minhas primeiro, atravessando a página
+    for (let i = 0; i < 55; i++) {
+      await conversa({ restaurantId: c.restaurantId, nome: `H${i}`, estado: 'humano', atendenteId: i % 2 ? c.dono : c.gerente, lastMessageAt: minutos(i) })
+    }
+    const h1 = await listarInbox(db, as(c.dono), { aba: 'em_atendimento' })
+    const h2 = await listarInbox(db, as(c.dono), { aba: 'em_atendimento', cursor: h1.proximo! })
+    expect(h2.proximo).toBeNull()
+    const esperado = [...Array.from({ length: 55 }, (_, i) => i).filter((i) => i % 2), ...Array.from({ length: 55 }, (_, i) => i).filter((i) => !(i % 2))]
+    expect([...h1.itens, ...h2.itens].map((i) => i.nome)).toEqual(esperado.map((i) => `H${i}`))
     await expect(listarInbox(db, as(c.dono), { aba: 'ia', cursor: 'lixo' })).resolves.toMatchObject({ itens: expect.any(Array) })
   })
 
@@ -160,6 +175,10 @@ describe('lerConversa', () => {
     expect(r!.mensagens).toHaveLength(50)
     expect(r!.mensagens.at(-1)).toMatchObject({ texto: 'resposta', autor: 'humano', atendente: 'Ana', statusEnvio: 'enviado', transcrito: false })
     expect(r!.mensagens[0]!.texto).toBe('m11')
+    for (const antesDe of [Number.NaN, 1.5, -1, Number.MAX_SAFE_INTEGER + 2]) {
+      const x = await lerConversa(db, as(c.dono), id, { antesDe })
+      expect(x!.mensagens, String(antesDe)).toEqual([])
+    }
     const antes = await lerConversa(db, as(c.dono), id, { antesDe: r!.mensagens[0]!.id })
     expect(antes!.mensagens.map((m) => m.texto)).toEqual(Array.from({ length: 11 }, (_, i) => `m${i}`))
   })
@@ -232,6 +251,9 @@ describe('responderConversa', () => {
     expect(await responderConversa(db, as(c.dono), minha, 'oi')).toEqual({ ok: false, erro: 'nao_e_seu' })
     expect(await responderConversa(db, eu, minha, '   ')).toEqual({ ok: false, erro: 'texto_invalido' })
     expect(await responderConversa(db, eu, minha, 'x'.repeat(4097))).toEqual({ ok: false, erro: 'texto_invalido' })
+    // régua em code points: 4096 emojis cabem, 4097 não
+    expect(await responderConversa(db, eu, minha, '😀'.repeat(4097))).toEqual({ ok: false, erro: 'texto_invalido' })
+
     const aguardando = await conversa({ restaurantId: c.restaurantId, unitId: c.unitId })
     expect(await responderConversa(db, eu, aguardando, 'oi')).toEqual({ ok: false, erro: 'transicao_invalida' })
     const vencida = await conversa({ restaurantId: c.restaurantId, unitId: c.unitId, estado: 'humano', atendenteId: c.atendente, janela: minutos(1) })
@@ -250,6 +272,7 @@ describe('responderConversa', () => {
     const audit = await db.select().from(auditLog).where(eq(auditLog.acao, 'conversa.respondida'))
     expect(audit).toHaveLength(1)
     expect(JSON.stringify(audit[0]!.diff)).not.toContain('Maria')
+    expect((await responderConversa(db, eu, minha, '😀'.repeat(4096))).ok).toBe(true)
   })
 
   it('conversa devolvida no meio: recusa', async () => {
@@ -302,7 +325,11 @@ describe('devolver e encerrar', () => {
     expect(await encerrarConversa(db, as(c.gerente), daAna)).toEqual({ ok: true })
     expect(await encerrarConversa(db, as(c.gerente), daAna)).toEqual({ ok: false, erro: 'transicao_invalida' })
     const comIa = await conversa({ restaurantId: c.restaurantId, unitId: c.unitId, estado: 'ia' })
+    const pendIa = await msg(c.restaurantId, comIa, 'resposta', { direcao: 'out', autor: 'ia', statusEnvio: 'pendente' })
+    const enviada = await msg(c.restaurantId, comIa, 'antes', { direcao: 'out', autor: 'ia', statusEnvio: 'enviado' })
     expect(await encerrarConversa(db, as(c.atendente, 'aal1'), comIa)).toEqual({ ok: true })
+    const st = await db.select({ id: messages.id, s: messages.statusEnvio }).from(messages).where(eq(messages.conversationId, comIa))
+    expect(Object.fromEntries(st.map((x) => [x.id, x.s]))).toEqual({ [pendIa]: 'cancelado', [enviada]: 'enviado' })
     const est = await db.select({ e: conversations.estado }).from(conversations).where(and(eq(conversations.restaurantId, c.restaurantId)))
     expect(est.every((x) => x.e === 'encerrada')).toBe(true)
     expect((await db.select().from(auditLog).where(eq(auditLog.acao, 'conversa.encerrada')))).toHaveLength(2)

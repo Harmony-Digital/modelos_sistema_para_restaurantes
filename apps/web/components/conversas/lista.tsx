@@ -6,8 +6,8 @@ import { Badge } from '@/components/ui/badge'
 import { haQuanto, ROTULO_ESTADO, ROTULO_MOTIVO, VAZIO_INBOX } from '@/lib/conversas'
 import { cn } from '@/lib/utils'
 
-/** `atendenteId` (opcional) marca as conversas do próprio usuário com "Você". */
-export type ItemLista = ItemInbox & { atendenteId?: string | null }
+/** `atendenteId` (vem da DAL) marca as conversas do próprio usuário com "Você". */
+export type ItemLista = ItemInbox
 
 const COR_ESTADO: Record<ItemInbox['estado'], string> = {
   aguardando_humano: 'border-warning text-warning',

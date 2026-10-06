@@ -20,6 +20,7 @@ export type ItemInbox = {
   trecho: string | null
   estado: ConversationState
   atendente: string | null
+  atendenteId: string | null
   aguardandoDesde: Date | null
   lastMessageAt: Date
   simulada: boolean
@@ -60,6 +61,7 @@ const colunasItem = {
   trecho,
   estado: conversations.estado,
   atendente: staff.nome,
+  atendenteId: conversations.atendenteId,
   aguardandoDesde: conversations.aguardandoDesde,
   lastMessageAt: conversations.lastMessageAt,
   simulada: conversations.simulada,
@@ -76,19 +78,24 @@ function selecionarItens(tx: Tx) {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-// cursor = [chave de ordenação como texto do Postgres (precisão de µs), id]; malformado ⇒ ignorado (primeira página)
-const codificar = (chave: string, id: string) => Buffer.from(JSON.stringify([chave, id])).toString('base64url')
-function decodificar(cursor: string | undefined): [string, string] | null {
+// cursor = [chave de ordenação como texto do Postgres (precisão de µs), id, meu (0/1, só em atendimento)];
+// malformado ⇒ ignorado (primeira página)
+type Cursor = [string, string, number]
+const codificar = (c: Cursor) => Buffer.from(JSON.stringify(c)).toString('base64url')
+function decodificar(cursor: string | undefined): Cursor | null {
   if (!cursor) return null
   try {
     const v: unknown = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'))
-    if (Array.isArray(v) && v.length === 2 && typeof v[0] === 'string' && typeof v[1] === 'string'
-      && UUID.test(v[1]) && !Number.isNaN(Date.parse(v[0]))) return [v[0], v[1]]
+    if (Array.isArray(v) && v.length === 3 && typeof v[0] === 'string' && typeof v[1] === 'string'
+      && UUID.test(v[1]) && !Number.isNaN(Date.parse(v[0])) && (v[2] === 0 || v[2] === 1)) return [v[0], v[1], v[2]]
   } catch { /* cursor inválido */ }
   return null
 }
 
-/** Inbox por aba (50 por página). Aguardando: espera mais antiga primeiro; demais: última mensagem primeiro. */
+/**
+ * Inbox por aba (50 por página). Aguardando: espera mais antiga primeiro. Em atendimento: todas em `humano`
+ * visíveis, as do próprio usuário primeiro, depois última mensagem. Demais: última mensagem primeiro.
+ */
 export function listarInbox(
   db: Db,
   claims: JwtClaims,
@@ -101,29 +108,35 @@ export function listarInbox(
     const filtros: SQL[] = []
     if (p.aba === 'aguardando') filtros.push(eq(conversations.estado, 'aguardando_humano'))
     else if (p.aba === 'ia') filtros.push(eq(conversations.estado, 'ia'))
-    else if (p.aba === 'em_atendimento') filtros.push(eq(conversations.estado, 'humano'), eq(conversations.atendenteId, claims.sub))
+    else if (p.aba === 'em_atendimento') filtros.push(eq(conversations.estado, 'humano'))
     else filtros.push(eq(conversations.estado, 'encerrada'), gte(conversations.lastMessageAt, sql`now() - make_interval(days => ${DIAS_ENCERRADAS})`))
     if (!p.simulacoes) filtros.push(eq(conversations.simulada, false))
     if (p.unitId) filtros.push(eq(conversations.unidadeContextoId, p.unitId))
+    // em atendimento: 1 = conversa do próprio usuário (vem primeiro); nas outras abas é constante
+    const meu = p.aba === 'em_atendimento'
+      ? sql<number>`(${conversations.atendenteId} is not distinct from ${claims.sub}::uuid)::int`
+      : sql<number>`0::int`
     const cur = decodificar(p.cursor)
     if (cur) {
       filtros.push(crescente
         ? sql`(${col}, ${conversations.id}) > (${cur[0]}::timestamptz, ${cur[1]}::uuid)`
-        : sql`(${col}, ${conversations.id}) < (${cur[0]}::timestamptz, ${cur[1]}::uuid)`)
+        : sql`(${meu}, ${col}, ${conversations.id}) < (${cur[2]}::int, ${cur[0]}::timestamptz, ${cur[1]}::uuid)`)
     }
     const rows = await tx
-      .select({ ...colunasItem, chave: sql<string>`${col}::text` })
+      .select({ ...colunasItem, chave: sql<string>`${col}::text`, meu })
       .from(conversations)
       .innerJoin(customers, eq(customers.id, conversations.customerId))
       .leftJoin(units, eq(units.id, conversations.unidadeContextoId))
       .leftJoin(staff, eq(staff.userId, conversations.atendenteId))
       .where(and(...filtros))
-      .orderBy(...(crescente ? [asc(col), asc(conversations.id)] : [desc(col), desc(conversations.id)]))
+      .orderBy(...(crescente
+        ? [asc(col), asc(conversations.id)]
+        : [...(p.aba === 'em_atendimento' ? [desc(meu)] : []), desc(col), desc(conversations.id)]))
       .limit(POR_PAGINA + 1)
     const pagina = rows.slice(0, POR_PAGINA)
     const ultimo = pagina.at(-1)
-    const proximo = rows.length > POR_PAGINA && ultimo ? codificar(ultimo.chave, ultimo.id) : null
-    return { itens: pagina.map(({ chave: _chave, ...item }) => item), proximo }
+    const proximo = rows.length > POR_PAGINA && ultimo ? codificar([ultimo.chave, ultimo.id, Number(ultimo.meu)]) : null
+    return { itens: pagina.map(({ chave: _chave, meu: _meu, ...item }) => item), proximo }
   })
 }
 
@@ -146,16 +159,18 @@ export function lerConversa(
   p: { antesDe?: number } = {},
 ): Promise<{ conversa: ItemInbox & { janelaAte: Date | null; atendenteId: string | null }; mensagens: MensagemInbox[] } | null> {
   if (!UUID.test(id)) return Promise.resolve(null)
+  // antesDe inválido (NaN, fração, ≤ 0, fora do inteiro seguro) ⇒ página vazia, nunca erro SQL
+  const antesDeValido = p.antesDe === undefined || (Number.isSafeInteger(p.antesDe) && p.antesDe > 0)
   return withUserContext(db, claims, async (tx) => {
     const [c] = await selecionarItens(tx).where(eq(conversations.id, id))
     if (!c) return null
     const [extra] = await tx
-      .select({ janelaAte: conversations.windowExpiresAt, atendenteId: conversations.atendenteId })
+      .select({ janelaAte: conversations.windowExpiresAt })
       .from(conversations)
       .where(eq(conversations.id, id))
     const filtros = [eq(messages.conversationId, id)]
-    if (p.antesDe !== undefined) filtros.push(lt(messages.id, p.antesDe))
-    const ms = await tx
+    if (p.antesDe !== undefined && antesDeValido) filtros.push(lt(messages.id, p.antesDe))
+    const ms = !antesDeValido ? [] : await tx
       .select({
         id: messages.id, direcao: messages.direcao, autor: messages.autor, atendente: staff.nome, tipo: messages.tipo,
         texto: messages.texto, transcrito: messages.transcrito, payload: messages.payload, statusEnvio: messages.statusEnvio,
@@ -167,7 +182,7 @@ export function lerConversa(
       .orderBy(desc(messages.id))
       .limit(POR_PAGINA)
     return {
-      conversa: { ...c, janelaAte: extra?.janelaAte ?? null, atendenteId: extra?.atendenteId ?? null },
+      conversa: { ...c, janelaAte: extra?.janelaAte ?? null },
       mensagens: ms.reverse(),
     }
   })
@@ -273,7 +288,8 @@ export function responderConversa(
   texto: string,
 ): Promise<{ ok: true; messageId: number } | Falha> {
   const t = texto.trim()
-  if (t.length === 0 || t.length > MAX_TEXTO) return Promise.resolve(erro('texto_invalido'))
+  const tamanho = [...t].length // code points (emoji conta 1), mesma régua do Zod da action
+  if (tamanho === 0 || tamanho > MAX_TEXTO) return Promise.resolve(erro('texto_invalido'))
   if (!UUID.test(id)) return Promise.resolve(erro('nao_encontrada'))
   return withUserContext(db, claims, async (tx) => {
     const ctx = await contexto(tx, claims)
@@ -351,6 +367,9 @@ export function encerrarConversa(db: Db, claims: JwtClaims, id: string): Promise
     acao: 'conversa.encerrada',
     set: sql`estado = 'encerrada', pendente = null`,
     origem: sql`c.estado in ('ia', 'aguardando_humano')`,
+    // nada sai depois de encerrar: um deliver já enfileirado encontra as pendentes canceladas
+    depois: sql`update public.messages set status_envio = 'cancelado'
+      where conversation_id = ${id}::uuid and direcao = 'out' and status_envio = 'pendente'`,
   })
 }
 
@@ -359,7 +378,7 @@ function transicionar(
   db: Db,
   claims: JwtClaims,
   id: string,
-  t: { acao: string; set: SQL; origem: SQL },
+  t: { acao: string; set: SQL; origem: SQL; depois?: SQL },
 ): Promise<{ ok: true } | Falha> {
   if (!UUID.test(id)) return Promise.resolve(erro('nao_encontrada'))
   return withUserContext(db, claims, async (tx) => {
@@ -371,6 +390,7 @@ function transicionar(
        where c.id = ${id}::uuid and ${visivel(ctx)}
          and (${t.origem} or (c.estado = 'humano' and (c.atendente_id = ${ctx.eu}::uuid or ${gestao(ctx)}::boolean)))
       returning c.restaurant_id, c.simulada`)
+    if (r && t.depois) await tx.execute(t.depois)
     await comoUsuario(tx)
     if (r) {
       await registrarAuditoria(tx, claims, {

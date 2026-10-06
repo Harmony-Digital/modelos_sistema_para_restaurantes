@@ -5,7 +5,7 @@ import { ListaConversas, type ItemLista } from './lista'
 const agora = new Date('2026-10-06T12:00:00Z')
 const item = (extra: Partial<ItemLista>): ItemLista => ({
   id: '11111111-1111-4111-8111-111111111111', nome: 'Maria', unidade: 'Asa Sul', trecho: 'Quero falar com alguém',
-  estado: 'aguardando_humano', atendente: null, aguardandoDesde: new Date('2026-10-06T11:50:00Z'),
+  estado: 'aguardando_humano', atendente: null, atendenteId: null, aguardandoDesde: new Date('2026-10-06T11:50:00Z'),
   lastMessageAt: new Date('2026-10-06T11:55:00Z'), simulada: false, handoffMotivo: 'pedido', ...extra,
 })
 

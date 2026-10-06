@@ -218,6 +218,13 @@
       "when": 1791286806456,
       "tag": "0030_inbox_rls_realtime",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1791289271217,
+      "tag": "0031_inbox_broadcast_status",
+      "breakpoints": true
     }
   ]
 }
