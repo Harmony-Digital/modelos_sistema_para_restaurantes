@@ -15,16 +15,16 @@ function erroPg(err: unknown): { code?: string; constraint_name?: string } {
 }
 
 /** Recusa de RLS/grant (42501) vira `sem_permissao`; violação de única listada vira o erro indicado. */
-export async function semPermissaoVira<T>(
-  fn: () => Promise<ResultadoPainel<T>>,
+export async function semPermissaoVira<R extends { ok: boolean }>(
+  fn: () => Promise<R>,
   unicas: Record<string, ErroPainel> = {},
-): Promise<ResultadoPainel<T>> {
+): Promise<R | { ok: false; erro: ErroPainel }> {
   try {
     return await fn()
   } catch (err) {
     const e = erroPg(err)
-    if (e.code === '42501') return falha('sem_permissao')
-    if (e.code === '23505' && e.constraint_name && unicas[e.constraint_name]) return falha(unicas[e.constraint_name]!)
+    if (e.code === '42501') return { ok: false, erro: 'sem_permissao' }
+    if (e.code === '23505' && e.constraint_name && unicas[e.constraint_name]) return { ok: false, erro: unicas[e.constraint_name]! }
     throw err
   }
 }
