@@ -22,6 +22,11 @@ export type ItemEncontrado = {
   /** unidades ativas do restaurante, com disponibilidade e preço efetivos (exceção da unidade ou o do item) */
   porUnidade: PrecoNaUnidade[]
   rank: number
+  /**
+   * Só parece com a consulta (trigrama da frase inteira), sem corresponder: "carne de sol" × "Carne de porco".
+   * O core oferece como sugestão ("Não encontrei… Temos parecido"), nunca como "Temos sim".
+   */
+  parecido: boolean
 }
 
 type LinhaBusca = {
@@ -33,12 +38,16 @@ type LinhaBusca = {
   preco_base_centavos: number | null
   por_unidade: PrecoNaUnidade[]
   rank: number
+  parecido: boolean
 }
 
 /**
  * Busca no cardápio do restaurante (worker). Full-text em português sem acento (nome peso A; descrição, outros nomes e
  * tags peso B) **ou** semelhança de trigramas (erro de digitação) no nome e nos outros nomes. Só categorias ativas e
  * itens disponíveis no padrão ou em alguma unidade ativa. Sem consulta: lista na ordem do cardápio (útil com `tag`).
+ * **Correspondência** (`parecido = false`): o full-text casa, ou toda palavra da consulta (3+ letras) casa por trigrama
+ * com alguma palavra do nome/outros nomes (erro de digitação: "picanah"). O resto que só parece pela frase inteira vem
+ * como `parecido` e depois das correspondências.
  * Tudo parametrizado; a consulta do cliente é só texto.
  */
 export async function buscarCardapio(
@@ -53,7 +62,9 @@ export async function buscarCardapio(
     return tx.execute<LinhaBusca>(sql`
     with q as (
       select websearch_to_tsquery('portuguese'::regconfig, app.f_unaccent(${consulta}::text)) as tsq,
-             app.f_unaccent(lower(${consulta}::text)) as termo
+             app.f_unaccent(lower(${consulta}::text)) as termo,
+             array(select w from regexp_split_to_table(app.f_unaccent(lower(${consulta}::text)), '[^[:alnum:]]+') w
+                    where length(w) >= 3) as palavras
     ),
     achados as (
       select i.id, i.nome, i.descricao, c.nome as categoria, i.tags, i.preco_centavos, i.disponivel,
@@ -62,7 +73,13 @@ export async function buscarCardapio(
                ts_rank(i.search, q.tsq)
                + greatest(extensions.word_similarity(q.termo, app.f_unaccent(lower(i.nome))),
                           extensions.word_similarity(q.termo, app.f_unaccent(lower(app.f_juntar(i.outros_nomes)))))
-             )::float8 end as rank
+             )::float8 end as rank,
+             not (q.termo is null
+                  or i.search @@ q.tsq
+                  or (cardinality(q.palavras) > 0 and not exists (
+                        select 1 from unnest(q.palavras) w
+                         where not (w operator(extensions.<%)
+                                    app.f_unaccent(lower(i.nome || ' ' || app.f_juntar(i.outros_nomes))))))) as parecido
         from public.menu_items i
         join public.menu_categories c on c.id = i.category_id and c.ativo
         cross join q
@@ -76,10 +93,10 @@ export async function buscarCardapio(
            select 1 from public.units u
              left join public.menu_item_units x on x.item_id = i.id and x.unit_id = u.id
             where u.restaurant_id = i.restaurant_id and u.ativo and coalesce(x.disponivel, i.disponivel))
-       order by rank desc, c.ordem, i.ordem, i.nome, i.id
+       order by parecido, rank desc, c.ordem, i.ordem, i.nome, i.id
        limit ${limite}
     )
-    select a.id, a.nome, a.descricao, a.categoria, a.tags, a.preco_centavos as preco_base_centavos, a.rank,
+    select a.id, a.nome, a.descricao, a.categoria, a.tags, a.preco_centavos as preco_base_centavos, a.rank, a.parecido,
            coalesce((
              select json_agg(json_build_object(
                       'unitId', u.id,
@@ -91,7 +108,7 @@ export async function buscarCardapio(
               where u.restaurant_id = ${p.restaurantId} and u.ativo
            ), '[]'::json) as por_unidade
       from achados a
-     order by a.rank desc, a.ordem_categoria, a.ordem, a.nome, a.id`)
+     order by a.parecido, a.rank desc, a.ordem_categoria, a.ordem, a.nome, a.id`)
   })
   return rows.map((r) => ({
     id: r.id,
@@ -102,6 +119,7 @@ export async function buscarCardapio(
     precoBaseCentavos: r.preco_base_centavos,
     porUnidade: r.por_unidade,
     rank: Number(r.rank),
+    parecido: r.parecido,
   }))
 }
 

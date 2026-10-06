@@ -498,6 +498,29 @@ exports[`evals S4 — camada 2 (resolução + composição, determinística) > b
 }
 `;
 
+exports[`evals S4 — camada 2 (resolução + composição, determinística) > b25: tem carne de sol? (a busca só achou nome parecido: nunca "Temos sim") 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "acoesS4": [],
+  "handoff": false,
+  "lacunas": [
+    {
+      "chave": "cardapio:carne de sol",
+      "unitId": null,
+    },
+  ],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarPessoas": null,
+  "respondidos": 0,
+  "texto": "Não encontrei esse item no cardápio. Temos parecido: *Fraldinha*. Quer saber o preço?",
+  "validos": 1,
+}
+`;
+
 exports[`evals S4 — camada 2 (resolução + composição, determinística) > e01: me manda o cardápio 1`] = `
 {
   "acoesS2": [],

@@ -129,6 +129,37 @@ describe('buscarCardapio', () => {
   })
 })
 
+describe('buscarCardapio: correspondência × parecido (I1)', () => {
+  async function parecidos() {
+    const { restaurantId } = await seedRestaurant(db)
+    const [cat] = await db.insert(menuCategories).values({ restaurantId, nome: 'Pratos', ordem: 1 }).returning()
+    await db.insert(menuItems).values(['Carne de porco', 'Suco de uva', 'File a parmegiana', 'Picanha', 'Cocada'].map((nome, i) =>
+      ({ restaurantId, categoryId: cat!.id, nome, precoCentavos: 1000 + i, ordem: i })))
+    return restaurantId
+  }
+  const busca = (restaurantId: string, consulta: string) => buscarCardapio(db, { restaurantId, consulta, tag: null })
+
+  it('nome só parecido nunca vem como correspondência: carne de sol × carne de porco, suco de laranja × suco de uva', async () => {
+    const r = await parecidos()
+    for (const [consulta, outro] of [['carne de sol', 'Carne de porco'], ['suco de laranja', 'Suco de uva'], ['frango a parmegiana', 'File a parmegiana']]) {
+      const achados = await busca(r, consulta!)
+      expect(achados.filter((i) => !i.parecido), consulta).toEqual([])
+      // continua como sugestão (parecido), para o core oferecer
+      expect(achados.find((i) => i.nome === outro)?.parecido, consulta).toBe(true)
+    }
+  })
+
+  it('erro de digitação e palavra do nome continuam correspondência', async () => {
+    const r = await parecidos()
+    for (const consulta of ['picanah', 'pikanha', 'picanha', 'carne de porco', 'porco', 'Suco de Uva']) {
+      const [i] = await busca(r, consulta)
+      expect(i?.parecido, consulta).toBe(false)
+    }
+    // sem consulta (filtro por tag) nada é "parecido"
+    expect((await buscarCardapio(db, { restaurantId: r, consulta: null, tag: null })).every((i) => !i.parecido)).toBe(true)
+  })
+})
+
 describe('arquivos de cardápio (worker)', () => {
   async function arquivos() {
     const c = await cenario()

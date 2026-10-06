@@ -87,6 +87,7 @@ export const MODELOS_S1 = {
   cardapio_indisponivel: { texto: 'Na unidade {unidade}, {item} está indisponível no momento.', variaveis: ['unidade', 'item'] },
   cardapio_filtro: { texto: 'Opções {tag}:\n{itens}', variaveis: ['tag', 'itens'] },
   cardapio_nao_encontrado: { texto: 'Não encontrei esse item no cardápio. Quer que eu mande o cardápio completo?', variaveis: [] },
+  cardapio_parecido: { texto: 'Não encontrei esse item no cardápio. Temos parecido: {itens}. Quer saber o preço?', variaveis: ['itens'] },
   cardapio_enviando: { texto: 'Aqui está o nosso cardápio.', variaveis: [] },
   cardapio_sem_arquivo: { texto: 'Nosso cardápio:\n{categorias}', variaveis: ['categorias'] },
 } as const satisfies Record<string, { texto: string; variaveis: readonly string[] }>

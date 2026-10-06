@@ -54,6 +54,7 @@ export const ROTULOS_MODELO: Record<ChaveModelo, { titulo: string; quando: strin
   cardapio_indisponivel: { titulo: 'Item indisponível na unidade', quando: 'O item existe, mas está indisponível na unidade perguntada.' },
   cardapio_filtro: { titulo: 'Opções por tipo', quando: 'O cliente pergunta por opções veganas, sem glúten, infantis…' },
   cardapio_nao_encontrado: { titulo: 'Item não encontrado', quando: 'O item não está no cardápio; a pergunta vai para "Sem resposta".' },
+  cardapio_parecido: { titulo: 'Só item parecido', quando: 'O item pedido não está no cardápio, mas há nomes parecidos: eles são sugeridos (sem preço) e a pergunta vai para "Sem resposta".' },
   cardapio_enviando: { titulo: 'Envio do cardápio', quando: 'Texto que acompanha o arquivo do cardápio.' },
   cardapio_sem_arquivo: { titulo: 'Cardápio sem arquivo', quando: 'O cliente pede o cardápio e não há arquivo cadastrado: vão as categorias com alguns itens.' },
 }

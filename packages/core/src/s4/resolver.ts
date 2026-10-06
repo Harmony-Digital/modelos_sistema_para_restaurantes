@@ -104,7 +104,20 @@ export function resolverItensS4(
     trechos.push(m('cardapio_nao_encontrado'))
   }
 
-  function buscar(item: ItemExtraido, encontrados: readonly ItemCardapioCore[], u: UnidadeS1 | null): void {
+  function buscar(item: ItemExtraido, todos: readonly ItemCardapioCore[], u: UnidadeS1 | null): void {
+    // só parecido ("carne de sol" × "Carne de porco"): nunca "Temos sim"; sugere os nomes (sem preço) e registra a lacuna
+    const encontrados = todos.filter((i) => !i.parecido)
+    if (encontrados.length === 0) {
+      validos++
+      const sugestoes = todos.filter((i) => precoDe(i, u).tipo !== 'indisponivel').slice(0, MAX_DETALHADOS)
+      if (sugestoes.length === 0) {
+        naoEncontrado(item.consulta, u)
+        return
+      }
+      lacuna(chaveLacunaCardapio(item.consulta), u?.id ?? null)
+      trechos.push(m('cardapio_parecido', { itens: sugestoes.map((i) => negrito(i.nome)).join(', ') }))
+      return
+    }
     if (precisaUnidade(encontrados, u)) {
       pendenteUnidade.push(item) // conta quando o cliente escolher
       return

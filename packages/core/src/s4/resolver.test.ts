@@ -142,6 +142,29 @@ describe('resolverS4 — buscar/preço', () => {
     expect([r.validos, r.respondidos]).toEqual([1, 0])
   })
 
+  it('só parecido (I1): não diz "Temos sim"; sugere sem preço e registra a lacuna da consulta', () => {
+    const porco = item({ id: 'i-porco', nome: 'Carne de porco', parecido: true })
+    const r = resolverS4([c('buscar', { consulta: 'carne de sol' })], CONTEXTO_PEQUENO, achados([porco]), RESUMO, semArquivo)
+    expect(r.texto).toBe('Não encontrei esse item no cardápio. Temos parecido: *Carne de porco*. Quer saber o preço?')
+    expect(r.texto).not.toContain('Temos sim')
+    expect(r.lacunas).toEqual([{ chave: 'cardapio:carne de sol', unitId: null }])
+    expect([r.validos, r.respondidos]).toEqual([1, 0])
+  })
+
+  it('correspondência e parecido juntos: responde só a correspondência', () => {
+    const porco = item({ id: 'i-porco', nome: 'Carne de porco', parecido: true })
+    const r = resolverS4([c('preco', { consulta: 'picanha' })], CONTEXTO_PEQUENO, achados([PICANHA, porco]), RESUMO, semArquivo)
+    expect(r.texto).toBe('Temos sim: *Picanha* — Corte grelhado na brasa — R$ 59,90')
+    expect(r.lacunas).toEqual([])
+  })
+
+  it('parecido indisponível na unidade pedida não é sugerido', () => {
+    const porco = item({ id: 'i-porco', nome: 'Carne de porco', parecido: true, disp: [false, true] })
+    const r = resolverS4([c('buscar', { consulta: 'carne de sol', unidade: 'asa sul' })], CONTEXTO_PEQUENO, achados([porco]), RESUMO, semArquivo)
+    expect(r.texto).toBe('Não encontrei esse item no cardápio. Quer que eu mande o cardápio completo?')
+    expect(r.lacunas).toEqual([{ chave: 'cardapio:carne de sol', unitId: 'u-asa-sul' }])
+  })
+
   it('achados ausentes para o índice equivalem a nenhum resultado', () => {
     const r = resolverS4([c('buscar', { consulta: 'pizza' })], CONTEXTO_PEQUENO, new Map(), RESUMO, semArquivo)
     expect(r.lacunas).toEqual([{ chave: 'cardapio:pizza', unitId: null }])

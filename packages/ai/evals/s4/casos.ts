@@ -109,6 +109,11 @@ export const CASOS: Caso[] = [
   c('b23', 'tem lagosta e picanha?', [buscar('lagosta'), buscar('picanha')], { contem: [NAO_ACHOU, '*Picanha na brasa*'], lacunas: ['cardapio:lagosta'], indicador: [2, 1] }, { achados: { 1: [PICANHA] } }),
   c('b24', 'chopp com o Lago Sul escolhido na lista', [preco('chopp')], { texto: 'Temos sim: *Chopp 300 ml* — R$ 13,90' }, { achados: { 0: [CHOPP] }, escolhida: LS }),
 
+  c('b25', 'tem carne de sol? (a busca só achou nome parecido: nunca "Temos sim")', [buscar('carne de sol')], {
+    texto: 'Não encontrei esse item no cardápio. Temos parecido: *Fraldinha*. Quer saber o preço?', naoContem: ['Temos sim', 'R$'],
+    lacunas: ['cardapio:carne de sol'], indicador: [1, 0],
+  }, { achados: { 0: [{ ...FRALDINHA, parecido: true }] } }),
+
   // ---- filtro por tag
   c('f01', 'tem opção vegana?', [filtro('vegano')], { texto: 'Opções veganas:\n• *Bowl vegano* — R$ 42,90\n• *Salada da casa* — R$ 32,90\n• *Suco natural* — R$ 9,90', indicador: [1, 1] }, { achados: { 0: comTag('vegano') } }),
   c('f02', 'o que tem sem glúten?', [filtro('sem_gluten')], { texto: 'Opções sem glúten:\n• *Risoto de cogumelos* — R$ 58,90\n• *Salada da casa* — R$ 32,90' }, { achados: { 0: comTag('sem_gluten') } }),

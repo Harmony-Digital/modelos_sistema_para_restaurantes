@@ -15,6 +15,8 @@ export type ItemCardapioCore = {
   /** centavos; null = "preço sob consulta" */
   precoBaseCentavos: number | null
   porUnidade: PrecoNaUnidadeCore[]
+  /** só parece com a consulta (não corresponde): vira sugestão, nunca "Temos sim" */
+  parecido?: boolean
 }
 
 /** Resumo para quando não há arquivo: categorias ativas em ordem, até 3 itens cada (mesmo formato de @atd/db). */

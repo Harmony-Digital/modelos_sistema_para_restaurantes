@@ -157,6 +157,16 @@ describe('S4 no worker — perguntas sobre o cardápio', () => {
     expect(lacunas.map((l) => l.chaveNormalizada)).toEqual(['cardapio:lagosta'])
   })
 
+  it('busca real × core (I1): "carne de porco" não é respondida com a Carne-de-sol; vira sugestão e lacuna', async () => {
+    const { restaurantId } = await setup()
+    const conv = await receive(restaurantId, 'tem carne de porco?')
+    await processConversation(deps(fakeLlm([triagem(card({ consulta: 'carne de porco' }))]).llm, fakeWa()), conv)
+    const [m] = await saidas(conv)
+    expect(m!.texto).toBe('Não encontrei esse item no cardápio. Temos parecido: *Carne-de-sol*. Quer saber o preço?')
+    const lacunas = await db.select().from(schema.knowledgeGaps)
+    expect(lacunas.map((l) => l.chaveNormalizada)).toEqual(['cardapio:carne de porco'])
+  })
+
   it('sem arquivo: "manda o cardápio" responde o resumo do banco em texto', async () => {
     const { restaurantId } = await setup({ arquivo: null })
     const conv = await receive(restaurantId, 'manda o cardápio')
