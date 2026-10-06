@@ -280,18 +280,35 @@ export function rejeitarImportacao(db: Db, claims: JwtClaims, id: string): Promi
 
 // ============ worker (job document.ingest) ============
 
-/** Passa de `enviado` a `processando` (uma vez só). Devolve onde está o arquivo, ou null se não estava `enviado`. */
+/** Leitura parada há mais que isso (o job expira em 300 s) é de um worker que morreu: pode ser retomada. */
+export const PRAZO_PROCESSANDO = '5 minutes'
+
+/**
+ * Passa de `enviado` a `processando` (uma vez só) — ou retoma um `processando` parado há mais de
+ * `PRAZO_PROCESSANDO` (`retomada: true`: quem chama libera a reserva do processo morto e encerra). Devolve onde está
+ * o arquivo, ou null se não há o que fazer.
+ */
 export async function marcarProcessando(
   db: Db | Tx,
   id: string,
-): Promise<{ storagePath: string; mime: string; restaurantId: string } | null> {
-  const [r] = await db
-    .update(knowledgeDocuments)
-    .set({ status: 'processando' })
-    .where(and(eq(knowledgeDocuments.id, id), eq(knowledgeDocuments.status, 'enviado')))
-    .returning({ storagePath: knowledgeDocuments.storagePath, mime: knowledgeDocuments.mime, restaurantId: knowledgeDocuments.restaurantId })
-  // origem 'arquivo' sempre tem caminho (check knowledge_documents_storage_ck)
-  return r && r.storagePath !== null ? { storagePath: r.storagePath, mime: r.mime, restaurantId: r.restaurantId } : null
+): Promise<{ storagePath: string; mime: string; restaurantId: string; retomada: boolean } | null> {
+  return (db as Db).transaction(async (tx) => {
+    const [atual] = await tx
+      .select({ status: knowledgeDocuments.status, parado: sql<boolean>`${knowledgeDocuments.updatedAt} < now() - ${PRAZO_PROCESSANDO}::interval` })
+      .from(knowledgeDocuments)
+      .where(eq(knowledgeDocuments.id, id))
+      .for('update')
+    const retomada = atual?.status === 'processando' && atual.parado
+    if (!atual || (atual.status !== 'enviado' && !retomada)) return null
+    // o gatilho touch_updated_at renova updated_at (o prazo recomeça)
+    const [r] = await tx
+      .update(knowledgeDocuments)
+      .set({ status: 'processando' })
+      .where(eq(knowledgeDocuments.id, id))
+      .returning({ storagePath: knowledgeDocuments.storagePath, mime: knowledgeDocuments.mime, restaurantId: knowledgeDocuments.restaurantId })
+    // origem 'arquivo' sempre tem caminho (check knowledge_documents_storage_ck)
+    return r && r.storagePath !== null ? { storagePath: r.storagePath, mime: r.mime, restaurantId: r.restaurantId, retomada } : null
+  })
 }
 
 /**

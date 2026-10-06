@@ -164,16 +164,46 @@ export async function guardarMidiaMeta(db: Db | Tx, p: { arquivoId: string; waMe
     .where(eq(menuFiles.id, p.arquivoId))
 }
 
-export type ResumoCardapioDb = { categoria: string; itens: { nome: string; precoCentavos: number | null }[] }[]
+export type ResumoCardapioDb = { categoria: string; itens: { nome: string; precoCentavos: number | null; precoVaria?: boolean }[] }[]
+
+type LinhaResumo = { categoria: string; nome: string; preco_centavos: number | null; preco_varia: boolean }
 
 /**
- * Resumo para quando não há arquivo: categorias ativas em ordem, até 3 itens disponíveis cada. Com unidade, usa
- * disponibilidade e preço efetivos dela (exceção sobre o padrão — entra item indisponível no padrão mas disponível
- * ali); sem unidade, o padrão.
+ * Resumo para quando não há arquivo: categorias ativas em ordem, até 3 itens disponíveis cada.
+ * - unidade: disponibilidade e preço efetivos dela (exceção sobre o padrão — entra item indisponível no padrão mas
+ *   disponível ali);
+ * - `'todas'` (várias unidades e nenhuma citada): só itens disponíveis em alguma unidade ativa; preço efetivo único
+ *   entre elas, ou `precoVaria` (sem preço) quando difere; sem unidade ativa, cai no padrão;
+ * - null: o padrão.
  */
-export async function resumoCardapio(db: Db | Tx, restaurantId: string, unitId: string | null): Promise<ResumoCardapioDb> {
-  const rows = await db.execute<{ categoria: string; nome: string; preco_centavos: number | null }>(sql`
-    select categoria, nome, preco_centavos from (
+export async function resumoCardapio(db: Db | Tx, restaurantId: string, unitId: string | null | 'todas'): Promise<ResumoCardapioDb> {
+  const rows = unitId === 'todas'
+    ? await db.execute<LinhaResumo>(sql`
+    with ef as (
+      select i.id as item_id,
+             count(distinct coalesce(x.preco_override_centavos, i.preco_centavos)) as n_precos,
+             bool_or(coalesce(x.preco_override_centavos, i.preco_centavos) is null) as tem_nulo,
+             min(coalesce(x.preco_override_centavos, i.preco_centavos)) as preco
+        from public.menu_items i
+        join public.units u on u.restaurant_id = i.restaurant_id and u.ativo
+        left join public.menu_item_units x on x.item_id = i.id and x.unit_id = u.id
+       where i.restaurant_id = ${restaurantId} and coalesce(x.disponivel, i.disponivel)
+       group by i.id
+    )
+    select categoria, nome, preco_centavos, preco_varia from (
+      select c.nome as categoria, c.ordem as ordem_categoria, c.id as category_id, i.nome, i.ordem,
+             (ef.n_precos + ef.tem_nulo::int) > 1 as preco_varia,
+             case when (ef.n_precos + ef.tem_nulo::int) > 1 or ef.tem_nulo then null else ef.preco end as preco_centavos,
+             row_number() over (partition by c.id order by i.ordem, i.nome, i.id) as n
+        from public.menu_categories c
+        join public.menu_items i on i.category_id = c.id
+        join ef on ef.item_id = i.id
+       where c.restaurant_id = ${restaurantId} and c.ativo
+    ) t
+     where n <= 3
+     order by ordem_categoria, categoria, category_id, ordem, nome`)
+    : await db.execute<LinhaResumo>(sql`
+    select categoria, nome, preco_centavos, false as preco_varia from (
       select c.nome as categoria, c.ordem as ordem_categoria, c.id as category_id, i.nome, i.ordem,
              coalesce(x.preco_override_centavos, i.preco_centavos) as preco_centavos,
              row_number() over (partition by c.id order by i.ordem, i.nome, i.id) as n
@@ -184,6 +214,10 @@ export async function resumoCardapio(db: Db | Tx, restaurantId: string, unitId: 
     ) t
      where n <= 3
      order by ordem_categoria, categoria, category_id, ordem, nome`)
+  if (unitId === 'todas' && rows.length === 0) {
+    const [ativa] = await db.execute<{ id: string }>(sql`select id from public.units where restaurant_id = ${restaurantId} and ativo limit 1`)
+    if (!ativa) return resumoCardapio(db, restaurantId, null)
+  }
   const out: ResumoCardapioDb = []
   for (const r of rows) {
     let cat = out.at(-1)
@@ -191,7 +225,7 @@ export async function resumoCardapio(db: Db | Tx, restaurantId: string, unitId: 
       cat = { categoria: r.categoria, itens: [] }
       out.push(cat)
     }
-    cat.itens.push({ nome: r.nome, precoCentavos: r.preco_centavos })
+    cat.itens.push({ nome: r.nome, precoCentavos: r.preco_centavos, ...(r.preco_varia ? { precoVaria: true } : {}) })
   }
   return out
 }

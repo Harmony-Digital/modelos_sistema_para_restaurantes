@@ -124,7 +124,7 @@ describe('worker: processamento', () => {
     const id = idDe(await arquivo(c))
     const doCsv = idDe(await csv(c))
     expect(await withRole(db, 'worker_app', (tx) => marcarProcessando(tx, id))).toEqual({
-      storagePath: `importacoes/${c.restaurantId}/menu.pdf`, mime: 'application/pdf', restaurantId: c.restaurantId,
+      storagePath: `importacoes/${c.restaurantId}/menu.pdf`, mime: 'application/pdf', restaurantId: c.restaurantId, retomada: false,
     })
     expect(await marcarProcessando(db, id)).toBeNull()
     expect(await marcarProcessando(db, doCsv)).toBeNull()
@@ -135,6 +135,21 @@ describe('worker: processamento', () => {
     // já não está processando: nada muda
     await concluirIngestao(db, id, { ok: false, erro: 'x' })
     expect((await lerImportacao(db, as(c.dono), id))!.status).toBe('rascunho')
+  })
+
+  it('processando parado há mais de 5 minutos (worker morreu) é retomado uma vez; recente não', async () => {
+    const c = await cenario()
+    const id = idDe(await arquivo(c))
+    await marcarProcessando(db, id)
+    expect(await marcarProcessando(db, id)).toBeNull() // recente: outro job ainda pode estar lendo
+    // envelhece sem o gatilho de updated_at
+    await sql.begin(async (tx) => {
+      await tx`set local session_replication_role = replica`
+      await tx`update knowledge_documents set updated_at = now() - interval '6 minutes' where id = ${id}`
+    })
+    expect(await withRole(db, 'worker_app', (tx) => marcarProcessando(tx, id))).toMatchObject({ retomada: true, restaurantId: c.restaurantId })
+    // a retomada renova o prazo
+    expect(await marcarProcessando(db, id)).toBeNull()
   })
 
   it('erro de leitura ou rascunho inválido ⇒ status erro com mensagem amigável', async () => {

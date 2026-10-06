@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
-import { schema } from '@atd/db'
+import { reserveBudget, schema } from '@atd/db'
 import { getTestDb, resetDb, seedRestaurant } from '@atd/db/test-utils'
 import type { LlmClient } from '@atd/ai'
 import { createLogger } from '../logger.ts'
@@ -141,4 +141,31 @@ describe('job document.ingest', () => {
     expect((await importacao(id)).erro).toBe('Não consegui abrir o arquivo enviado. Envie de novo.')
     expect((await contadores(restaurantId)).map((c) => [c.reservado, c.gasto])).toEqual([['0.000000', '0.000000'], ['0.000000', '0.000000']])
   })
+
+  it('importação presa em "processando" (worker morreu): o job seguinte devolve a reserva pendente e marca erro', async () => {
+    const { restaurantId, id } = await setup()
+    // o processo morto: marcou processando e reservou, sem liquidar
+    await db.update(schema.knowledgeDocuments).set({ status: 'processando' }).where(eq(schema.knowledgeDocuments.id, id))
+    await reserveBudget(db, { restaurantId, scope: 'ia', amountUsd: '0.50', timeZone: 'America/Sao_Paulo', ref: `importacao:${id}` })
+    await sql.begin(async (tx) => {
+      await tx`set local session_replication_role = replica`
+      await tx`update knowledge_documents set updated_at = now() - interval '6 minutes' where id = ${id}`
+    })
+    const { llm, chamadas } = fakeLlm(LEITURA)
+    expect(await ingestDocument(deps(llm), id)).toBe('erro')
+    expect(chamadas).toHaveLength(0)
+    expect(await importacao(id)).toMatchObject({ status: 'erro', erro: 'A leitura demorou demais. Envie de novo.' })
+    expect((await contadores(restaurantId)).map((c) => [c.reservado, c.gasto])).toEqual([['0.000000', '0.000000'], ['0.000000', '0.000000']])
+  })
+
+  it('arquivo baixado não é do tipo gravado (magic bytes): erro amigável, sem chamar a IA, reserva devolvida', async () => {
+    const { restaurantId, id } = await setup()
+    const { llm, chamadas } = fakeLlm(LEITURA)
+    const storage = { async baixarObjeto() { return new TextEncoder().encode('<html>oi</html>') } }
+    expect(await ingestDocument(deps(llm, { storage }), id)).toBe('erro')
+    expect(chamadas).toHaveLength(0)
+    expect((await importacao(id)).erro).toBe('O arquivo enviado não é um PDF nem uma imagem válida. Envie de novo.')
+    expect((await contadores(restaurantId)).map((c) => c.reservado)).toEqual(['0.000000', '0.000000'])
+  })
 })
+

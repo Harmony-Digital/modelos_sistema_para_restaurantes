@@ -107,15 +107,22 @@ export async function cancelarPedidoDoCliente(
   return r.length > 0
 }
 
+const MAX_OBSERVACOES = 300
+
 /** Mudança pedida pelo cliente num pedido em andamento: acrescenta a observação (texto nosso) sem passar de 300. */
 export async function observarPedidoDoCliente(
   tx: Tx,
   p: { restaurantId: string; customerId: string; pedidoId: string; observacao: string },
 ): Promise<boolean> {
+  const obs = sql`${p.observacao}::text`
   const r = await tx
     .update(eventRequests)
     .set({
-      observacoes: sql`left(concat_ws(${'\n'}, nullif(${eventRequests.observacoes}, ''), ${p.observacao}::text), 300)`,
+      // a observação nova nunca é cortada: o que não cabe sai das anteriores (300 no total, check da tabela)
+      observacoes: sql`case
+        when coalesce(${eventRequests.observacoes}, '') = '' or char_length(${obs}) >= ${MAX_OBSERVACOES - 1} then left(${obs}, ${MAX_OBSERVACOES})
+        else left(${eventRequests.observacoes}, ${MAX_OBSERVACOES - 1} - char_length(${obs})) || ${'\n'} || ${obs}
+      end`,
       updatedAt: sql`now()`,
     })
     .where(and(

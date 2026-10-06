@@ -51,7 +51,7 @@ describe('evals S4 — camada 2 (resolução + composição, determinística)', 
   }
 
   it('nenhum preço fora do banco: a asserção pega um preço inventado', () => {
-    expect(precosForaDoBanco('Temos sim: **Picanha** — R$ 1,00', [], [])).toEqual(['R$ 1,00'])
+    expect(precosForaDoBanco('Temos sim: *Picanha* — R$ 1,00', [], [])).toEqual(['R$ 1,00'])
     const c = CASOS.find((x) => x.id === 'b01')!
     expect(precosForaDoBanco(rodar(c).texto, itensDoCaso(c), resumoDoCaso(c))).toEqual([])
   })

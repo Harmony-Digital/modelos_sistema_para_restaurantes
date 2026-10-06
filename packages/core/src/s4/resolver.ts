@@ -35,7 +35,7 @@ export function formatarPreco(centavos: number): string {
 }
 
 const textoPreco = (c: number | null) => (c === null ? 'preço sob consulta' : formatarPreco(c))
-const negrito = (nome: string) => `**${nome}**`
+const negrito = (nome: string) => `*${nome}*`
 export const chaveLacunaCardapio = (termo: string | null) => `${LACUNA_CARDAPIO}:${normalizeText(termo ?? '').slice(0, 60) || 'geral'}`
 
 /** Itens do cardápio por índice na lista de itens da mensagem (o worker busca antes de resolver). */
@@ -84,7 +84,7 @@ export function resolverItensS4(
     return { tipo: 'porUnidade', precos }
   }
 
-  /** `**Nome** — descrição — R$ 59,90` (detalhado) · `**Nome** — R$ 59,90` · `**Nome**: Asa Sul R$ 59,90 · Asa Norte R$ 62,00` */
+  /** `*Nome* — descrição — R$ 59,90` (detalhado) · `*Nome* — R$ 59,90` · `*Nome*: Asa Sul R$ 59,90 · Asa Norte R$ 62,00` (negrito do WhatsApp) */
   function linha(item: ItemCardapioCore, preco: Exclude<PrecoDoItem, { tipo: 'indisponivel' }>, detalhado: boolean): string {
     if (preco.tipo === 'porUnidade') {
       return `${negrito(item.nome)}: ${preco.precos.map((p) => `${p.unidade.nome} ${textoPreco(p.centavos)}`).join(' · ')}`
@@ -168,7 +168,7 @@ export function resolverItensS4(
     }
     respondidos++
     const linhas = categorias.map((c) =>
-      `${negrito(c.categoria)}: ${c.itens.slice(0, MAX_DETALHADOS).map((i) => `${i.nome} (${textoPreco(i.precoCentavos)})`).join(', ')}`)
+      `${negrito(c.categoria)}: ${c.itens.slice(0, MAX_DETALHADOS).map((i) => `${i.nome} (${i.precoVaria ? 'preço varia por unidade' : textoPreco(i.precoCentavos)})`).join(', ')}`)
     trechos.push(m('cardapio_sem_arquivo', { categorias: lista(linhas) }))
   }
 

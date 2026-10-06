@@ -55,3 +55,15 @@ export function createStorage(cfg: { url: string; serviceRoleKey: string; fetch?
 }
 
 export type Storage = ReturnType<typeof createStorage>
+
+const comeca = (b: Uint8Array, sig: readonly number[], desde = 0) => b.length >= desde + sig.length && sig.every((x, i) => b[desde + i] === x)
+const ascii = (s: string) => [...s].map((c) => c.charCodeAt(0))
+
+/** Tipo do arquivo pelos primeiros bytes (mesmas assinaturas do upload do painel); null se não for PDF/JPEG/PNG/WebP. */
+export function mimeDosBytes(bytes: Uint8Array): 'application/pdf' | 'image/jpeg' | 'image/png' | 'image/webp' | null {
+  if (comeca(bytes, ascii('%PDF'))) return 'application/pdf'
+  if (comeca(bytes, [0xff, 0xd8, 0xff])) return 'image/jpeg'
+  if (comeca(bytes, [0x89, 0x50, 0x4e, 0x47])) return 'image/png'
+  if (comeca(bytes, ascii('RIFF')) && comeca(bytes, ascii('WEBP'), 8)) return 'image/webp'
+  return null
+}

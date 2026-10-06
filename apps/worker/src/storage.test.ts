@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createStorage, MAX_OBJETO_BYTES } from './storage.ts'
+import { createStorage, MAX_OBJETO_BYTES, mimeDosBytes } from './storage.ts'
 
 const URL_BASE = 'http://127.0.0.1:54321'
 const CHAVE = 'chave-de-servico-bem-longa-0123456789'
@@ -40,3 +40,19 @@ describe('baixarObjeto (Storage por REST, chave de serviço)', () => {
     expect(f).not.toHaveBeenCalled()
   })
 })
+
+describe('mimeDosBytes (tipo pelos primeiros bytes, nunca pelo nome/MIME gravado)', () => {
+  const ascii = (t: string) => [...t].map((c) => c.charCodeAt(0))
+  it('reconhece PDF, JPEG, PNG e WebP', () => {
+    expect(mimeDosBytes(new Uint8Array(ascii('%PDF-1.7')))).toBe('application/pdf')
+    expect(mimeDosBytes(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]))).toBe('image/jpeg')
+    expect(mimeDosBytes(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toBe('image/png')
+    expect(mimeDosBytes(new Uint8Array([...ascii('RIFF'), 0, 0, 0, 0, ...ascii('WEBP')]))).toBe('image/webp')
+  })
+  it('outro conteúdo (HTML, vazio, RIFF que não é WebP) ⇒ null', () => {
+    expect(mimeDosBytes(new Uint8Array(ascii('<html>')))).toBeNull()
+    expect(mimeDosBytes(new Uint8Array())).toBeNull()
+    expect(mimeDosBytes(new Uint8Array([...ascii('RIFF'), 0, 0, 0, 0, ...ascii('WAVE')]))).toBeNull()
+  })
+})
+

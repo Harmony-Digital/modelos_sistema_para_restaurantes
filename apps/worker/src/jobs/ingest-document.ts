@@ -1,12 +1,12 @@
 import { eq } from 'drizzle-orm'
 import {
-  concluirIngestao, ERRO_RASCUNHO_INVALIDO, marcarProcessando, releaseBudget, reserveBudget, schema, settleBudget, type Db,
+  concluirIngestao, ERRO_RASCUNHO_INVALIDO, liberarReservasPendentes, marcarProcessando, releaseBudget, reserveBudget, schema, settleBudget, type Db,
   type Reservation,
 } from '@atd/db'
 import { INGESTAO_BUDGET_ESTIMATE_USD, INGESTAO_PROMPT_VERSION, lerCardapioPorIa, type JsonCallResult, type LlmClient } from '@atd/ai'
 import type { RascunhoCardapio } from '@atd/core'
 import type { Logger } from '../logger.ts'
-import type { Storage } from '../storage.ts'
+import { mimeDosBytes, type Storage } from '../storage.ts'
 
 const { aiRuns, auditLog, restaurants } = schema
 
@@ -30,6 +30,8 @@ export const ERRO_SEM_MODELO = 'Importação por IA não configurada. Envie um C
 export const ERRO_SEM_ORCAMENTO = 'O limite de gastos com IA foi atingido. Tente de novo depois ou envie um CSV.'
 export const ERRO_STORAGE = 'Não consegui abrir o arquivo enviado. Envie de novo.'
 export const ERRO_INESPERADO = 'Não foi possível ler o arquivo agora. Envie de novo.'
+export const ERRO_DEMOROU = 'A leitura demorou demais. Envie de novo.'
+export const ERRO_TIPO = 'O arquivo enviado não é um PDF nem uma imagem válida. Envie de novo.'
 
 const fmt = (m: number) => (m / 1_000_000).toFixed(6)
 const micros = (usd: string) => Math.round(Number(usd) * 1_000_000)
@@ -80,10 +82,16 @@ export async function ingestDocument(deps: IngestDeps, importacaoId: string): Pr
   }
 
   try {
+    const [r] = await db.select({ timezone: restaurants.timezone }).from(restaurants).where(eq(restaurants.id, alvo.restaurantId))
+    if (alvo.retomada) {
+      // o processo anterior morreu no meio: devolve a reserva que ficou aberta e encerra (sem ler de novo nem cobrar)
+      const n = await liberarReservasPendentes(db, { restaurantId: alvo.restaurantId, ref, timeZone: r!.timezone })
+      deps.log.warn({ importacaoId, reservasLiberadas: n }, 'importação parada em processando; marcada com erro')
+      return await erro(ERRO_DEMOROU)
+    }
     const modelos = deps.ingestModels ?? []
     if (modelos.length === 0) return await erro(ERRO_SEM_MODELO)
 
-    const [r] = await db.select({ timezone: restaurants.timezone }).from(restaurants).where(eq(restaurants.id, alvo.restaurantId))
     reserva = await reserveBudget(db, {
       restaurantId: alvo.restaurantId, scope: 'ia', amountUsd: INGESTAO_RESERVA_USD, timeZone: r!.timezone, ref,
       ...(deps.now ? { now: deps.now() } : {}),
@@ -101,6 +109,13 @@ export async function ingestDocument(deps: IngestDeps, importacaoId: string): Pr
       return await erro(ERRO_STORAGE)
     }
 
+    // o conteúdo precisa ser do tipo gravado (o painel confere no upload; aqui é a última barreira antes da IA)
+    if (mimeDosBytes(bytes) !== alvo.mime) {
+      deps.log.error({ importacaoId }, 'arquivo da importação não corresponde ao tipo gravado')
+      await releaseBudget(db, reserva, ref)
+      reserva = null
+      return await erro(ERRO_TIPO)
+    }
     const arquivo = { mime: alvo.mime, base64: Buffer.from(bytes).toString('base64'), filename: resto.at(-1) ?? 'cardapio' }
     const ler = () => lerCardapioPorIa(deps.llm, { models: modelos, arquivo })
     const runs: Run[] = []

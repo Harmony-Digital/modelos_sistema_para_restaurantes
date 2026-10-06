@@ -201,4 +201,35 @@ describe('resumoCardapio', () => {
       itens: [{ nome: 'Picanha na chapa', precoCentavos: 8990 }, { nome: 'Carne-de-sol', precoCentavos: 5990 }, { nome: 'Fraldinha', precoCentavos: 6490 }],
     })
   })
+
+  it("todas as unidades: só o que está disponível em alguma unidade ativa; preço efetivo único ou 'varia'", async () => {
+    const c = await cenario()
+    const r = await withRole(db, 'worker_app', (tx) => resumoCardapio(tx, c.restaurantId, 'todas'))
+    expect(r).toEqual([
+      {
+        categoria: 'Carnes',
+        // picanha: 89,90 na Asa Sul e 95,00 na Asa Norte; carne-de-sol só na Asa Sul; costela só na Asa Norte; cupim em nenhuma
+        itens: [
+          { nome: 'Picanha na chapa', precoCentavos: null, precoVaria: true },
+          { nome: 'Carne-de-sol', precoCentavos: 5990 },
+          { nome: 'Costela', precoCentavos: 7990 },
+        ],
+      },
+      { categoria: 'Saladas', itens: [{ nome: 'Salada caprese', precoCentavos: null }, { nome: 'Salada verde', precoCentavos: 3000 }] },
+      { categoria: 'Bebidas', itens: [{ nome: 'Refrigerante lata', precoCentavos: 700 }] },
+    ])
+    // preço sob consulta numa unidade e com preço na outra também varia
+    await db.insert(menuItemUnits).values({ restaurantId: c.restaurantId, itemId: c.id('Refrigerante lata'), unitId: c.u2, precoOverrideCentavos: null, disponivel: true })
+    await db.update(menuItems).set({ precoCentavos: null }).where(eq(menuItems.id, c.id('Refrigerante lata')))
+    await db.update(menuItemUnits).set({ precoOverrideCentavos: 800 }).where(eq(menuItemUnits.itemId, c.id('Refrigerante lata')))
+    const bebidas = (await resumoCardapio(db, c.restaurantId, 'todas')).find((x) => x.categoria === 'Bebidas')!
+    expect(bebidas.itens).toEqual([{ nome: 'Refrigerante lata', precoCentavos: null, precoVaria: true }])
+  })
+
+  it('todas as unidades sem unidade ativa: cai no padrão', async () => {
+    const c = await cenario()
+    await db.update(units).set({ ativo: false }).where(eq(units.restaurantId, c.restaurantId))
+    expect(await resumoCardapio(db, c.restaurantId, 'todas')).toEqual(await resumoCardapio(db, c.restaurantId, null))
+  })
 })
+

@@ -117,8 +117,15 @@ describe('eventos do worker', () => {
     expect(await obs(p.id)).toBe('Bolo sem glúten\nCliente pediu: 60 convidados')
     expect(await observar(vazio.id, 'Cliente pediu: data 21/11/2026')).toBe(true)
     expect(await obs(vazio.id)).toBe('Cliente pediu: data 21/11/2026')
+    // a nova nunca some no corte: o que não cabe sai das anteriores
+    const longa = `Cliente pediu: ${'y'.repeat(255)}`
+    expect(await observar(p.id, longa)).toBe(true)
+    const depois = (await obs(p.id))!
+    expect(depois).toHaveLength(300)
+    expect(depois.endsWith(`\n${longa}`)).toBe(true)
+    expect(depois.startsWith('Bolo sem glúten')).toBe(true)
     expect(await observar(p.id, 'x'.repeat(300))).toBe(true)
-    expect(await obs(p.id)).toHaveLength(300)
+    expect(await obs(p.id)).toBe('x'.repeat(300))
     expect(await observar(p.id, 'outra', outro)).toBe(false)
     await db.update(eventRequests).set({ status: 'cancelado' }).where(eq(eventRequests.id, vazio.id))
     expect(await observar(vazio.id, 'depois de cancelado')).toBe(false)

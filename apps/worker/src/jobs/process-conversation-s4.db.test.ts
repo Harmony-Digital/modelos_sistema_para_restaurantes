@@ -27,10 +27,16 @@ const card = (extra: Partial<Item> = {}): Item => ({
 const triagem = (...itens: Item[]): TriageV5 => ({ itens, fora_escopo: false })
 const ENVIAR = triagem(card({ tipo: 'enviar' }))
 
-async function setup(o: { arquivo?: 'pdf' | 'jpeg' | null } = {}) {
+async function setup(o: { arquivo?: 'pdf' | 'jpeg' | null; asaNorte?: boolean } = {}) {
   const { restaurantId, unitId } = await seedRestaurant(db)
   await db.update(schema.restaurants).set({ nome: 'Casa Teste', politicaUrl: 'https://casa.test/privacidade' })
   await db.update(schema.units).set({ nome: 'Asa Sul', ordem: 1 }).where(eq(schema.units.id, unitId))
+  let asaNorte: string | null = null
+  if (o.asaNorte) {
+    const [u] = await db.insert(schema.units).values({ restaurantId, nome: 'Asa Norte', slug: 'asa-norte', ordem: 2 }).returning()
+    asaNorte = u!.id
+    for (let d = 0; d < 7; d++) await db.insert(schema.unitHours).values({ restaurantId, unitId: asaNorte, weekday: d, turno: 1, abre: '11:00', fecha: '23:00' })
+  }
   for (let d = 0; d < 7; d++) await db.insert(schema.unitHours).values({ restaurantId, unitId, weekday: d, turno: 1, abre: '11:00', fecha: '23:00' })
   await db.insert(schema.budgetLimits).values([
     { restaurantId, escopo: 'ia', periodo: 'dia', limiteUsd: '1' },
@@ -54,7 +60,7 @@ async function setup(o: { arquivo?: 'pdf' | 'jpeg' | null } = {}) {
     }).returning()
     arquivoId = f!.id
   }
-  return { restaurantId, unitId, arquivoId }
+  return { restaurantId, unitId, arquivoId, asaNorte }
 }
 
 async function receive(restaurantId: string, texto: string) {
@@ -99,13 +105,17 @@ function fakeWa(o: { recusarMidia?: boolean } = {}) {
   }
 }
 
-function fakeStorage() {
+const BYTES_PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46])
+const BYTES_JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0])
+
+/** Storage falso: devolve bytes de acordo com a extensão (ou `conteudo`, para simular arquivo trocado). */
+function fakeStorage(conteudo?: Uint8Array) {
   const baixados: { bucket: string; caminho: string }[] = []
   return {
     baixados,
     async baixarObjeto(bucket: string, caminho: string) {
       baixados.push({ bucket, caminho })
-      return new Uint8Array([0x25, 0x50, 0x44, 0x46])
+      return conteudo ?? (caminho.endsWith('.jpg') ? BYTES_JPEG : BYTES_PDF)
     },
   }
 }
@@ -259,3 +269,54 @@ describe('S4 no worker — envio do arquivo', () => {
     expect(wa.chamadas.some((c) => c.metodo === 'sendDocument' || c.metodo === 'uploadMedia')).toBe(false)
   })
 })
+
+describe('S4 no worker — correções do Bloco B', () => {
+  it('sem arquivo e duas unidades, nenhuma citada: preço que varia sai sem preço; indisponível em todas não aparece', async () => {
+    const { restaurantId, unitId, asaNorte } = await setup({ arquivo: null, asaNorte: true })
+    const [picanha] = await db.select().from(schema.menuItems).where(eq(schema.menuItems.nome, 'Picanha na chapa'))
+    const [carne] = await db.select().from(schema.menuItems).where(eq(schema.menuItems.nome, 'Carne-de-sol'))
+    await db.insert(schema.menuItemUnits).values([
+      { restaurantId, itemId: picanha!.id, unitId: asaNorte!, precoOverrideCentavos: 9500 },
+      { restaurantId, itemId: carne!.id, unitId, disponivel: false },
+      { restaurantId, itemId: carne!.id, unitId: asaNorte!, disponivel: false },
+    ])
+    const conv = await receive(restaurantId, 'manda o cardápio')
+    await processConversation(deps(fakeLlm([ENVIAR]).llm, fakeWa()), conv)
+    const [m] = await saidas(conv)
+    expect(m!.texto).toContain('Picanha na chapa (preço varia por unidade)')
+    expect(m!.texto).not.toContain('R$ 89,90')
+    expect(m!.texto).not.toContain('Carne-de-sol')
+  })
+
+  it('sem arquivo e uma unidade ativa só: preço efetivo dela (não o padrão)', async () => {
+    const { restaurantId, unitId } = await setup({ arquivo: null })
+    const [picanha] = await db.select().from(schema.menuItems).where(eq(schema.menuItems.nome, 'Picanha na chapa'))
+    await db.insert(schema.menuItemUnits).values({ restaurantId, itemId: picanha!.id, unitId, precoOverrideCentavos: 9900 })
+    const conv = await receive(restaurantId, 'manda o cardápio')
+    await processConversation(deps(fakeLlm([ENVIAR]).llm, fakeWa()), conv)
+    const [m] = await saidas(conv)
+    expect(m!.texto).toContain('Picanha na chapa (R$ 99,00)')
+    expect(m!.texto).not.toContain('R$ 89,90')
+  })
+
+  it('duas unidades sem arquivo próprio na mesma mensagem: o arquivo geral sai uma vez só', async () => {
+    const { restaurantId } = await setup({ asaNorte: true })
+    const conv = await receive(restaurantId, 'cardápio da asa sul e da asa norte')
+    const wa = fakeWa()
+    await processConversation(deps(fakeLlm([triagem(card({ tipo: 'enviar', unidade: 'asa sul' }), card({ tipo: 'enviar', unidade: 'asa norte' }))]).llm, wa), conv)
+    expect((await saidas(conv)).map((m) => m.tipo)).toEqual(['texto', 'documento'])
+    expect(wa.chamadas.filter((c) => c.metodo === 'sendDocument')).toHaveLength(1)
+  })
+
+  it('arquivo no Storage não bate com o tipo gravado (magic bytes): não sobe à Meta; manda o resumo em texto', async () => {
+    const { restaurantId } = await setup()
+    const conv = await receive(restaurantId, 'manda o cardápio')
+    const wa = fakeWa()
+    await processConversation(deps(fakeLlm([ENVIAR]).llm, wa, fakeStorage(new TextEncoder().encode('<html>'))), conv)
+    expect(wa.chamadas.some((c) => c.metodo === 'uploadMedia' || c.metodo === 'sendDocument')).toBe(false)
+    const out = await saidas(conv)
+    expect(out.map((m) => m.tipo)).toEqual(['texto', 'texto'])
+    expect(out[1]!.texto).toMatch(/^Nosso cardápio:/)
+  })
+})
+

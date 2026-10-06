@@ -43,11 +43,28 @@ export const CARDAPIO: ItemCardapioCore[] = [PICANHA, FRALDINHA, COSTELA, FEIJOA
 /** O que a busca do banco devolve para um filtro (itens com a tag). */
 export const comTag = (tag: TagCardapio) => CARDAPIO.filter((i) => i.tags.includes(tag))
 
-/** Resumo do banco: categorias em ordem, até 3 itens cada, com o preço base. */
-export const RESUMO: ResumoCardapio = [...new Set(CARDAPIO.map((i) => i.categoria))].map((categoria) => ({
-  categoria,
-  itens: CARDAPIO.filter((i) => i.categoria === categoria).slice(0, 3).map((i) => ({ nome: i.nome, precoCentavos: i.precoBaseCentavos })),
-}))
+/**
+ * Resumo do banco (mesma regra de `resumoCardapio`): categorias em ordem, até 3 itens disponíveis cada, com o preço
+ * efetivo da unidade; `'todas'` (várias unidades, nenhuma citada): disponível em alguma unidade, preço único ou "varia".
+ */
+export function resumoDe(unidade: string | 'todas'): ResumoCardapio {
+  const efetivo = (i: ItemCardapioCore) => {
+    const onde = i.porUnidade.filter((p) => p.disponivel && (unidade === 'todas' || p.unitId === unidade))
+    if (onde.length === 0) return null
+    const precos = new Set(onde.map((p) => p.precoCentavos))
+    return precos.size > 1 ? { precoCentavos: null, precoVaria: true } : { precoCentavos: onde[0]!.precoCentavos }
+  }
+  return [...new Set(CARDAPIO.map((i) => i.categoria))].map((categoria) => ({
+    categoria,
+    itens: CARDAPIO.filter((i) => i.categoria === categoria).flatMap((i) => {
+      const e = efetivo(i)
+      return e ? [{ nome: i.nome, ...e }] : []
+    }).slice(0, 3),
+  }))
+}
+
+/** O que o worker manda sem unidade citada (4 unidades ativas). */
+export const RESUMO: ResumoCardapio = resumoDe('todas')
 
 /** Todo "R$ x" do texto deve existir no banco: preços dos itens encontrados e do resumo usados no caso. */
 export function precosForaDoBanco(texto: string | null, itens: readonly ItemCardapioCore[], resumo: ResumoCardapio): string[] {

@@ -19,7 +19,7 @@ import {
 } from '@atd/ai'
 import type { SendResult, WhatsAppClient } from '@atd/whatsapp'
 import type { Logger } from '../logger.ts'
-import type { Storage } from '../storage.ts'
+import { mimeDosBytes, type Storage } from '../storage.ts'
 
 const { aiRuns, auditLog, conversations, customers, dataSubjectRequests, messages, restaurants } = schema
 
@@ -331,7 +331,10 @@ async function carregarS4(
   for (const unitId of new Set([null, ...envios.map(({ item }) => unidadeDe(item))])) {
     arquivos.set(unitId, await arquivoParaEnvio(deps.db, { restaurantId, unitId }))
   }
-  const resumo = envios.length ? await resumoCardapio(deps.db, restaurantId, unidadeDe(envios[0]!.item)) : []
+  // resumo com preço efetivo: da unidade citada; uma unidade ativa só ⇒ a dela; várias e nenhuma citada ⇒ todas
+  // (item com preço diferente entre unidades sai sem preço; indisponível em todas não aparece)
+  const unidadeDoResumo = envios.length ? (unidadeDe(envios[0]!.item) ?? (unidades.length === 1 ? unidades[0]!.id : 'todas')) : null
+  const resumo = envios.length ? await resumoCardapio(deps.db, restaurantId, unidadeDoResumo) : []
   const arquivoDe = (unitId: string | null) => (arquivos.has(unitId) ? arquivos.get(unitId)! : (arquivos.get(null) ?? null))
   return { contexto: { achados, resumo, temArquivo: (unitId) => arquivoDe(unitId) !== null }, resumo, arquivoDe }
 }
@@ -339,9 +342,12 @@ async function carregarS4(
 /** Mensagens de mídia das ações do S4 (o texto "Aqui está…" já veio do core), cada uma com o resumo para o caso de falha. */
 function midiasS4(acoes: readonly AcaoS4[], dados: DadosS4 | undefined, s1: ContextoS1): Saida[] {
   if (!dados) return []
+  const enviados = new Set<string>()
   return acoes.flatMap((a): Saida[] => {
     const arquivo = dados.arquivoDe(a.unitId)
-    if (!arquivo) return []
+    // duas unidades sem arquivo próprio caem no mesmo geral: um envio só
+    if (!arquivo || enviados.has(arquivo.id)) return []
+    enviados.add(arquivo.id)
     const semArquivo = resolverS4([ITEM_ENVIAR], s1, new Map(), dados.resumo, () => false, a.unitId ?? undefined)
     const alternativa = semArquivo.texto ?? renderModelo('lacuna', {}, s1.modelos)
     const imagem = (arquivo.mime === 'image/jpeg' || arquivo.mime === 'image/png') && arquivo.tamanho <= MAX_IMAGEM_META
@@ -906,6 +912,11 @@ async function subirArquivo(deps: ProcessDeps, a: ArquivoCardapio, agora: Date) 
     bytes = await deps.storage.baixarObjeto(bucket!, resto.join('/'))
   } catch (err) {
     deps.log.error({ err, arquivoId: a.id }, 'falha ao baixar o arquivo do cardápio do Storage')
+    return 'sem_arquivo' as const
+  }
+  // o conteúdo precisa ser do tipo gravado (o painel confere no upload; aqui é a última barreira antes da Meta)
+  if (mimeDosBytes(bytes) !== a.mime) {
+    deps.log.error({ arquivoId: a.id }, 'arquivo do cardápio no Storage não corresponde ao tipo gravado')
     return 'sem_arquivo' as const
   }
   const up = await deps.wa.uploadMedia(bytes, a.mime, nomeDoArquivo(a))

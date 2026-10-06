@@ -18,7 +18,11 @@ export type ItemCardapioCore = {
 }
 
 /** Resumo para quando não há arquivo: categorias ativas em ordem, até 3 itens cada (mesmo formato de @atd/db). */
-export type ResumoCardapio = { categoria: string; itens: { nome: string; precoCentavos: number | null }[] }[]
+export type ResumoCardapio = {
+  categoria: string
+  /** `precoVaria`: sem unidade, o preço efetivo difere entre as unidades (o texto não mostra preço) */
+  itens: { nome: string; precoCentavos: number | null; precoVaria?: boolean }[]
+}[]
 
 /** O que o worker executa: envia o arquivo ativo da unidade (senão o geral). */
 export type AcaoS4 = { tipo: 'enviar_arquivo'; unitId: string | null }

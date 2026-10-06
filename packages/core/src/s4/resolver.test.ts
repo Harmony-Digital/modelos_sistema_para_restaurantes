@@ -56,7 +56,7 @@ describe('formatarPreco', () => {
 describe('resolverS4 — buscar/preço', () => {
   it('um item, preço igual nas unidades: nome, descrição e preço', () => {
     const r = resolverS4([c('buscar', { consulta: 'picanha' })], CONTEXTO_PEQUENO, achados([PICANHA]), RESUMO, semArquivo)
-    expect(r.texto).toBe('Temos sim: **Picanha** — Corte grelhado na brasa — R$ 59,90')
+    expect(r.texto).toBe('Temos sim: *Picanha* — Corte grelhado na brasa — R$ 59,90')
     expect(r.acoes).toEqual([])
     expect(r.lacunas).toEqual([])
     expect([r.validos, r.respondidos]).toEqual([1, 1])
@@ -65,25 +65,25 @@ describe('resolverS4 — buscar/preço', () => {
   it('sem descrição: sem o trecho; preço null: "preço sob consulta"', () => {
     const semPreco = item({ id: 'i-x', nome: 'Costela', descricao: '  ', precoBaseCentavos: null })
     const r = resolverS4([c('preco', { consulta: 'costela' })], CONTEXTO_PEQUENO, achados([semPreco]), RESUMO, semArquivo)
-    expect(r.texto).toBe('Temos sim: **Costela** — preço sob consulta')
+    expect(r.texto).toBe('Temos sim: *Costela* — preço sob consulta')
   })
 
   it('com unidade: preço efetivo da unidade pedida', () => {
     const p = item({ precos: [5990, 6200] })
     const r = resolverS4([c('preco', { consulta: 'picanha', unidade: 'asa norte' })], CONTEXTO_PEQUENO, achados([p]), RESUMO, semArquivo)
-    expect(r.texto).toBe('Temos sim: **Picanha** — Corte grelhado na brasa — R$ 62,00')
+    expect(r.texto).toBe('Temos sim: *Picanha* — Corte grelhado na brasa — R$ 62,00')
   })
 
   it('unidade escolhida na lista vale como unidade', () => {
     const p = item({ precos: [5990, 6200] })
     const r = resolverS4([c('preco', { consulta: 'picanha' })], CONTEXTO_PEQUENO, achados([p]), RESUMO, semArquivo, 'u-asa-norte')
-    expect(r.texto).toBe('Temos sim: **Picanha** — Corte grelhado na brasa — R$ 62,00')
+    expect(r.texto).toBe('Temos sim: *Picanha* — Corte grelhado na brasa — R$ 62,00')
   })
 
   it('sem unidade e preços diferentes (poucas unidades): preço de cada unidade', () => {
     const p = item({ precos: [5990, 6200] })
     const r = resolverS4([c('preco', { consulta: 'picanha' })], CONTEXTO_PEQUENO, achados([p]), RESUMO, semArquivo)
-    expect(r.texto).toBe('Temos sim: **Picanha**: Asa Sul R$ 59,90 · Asa Norte R$ 62,00')
+    expect(r.texto).toBe('Temos sim: *Picanha*: Asa Sul R$ 59,90 · Asa Norte R$ 62,00')
     expect(r.pendenteUnidade).toEqual([])
   })
 
@@ -99,32 +99,32 @@ describe('resolverS4 — buscar/preço', () => {
   it('sem unidade, muitas unidades e preço igual: responde direto', () => {
     const p = item({ unidades: UNIDADES })
     const r = resolverS4([c('buscar', { consulta: 'picanha' })], CONTEXTO, achados([p]), RESUMO, semArquivo)
-    expect(r.texto).toBe('Temos sim: **Picanha** — Corte grelhado na brasa — R$ 59,90')
+    expect(r.texto).toBe('Temos sim: *Picanha* — Corte grelhado na brasa — R$ 59,90')
   })
 
   it('sem unidade: unidades onde o item está indisponível ficam de fora', () => {
     const p = item({ precos: [5990, 6200], disp: [false, true] })
     const r = resolverS4([c('buscar', { consulta: 'picanha' })], CONTEXTO_PEQUENO, achados([p]), RESUMO, semArquivo)
-    expect(r.texto).toBe('Temos sim: **Picanha** — Corte grelhado na brasa — R$ 62,00')
+    expect(r.texto).toBe('Temos sim: *Picanha* — Corte grelhado na brasa — R$ 62,00')
   })
 
   it('indisponível na unidade pedida', () => {
     const p = item({ disp: [true, false] })
     const r = resolverS4([c('buscar', { consulta: 'picanha', unidade: 'asa norte' })], CONTEXTO_PEQUENO, achados([p]), RESUMO, semArquivo)
-    expect(r.texto).toBe('Na unidade Asa Norte, **Picanha** está indisponível no momento.')
+    expect(r.texto).toBe('Na unidade Asa Norte, *Picanha* está indisponível no momento.')
     expect(r.texto).not.toContain('R$')
     expect([r.validos, r.respondidos]).toEqual([1, 1])
   })
 
   it('vários itens (até 3): lista detalhada', () => {
     const r = resolverS4([c('buscar', { consulta: 'carne' })], CONTEXTO_PEQUENO, achados([PICANHA, FRALDINHA]), RESUMO, semArquivo)
-    expect(r.texto).toBe('Temos sim:\n• **Picanha** — Corte grelhado na brasa — R$ 59,90\n• **Fraldinha** — R$ 49,00')
+    expect(r.texto).toBe('Temos sim:\n• *Picanha* — Corte grelhado na brasa — R$ 59,90\n• *Fraldinha* — R$ 49,00')
   })
 
   it('mais de 3 itens: lista com nome e preço', () => {
     const lista = [1, 2, 3, 4].map((n) => item({ id: `i-${n}`, nome: `Corte ${n}`, precoBaseCentavos: 1000 * n }))
     const r = resolverS4([c('buscar', { consulta: 'corte' })], CONTEXTO_PEQUENO, achados(lista), RESUMO, semArquivo)
-    expect(r.texto).toBe('Temos sim:\n• **Corte 1** — R$ 10,00\n• **Corte 2** — R$ 20,00\n• **Corte 3** — R$ 30,00\n• **Corte 4** — R$ 40,00')
+    expect(r.texto).toBe('Temos sim:\n• *Corte 1* — R$ 10,00\n• *Corte 2* — R$ 20,00\n• *Corte 3* — R$ 30,00\n• *Corte 4* — R$ 40,00')
   })
 
   it('disponível e indisponível na mesma resposta', () => {
@@ -132,7 +132,7 @@ describe('resolverS4 — buscar/preço', () => {
       [c('buscar', { consulta: 'carne', unidade: 'asa sul' })], CONTEXTO_PEQUENO,
       achados([PICANHA, item({ id: 'i-f', nome: 'Fraldinha', descricao: null, disp: [false, true] })]), RESUMO, semArquivo,
     )
-    expect(r.texto).toBe('Temos sim: **Picanha** — Corte grelhado na brasa — R$ 59,90\n\nNa unidade Asa Sul, **Fraldinha** está indisponível no momento.')
+    expect(r.texto).toBe('Temos sim: *Picanha* — Corte grelhado na brasa — R$ 59,90\n\nNa unidade Asa Sul, *Fraldinha* está indisponível no momento.')
   })
 
   it('sem resultado: oferece o cardápio e registra a lacuna com a consulta normalizada', () => {
@@ -150,7 +150,7 @@ describe('resolverS4 — buscar/preço', () => {
   it('usa os achados do índice do item na mensagem (itens de outros serviços contam no índice)', () => {
     const outro: ItemExtraido = { servico: 'horario_unidades', tipo: 'horario_dia', ...nulos }
     const r = resolverS4([outro, c('buscar', { consulta: 'picanha' })], CONTEXTO_PEQUENO, new Map([[1, [PICANHA]]]), RESUMO, semArquivo)
-    expect(r.texto).toBe('Temos sim: **Picanha** — Corte grelhado na brasa — R$ 59,90')
+    expect(r.texto).toBe('Temos sim: *Picanha* — Corte grelhado na brasa — R$ 59,90')
     expect([r.validos, r.respondidos]).toEqual([1, 1])
   })
 
@@ -167,7 +167,7 @@ describe('resolverS4 — filtro', () => {
     const salada = item({ id: 'i-s', nome: 'Salada da casa', descricao: 'Folhas', precoBaseCentavos: 3200, tags: ['vegano'] })
     const risoto = item({ id: 'i-r', nome: 'Risoto de cogumelos', precoBaseCentavos: 4800, tags: ['vegano'] })
     const r = resolverS4([c('filtro', { tag: 'vegano' })], CONTEXTO_PEQUENO, achados([salada, risoto]), RESUMO, semArquivo)
-    expect(r.texto).toBe('Opções veganas:\n• **Salada da casa** — R$ 32,00\n• **Risoto de cogumelos** — R$ 48,00')
+    expect(r.texto).toBe('Opções veganas:\n• *Salada da casa* — R$ 32,00\n• *Risoto de cogumelos* — R$ 48,00')
     expect([r.validos, r.respondidos]).toEqual([1, 1])
   })
 
@@ -175,13 +175,13 @@ describe('resolverS4 — filtro', () => {
     const a = item({ id: 'i-a', nome: 'Suco', precoBaseCentavos: 900, precos: [900, 1000], tags: ['bebida'] })
     const b = item({ id: 'i-b', nome: 'Chá', precoBaseCentavos: 700, disp: [true, false], tags: ['bebida'] })
     const r = resolverS4([c('filtro', { tag: 'bebida', unidade: 'asa norte' })], CONTEXTO_PEQUENO, achados([a, b]), RESUMO, semArquivo)
-    expect(r.texto).toBe('Opções de bebidas:\n• **Suco** — R$ 10,00')
+    expect(r.texto).toBe('Opções de bebidas:\n• *Suco* — R$ 10,00')
   })
 
   it('sem unidade e preços diferentes: preço por unidade na linha', () => {
     const a = item({ id: 'i-a', nome: 'Suco', precos: [900, 1000], tags: ['bebida'] })
     const r = resolverS4([c('filtro', { tag: 'bebida' })], CONTEXTO_PEQUENO, achados([a]), RESUMO, semArquivo)
-    expect(r.texto).toBe('Opções de bebidas:\n• **Suco**: Asa Sul R$ 9,00 · Asa Norte R$ 10,00')
+    expect(r.texto).toBe('Opções de bebidas:\n• *Suco*: Asa Sul R$ 9,00 · Asa Norte R$ 10,00')
   })
 
   it('nenhuma opção: não encontrado + lacuna pela tag', () => {
@@ -209,9 +209,15 @@ describe('resolverS4 — enviar', () => {
 
   it('sem arquivo: categorias com até 3 itens e preço', () => {
     const r = resolverS4([c('enviar')], CONTEXTO_PEQUENO, achados([]), RESUMO, semArquivo)
-    expect(r.texto).toBe('Nosso cardápio:\n• **Carnes**: Picanha (R$ 59,90), Fraldinha (preço sob consulta)\n• **Sobremesas**: Pudim (R$ 14,00)')
+    expect(r.texto).toBe('Nosso cardápio:\n• *Carnes*: Picanha (R$ 59,90), Fraldinha (preço sob consulta)\n• *Sobremesas*: Pudim (R$ 14,00)')
     expect(r.acoes).toEqual([])
     expect(precosForaDoBanco(r.texto, [], RESUMO)).toEqual([])
+  })
+
+  it('sem arquivo e sem unidade, preço que varia entre unidades: sem preço no texto', () => {
+    const resumo = [{ categoria: 'Carnes', itens: [{ nome: 'Picanha', precoCentavos: null, precoVaria: true }, { nome: 'Costela', precoCentavos: 7990 }] }]
+    const r = resolverS4([c('enviar')], CONTEXTO, achados([]), resumo, semArquivo)
+    expect(r.texto).toBe('Nosso cardápio:\n• *Carnes*: Picanha (preço varia por unidade), Costela (R$ 79,90)')
   })
 
   it('sem arquivo e sem cardápio cadastrado: lacuna', () => {
@@ -270,6 +276,6 @@ describe('resolverAtendimento com S4', () => {
     const depois = resolverAtendimento(r.pendente, CONTEXTO, SEG_14H, [], 'u-asa-norte', undefined, {
       achados: new Map([[0, [p]]]), resumo: RESUMO, temArquivo: semArquivo,
     })
-    expect(depois.texto).toBe('Temos sim: **Picanha** — Corte grelhado na brasa — R$ 62,00')
+    expect(depois.texto).toBe('Temos sim: *Picanha* — Corte grelhado na brasa — R$ 62,00')
   })
 })
