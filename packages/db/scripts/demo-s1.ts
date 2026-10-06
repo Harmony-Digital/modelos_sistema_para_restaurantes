@@ -1,10 +1,12 @@
 /** Dados de demonstração de S1 (idempotente). Banco local; em produção só pelo `demo:s1:prod` (--producao). */
 import { and, eq, inArray } from 'drizzle-orm'
+import { encryptPhone, keyFromBase64 } from '@atd/core'
 import { createDb, getSingleRestaurantId, podeRodarDemo, schema } from '../src/index.ts'
 
 const url = process.env.DATABASE_URL
 if (!url) throw new Error('Defina DATABASE_URL')
 if (!podeRodarDemo(url, process.argv.slice(2))) throw new Error('demo:s1 só roda no banco local (em produção use demo:s1:prod)')
+const producao = process.argv.includes('--producao')
 
 type T = { abre: string; fecha: string }
 const almoco = { abre: '11:30', fecha: '15:00' }
@@ -91,6 +93,10 @@ const RESPOSTAS_RAPIDAS = [
   { titulo: 'Verificando', texto: 'Um instante, por favor: estou verificando e já te respondo.', ordem: 2 },
 ]
 
+// cliente fictício do pedido de LGPD de exemplo (telefone inexistente, só para a demonstração local)
+const TITULAR_DEMO = { waIdHash: 'demo-lgpd:titular', nome: 'Cliente de demonstração (LGPD)', telefone: '5561900000000' }
+let pedidoLgpd = false
+
 const { db, sql } = createDb(url)
 try {
   const restaurantId = await getSingleRestaurantId(db)
@@ -148,10 +154,26 @@ try {
       if (atual) await tx.update(quickReplies).set({ ...r, ativo: true }).where(eq(quickReplies.id, atual.id))
       else await tx.insert(quickReplies).values({ restaurantId, ...r })
     }
+
+    // LGPD (Etapa 08), só no banco local: um cliente fictício com um pedido de acesso em aberto, para a fila de
+    // Privacidade ter o que mostrar. Em produção não: seria um "cliente real" falso na base do restaurante.
+    if (!producao && process.env.PHONE_ENC_KEY) {
+      const { customers, dataSubjectRequests } = schema
+      const [titular] = await tx.insert(customers)
+        .values({ restaurantId, waIdHash: TITULAR_DEMO.waIdHash, nomePerfil: TITULAR_DEMO.nome,
+          telefoneCifrado: encryptPhone(TITULAR_DEMO.telefone, keyFromBase64(process.env.PHONE_ENC_KEY)) })
+        .onConflictDoUpdate({ target: [customers.restaurantId, customers.waIdHash], set: { nomePerfil: TITULAR_DEMO.nome } })
+        .returning({ id: customers.id })
+      const [aberto] = await tx.select({ id: dataSubjectRequests.id }).from(dataSubjectRequests)
+        .where(and(eq(dataSubjectRequests.customerId, titular!.id), inArray(dataSubjectRequests.status, ['aberto', 'em_andamento'])))
+      if (!aberto) await tx.insert(dataSubjectRequests).values({ restaurantId, customerId: titular!.id, tipo: 'acesso' })
+      pedidoLgpd = true
+    }
   })
   const itens = CARDAPIO.reduce((n, c) => n + c.itens.length, 0)
   process.stdout.write(`Demonstração de S1 pronta: ${UNIDADES.length} unidades, ${FATOS.length} informações e cardápio com ${itens} itens, `
-    + `atendimento humano de segunda a sexta (9h às 18h) e ${RESPOSTAS_RAPIDAS.length} respostas rápidas.\n`)
+    + `atendimento humano de segunda a sexta (9h às 18h)${pedidoLgpd ? ',' : ' e'} ${RESPOSTAS_RAPIDAS.length} respostas rápidas`
+    + `${pedidoLgpd ? ' e 1 pedido de acesso (LGPD) de exemplo' : ''}.\n`)
 } finally {
   await sql.end()
 }

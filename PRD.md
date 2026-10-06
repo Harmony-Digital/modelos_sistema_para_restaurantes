@@ -78,7 +78,7 @@ Meta Cloud API ──webhook (X-Hub-Signature-256)──▶ apps/web — Next.js
                                                    │  2. INSERT messages (wamid único) + job pg-boss (mesma transação)
                                                    │  3. responde 200
                                                    ▼
-                              Supabase Postgres sa-east-1 (RLS · pg-boss · pg_trgm · unaccent · pg_cron · Vault)
+                              Supabase Postgres sa-east-1 (RLS · pg-boss · pg_trgm · unaccent · Vault)
                               Supabase Storage (privado) · Supabase Auth (MFA) · Realtime Broadcast (privado)
                                                    ▲
 apps/worker — Node 24 @ VPS Hostinger (Docker, sem portas abertas)
@@ -167,9 +167,12 @@ Convenções:
 | Tabela | Campos | Índices / regras |
 |---|---|---|
 | `ai_runs` | id bigint, conversation_id, etapa (`triagem`/`resposta`/`stt`/`ingestao`), modelo, prompt_version, tokens_in, tokens_out, tokens_cache, audio_segundos, cost_usd, latencia_ms, intent, resultado, erro | BRIN em `created_at`; `(conversation_id)` |
-| `budget_limits` | escopo (`ia`/`whatsapp`), periodo (`dia`/`mes`), limite_usd, alerta_pct (padrão 80), acao (`modo_economico`/`bloquear`) | único `(restaurant_id, escopo, periodo)` |
+| `budget_limits` | escopo (`ia`/`simulacao`/`whatsapp`), periodo (`dia`/`mes`), limite_usd, alerta_pct (padrão 80), acao (`modo_economico`/`bloquear`; o painel não mostra: é sempre modo econômico) | único `(restaurant_id, escopo, periodo)`; editado só pelo dono no painel (Etapa 08) |
 | `budget_counters` | escopo, periodo, inicio_periodo, reservado, gasto | único `(restaurant_id, escopo, periodo, inicio_periodo)` |
 | `spend_ledger` | id bigint, escopo, tipo (`reserva`/`liquidacao`/`estorno`), valor_usd, ref (ai_run_id / wamid) | auditoria do gasto |
+| `budget_alerts` | escopo, periodo, inicio_periodo, nivel (80/100), created_at | único `(restaurant_id, escopo, periodo, inicio_periodo, nivel)`; gravado na transação da reserva/liquidação que cruza o limiar (ou na recusa); leitura dono/gerente |
+
+`restaurants.cotacao_usd_brl` (numeric, padrão 5,50; 0,50–50) é só para exibir R$ = US$ × cotação; limites e cobrança são em dólar.
 
 **Reserva atômica (invariante I6):**
 ```sql
@@ -193,8 +196,9 @@ Após a chamada: `reservado -= $est, gasto += $real` (custo real de `usage.cost`
 |---|---|---|
 | `staff` | user_id (→ `auth.users`), papel (`dono`/`gerente`/`atendente`), unidades_permitidas `uuid[]` (vazio = todas), ativo | base das policies RLS |
 | `audit_log` | id bigint, ator_id, ator_tipo (`staff`/`ia`/`sistema`), acao, entidade, entidade_id, diff jsonb, ip, created_at | **append-only**: `REVOKE UPDATE, DELETE` de todos os roles de app |
-| `data_subject_requests` | id, customer_id, tipo (`acesso`/`exclusao`/`correcao`), status (`aberto`/`em_andamento`/`concluido`/`negado`), prazo (`created_at + 15 dias`), resolvido_por, resposta | alerta no painel ao se aproximar do prazo |
-| `retention_settings` | dado, dias, acao (`apagar`/`anonimizar`) | lidos pelo cron diário |
+| `data_subject_requests` | id, customer_id, tipo (`acesso`/`exclusao`/`correcao`), status (`aberto`/`em_andamento`/`concluido`/`negado`), prazo (`created_at + 15 dias`), resolvido_por, resposta | fila em Mais → Privacidade (dono/gerente); alerta no Início com ≤ 3 dias ou vencido |
+| `retention_settings` | dado, dias, acao (`apagar`/`anonimizar`) | lidos pelo job diário `retencao.diaria` (pg-boss); dono edita (mínimos: mensagens ≥ 7, demais ≥ 30 dias) |
+| `staff_invites` | email, nome, papel (`gerente`/`atendente`), unidades, status (`pendente`/`enviado`/`erro`/`aceito`), erro (código sem PII), user_id, created_by | um convite em aberto por e-mail; dono cria/reenvia; o worker chama o convite do Supabase Auth e cria `staff` |
 | `worker_heartbeats` | worker_id, versao, last_seen_at | painel mostra "IA online" |
 
 ---
@@ -275,10 +279,10 @@ Não há fine-tuning. A IA é "treinada" por: (a) dados aprovados no banco; (b) 
 
 ## 5. Custos e limites
 
-1. **Camada 1 — nosso banco:** reserva atômica antes de cada chamada (§3.6), liquidação pelo custo real. Limites diário e mensal por escopo (`ia`, `whatsapp`), alerta em `alerta_pct` (padrão 80%) e ação ao estourar.
+1. **Camada 1 — nosso banco:** reserva atômica antes de cada chamada (§3.6), liquidação pelo custo real. Limites diário e mensal por escopo (`ia`, `simulacao`, `whatsapp`), configurados pelo dono no painel (Mais → Gastos e limites), alerta em `alerta_pct` (padrão 80%) e em 100% (só no painel: faixa no topo e cartão no Início, tabela `budget_alerts`), modo econômico ao estourar. Conversa simulada reserva no escopo `simulacao`: estourá-lo só põe a simulação em modo econômico, nunca afeta clientes reais.
 2. **Camada 2 — provedor:** em produção (OpenAI), **projeto** na plataforma da OpenAI com **limite de gasto mensal** e só os modelos usados liberados; no OpenRouter (dev), API key com `limit` mensal + **Guardrail** com `limit_usd`, `reset_interval` e `enforce_zdr`. Protege contra bug na camada 1.
 3. **WhatsApp:** respostas dentro da janela de atendimento de 24h aberta pelo cliente não são cobradas; mensagens de template (iniciadas pela empresa) são contabilizadas no escopo `whatsapp` e limitadas. Tabela de preços por categoria/país configurável no painel.
-4. Custos exibidos em USD e BRL (cotação configurável).
+4. Custos exibidos em USD e BRL (cotação `restaurants.cotacao_usd_brl`, editável pelo dono; R$ só para exibição). Relatório do mês por dia (clientes × simulação), etapa, modelo e unidade.
 
 ---
 
@@ -311,7 +315,7 @@ Primeira interação de cada cliente (e novamente após 12 meses — `privacy_no
 - OpenRouter (desenvolvimento local) com `dataCollection: 'deny'` + ZDR. OpenAI (produção): `store: false`, retenção padrão de 30 dias para monitoramento de abuso, sem uso para treino (aceita pelo time em 06/10/2026), sem região de dados no Brasil; a transferência internacional (art. 33) é coberta na política de privacidade e no RIPD (Etapa 09), que também avaliam pedir ZDR à OpenAI.
 - Logs e Sentry com scrub de PII.
 
-### 6.6 Retenção (padrões; configuráveis em `retention_settings`; cron diário)
+### 6.6 Retenção (padrões; configuráveis em `retention_settings`; job diário `retencao.diaria` no pg-boss do worker, 03:00 America/Sao_Paulo, sem `pg_cron`)
 | Dado | Prazo | Ação |
 |---|---|---|
 | `messages` (conteúdo) | 90 dias | apagar |
@@ -321,11 +325,14 @@ Primeira interação de cada cliente (e novamente após 12 meses — `privacy_no
 | `customers` sem interação | 12 meses | apagar em cascata |
 | `audit_log` | 2 anos | apagar |
 | Áudio | 0 (após transcrição) | apagar |
+| Simulações (clientes, conversas, mensagens, avisos, eventos e `ai_runs` simulados) | 7 dias (fixo) | apagar |
+
+A função `app.aplicar_retencao(restaurant_id, agora, lote)` (`security definer`, só `worker_app`) roda em lotes e é idempotente; o handler repete enquanto houver `pendente` e audita `retencao.executada` com as contagens. Cliente sem contato só é poupado por conversa em atendimento humano (`aguardando_humano`/`humano`) ou pedido do titular em aberto.
 
 **Pendente:** confirmar prazos com o restaurante/jurídico.
 
 ### 6.7 Direitos do titular (art. 18)
-Detectados pela triagem/pré-filtro ⇒ `data_subject_requests`. Identidade = o próprio número do WhatsApp. **Acesso:** resumo gerado automaticamente e enviado. **Exclusão:** confirmada pela equipe no painel ⇒ função de exclusão/anonimização em cascata (inclui limpar `attendance_notices.nome` dos avisos do titular, além do `customer_id`). Prazo de 15 dias com alerta.
+Detectados pela triagem/pré-filtro ⇒ `data_subject_requests`. Identidade = o próprio número do WhatsApp. **Acesso:** resumo gerado automaticamente e enviado. **Exclusão:** confirmada pela equipe no painel ⇒ função de exclusão/anonimização em cascata (inclui limpar `attendance_notices.nome` dos avisos do titular, além do `customer_id`). Prazo de 15 dias com alerta. Painel (Etapa 08): fila em Mais → Privacidade; **Gerar resumo** (`app.resumo_titular`, sem telefone nem notas internas; copiar/baixar .txt; telefone só por "Mostrar telefone", auditado); exclusão com confirmação digitada (`EXCLUIR`) ⇒ `app.excluir_titular(customer, ator)` (`security definer`, só `web_app`, ator dono/gerente ativo) numa transação, auditando `lgpd.exclusao_executada` só com contagens; correção concluída com resposta; negar com resposta curta sem PII.
 
 ### 6.8 Incidentes
 Runbook em `docs/runbooks/incidente-lgpd.md`: contenção, avaliação, comunicação à ANPD e aos titulares em **3 dias úteis** (Res. CD/ANPD nº 15/2024), registro.
@@ -354,7 +361,7 @@ Runbook em `docs/runbooks/incidente-lgpd.md`: contenção, avaliação, comunica
 1. Índices casados com as consultas reais (listados no §3); toda consulta nova de caminho quente tem `EXPLAIN ANALYZE` revisado.
 2. Busca de cardápio/fatos: `tsvector` gerado (`portuguese` + `unaccent`) + GIN; trigram para nomes.
 3. BRIN para séries temporais (`ai_runs`), B-tree composta para `messages`.
-4. Retenção via cron mantém tabelas pequenas; `VACUUM`/autovacuum padrão do Supabase.
+4. Retenção diária (job do pg-boss) mantém tabelas pequenas; `VACUUM`/autovacuum padrão do Supabase.
 5. Worker: cache em memória da configuração do restaurante (unidades, horários, prompt), invalidado por `NOTIFY` em mudança.
 6. Realtime: **Broadcast em canal privado com RLS** (recomendação atual do Supabase sobre `postgres_changes`), disparado por trigger nas tabelas da inbox (Etapa 06: tópicos e payload no adendo).
 7. Metas: webhook p95 < 500 ms; resposta ao cliente p95 < 8 s após o fim do debounce (texto); < 15 s (áudio).
@@ -482,3 +489,13 @@ Spec: `docs/specs/2026-10-06-openai-producao-design.md`; plano: `docs/plans/open
 - **Orçamento:** inalterado (reserva atômica antes de toda chamada). O custo da OpenAI é calculado por tabela de preços em código (`packages/ai/src/precos-openai.ts`, com a data da consulta).
 - **Verificação:** `pnpm --filter @atd/worker smoke:ia:prod` (exige `{"ok":true}` por modelo) e `pnpm --filter @atd/ai eval:prod` (S1–S4 e frustração contra a OpenAI; custa centavos) antes de apresentar ou publicar.
 - **Pendências de conformidade (Etapa 09):** política de privacidade e RIPD citam a OpenAI como suboperadora, a retenção de 30 dias e a transferência internacional; avaliar pedido de ZDR à OpenAI.
+
+## Adendo — Etapa 08 (06/10/2026)
+
+Aprovado em [docs/specs/2026-10-06-etapa-08-gastos-lgpd-design.md](docs/specs/2026-10-06-etapa-08-gastos-lgpd-design.md) (§9) e no plano [docs/plans/etapa-08-gastos-lgpd.md](docs/plans/etapa-08-gastos-lgpd.md); prevalece sobre as seções citadas abaixo. Decisões do dono: limite **por negócio** (restaurante) configurado no painel; **simulação com limite próprio**; alertas **só no painel**; convite de equipe nesta etapa.
+- **§5 / §3.6 — gastos:** escopo novo `simulacao` em `budget_scope` (a migration 0033 recria o tipo em vez de `ADD VALUE`, porque o migrador aplica as migrations pendentes numa transação só e o valor novo não pode ser usado antes do commit; resultado igual: `ia`, `whatsapp`, `simulacao`). Padrões do bootstrap: IA 2/dia e 40/mês; simulação 1/dia e 10/mês; WhatsApp 1/dia e 20/mês (USD); restaurantes existentes ganharam os de simulação pela 0033. Dono edita limite e % de alerta (auditado `orcamento.limite_alterado` com antigo/novo) e a cotação (`orcamento.cotacao_alterada`); gerente só vê; atendente não vê. `budget_alerts` gravado dentro de `reserveBudget`/liquidação/estorno (mesma transação) e na recusa (transação própria, para "dono baixou o limite abaixo do já gasto" mostrar 100%), auditando `orcamento.alerta`. Simulação sem saldo ⇒ modo econômico só da conversa simulada e audita `orcamento.sem_saldo_simulacao`; o simulador lê o aviso por `app.simulacao_limite_atingido` (migration 0037, `security definer` estreita). Relatório por unidade por `app.custo_por_unidade` (dono/gerente com MFA; gerente restrito vê o restaurante todo no relatório). Quadro do Início com o provedor real (`AI_PROVIDER`; sem ela, OpenAI em produção) e simulação fora do total.
+- **§3.8 / §6.6 — retenção:** sem `pg_cron`: `boss.schedule('retencao.diaria', '0 3 * * *', {}, { tz: 'America/Sao_Paulo' })` no boot do worker (fila `exclusive`); o handler itera os restaurantes ativos e chama `app.aplicar_retencao` em lotes de 5000 até 50 vezes por restaurante; falha de um restaurante não para os outros. Regras na 0036: conversas vazias e vencidas saem em qualquer estado; cliente inativo = última interação e todas as conversas além do prazo, poupado só por conversa `aguardando_humano`/`humano` ou pedido do titular em aberto (pedido de evento futuro não protege; fica anonimizado). Mínimos editáveis: mensagens ≥ 7 dias, demais ≥ 30, máximo 3650; áudio fixo. A retenção de `audit_log` apaga também as evidências de LGPD mais antigas que o prazo (padrão 730 dias).
+- **§6.7 — titular:** gerente (mesmo restrito a unidades) opera a fila e pode excluir: o cliente é do restaurante, não da unidade. `app.excluir_titular` exige `p_ator = auth.uid()` (claims da sessão na transação); cliente já inexistente conclui sem erro. A exclusão e a retenção não mexem no Storage (áudio já é descartado; cardápio não tem PII de cliente). Pedido de correção: **Concluir correção** com resposta curta (`lgpd.correcao_concluida`).
+- **Equipe (§1.4, §3.8):** Mais → Equipe. O dono convida (`staff_invites` + fila `equipe.convite`, `stately` por convite); o worker chama `POST /auth/v1/invite` do Supabase Auth por REST com a chave de serviço (só no worker; o link do e-mail sai do template com a Site URL, sem `redirectTo`) e cria/atualiza `staff` com papel e unidades. Usuário já confirmado (`email_exists`) é vinculado sem e-mail novo (`generate_link` só para obter o id); outro restaurante ⇒ `erro: outro_restaurante`; erros do Auth viram códigos sem PII (`limite_envio`, `email_invalido`, `indisponivel`, `falha_convite`). Reenviar convite para quem nunca entrou; desativar/reativar (o dono não age sobre si mesmo; convite nunca rebaixa um dono). E-mail e nome nunca em log nem no `diff`.
+- **Navegação:** Mais ganha **Gastos e limites**, **Privacidade (LGPD)** e **Equipe** (dono/gerente; atendente não vê). Início: faixa de alerta no topo (layout), cartão **Alertas de gasto** e cartão **Pedidos de privacidade (LGPD)**.
+- **Operação:** worker com pool drizzle 11 (4 process + 2 deliver + 1 ingest + 1 convite + 1 retenção + heartbeat + folga) + pg-boss 3 = até 14 conexões no pooler de sessão; conferir o limite do plano do Supabase. Migrations 0033–0037.
