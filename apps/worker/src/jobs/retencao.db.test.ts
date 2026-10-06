@@ -3,7 +3,7 @@ import { asc, eq } from 'drizzle-orm'
 import { createDb, DEFAULT_RETENTION, QUEUES, schema } from '@atd/db'
 import { getTestBoss, getTestDb, resetDb, seedRestaurant, setupPgbossRoles, WORKER_URL } from '@atd/db/test-utils'
 import { createLogger } from '../logger.ts'
-import { agendarRetencao, aplicarRetencaoDiaria, RETENCAO_CRON, RETENCAO_TZ } from './retencao.ts'
+import { agendarRetencao, aplicarRetencaoDiaria, executarRetencaoDiaria, RETENCAO_CRON, RETENCAO_TZ } from './retencao.ts'
 
 /** Retenção roda com o role de produção (worker_app); o admin só semeia e confere. */
 const admin = getTestDb()
@@ -97,26 +97,56 @@ describe('retenção diária (worker)', () => {
     expect(await mensagens(a)).toHaveLength(1)
   })
 
-  it('falha de um restaurante não impede os outros (e é contada)', async () => {
-    const a = await restauranteCom(1)
-    let chamadas = 0
-    const db = new Proxy(worker.db, {
+  /** `db` que falha nas `n` primeiras chamadas de `app.aplicar_retencao` DESTE restaurante (pelo parâmetro, não pela ordem). */
+  function falhandoPara(restaurantId: string, n = Infinity) {
+    let falhas = 0
+    return new Proxy(worker.db, {
       get(alvo, prop, recv) {
         if (prop === 'execute') {
           return (...args: Parameters<typeof alvo.execute>) => {
-            chamadas++
-            if (chamadas === 1) return Promise.reject(new Error('falha simulada'))
+            const { params } = worker.db.dialect.sqlToQuery(args[0] as Parameters<typeof worker.db.dialect.sqlToQuery>[0])
+            if (params.includes(restaurantId) && falhas < n) {
+              falhas++
+              return Promise.reject(new Error('falha simulada'))
+            }
             return alvo.execute(...args)
           }
         }
         return Reflect.get(alvo, prop, recv)
       },
     })
+  }
+
+  it('falha de um restaurante não impede os outros (e é contada)', async () => {
+    const a = await restauranteCom(1)
     const b = await restauranteCom(1)
-    const r = await aplicarRetencaoDiaria({ db, log, now: () => AGORA })
-    expect(r.falhas).toBe(1)
-    const restantes = [(await mensagens(a)).length, (await mensagens(b)).length].sort()
-    expect(restantes).toEqual([1, 2]) // um limpou, o outro (que falhou) ficou intacto
-    expect(await auditorias()).toHaveLength(1)
+    const r = await aplicarRetencaoDiaria({ db: falhandoPara(a), log, now: () => AGORA })
+    expect(r).toMatchObject({ falhas: 1, falharam: [a] })
+    expect((await mensagens(a)).length).toBe(2) // o que falhou ficou intacto
+    expect((await mensagens(b)).length).toBe(1)
+    expect((await auditorias()).map((x) => x.restaurantId)).toEqual([b])
+  })
+
+  it('só os restaurantes indicados', async () => {
+    const a = await restauranteCom(1)
+    const b = await restauranteCom(1)
+    const r = await aplicarRetencaoDiaria({ db: worker.db, log, now: () => AGORA }, { restaurantes: [b] })
+    expect(r).toMatchObject({ restaurantes: 1, falhas: 0 })
+    expect((await mensagens(a)).length).toBe(2)
+  })
+
+  it('job: retenta só quem falhou, uma vez, e nunca relança (sem retentar o job inteiro nem duplicar auditoria)', async () => {
+    const a = await restauranteCom(1)
+    const b = await restauranteCom(1)
+    // falha passageira: a segunda tentativa de `a` passa
+    expect(await executarRetencaoDiaria({ db: falhandoPara(a, 1), log, now: () => AGORA })).toMatchObject({ falhas: 0 })
+    expect((await auditorias()).map((x) => x.restaurantId).sort()).toEqual([a, b].sort())
+    expect((await mensagens(a)).length).toBe(1)
+    // falha persistente: resolve (não relança), conta a falha e não audita `a` de novo
+    const c = await restauranteCom(1)
+    await expect(executarRetencaoDiaria({ db: falhandoPara(c), log, now: () => AGORA })).resolves.toMatchObject({ falhas: 1, falharam: [c] })
+    const porRestaurante = (await auditorias()).map((x) => x.restaurantId)
+    expect(porRestaurante.filter((x) => x === c)).toEqual([])
+    expect(porRestaurante.filter((x) => x === b)).toHaveLength(2) // uma por execução, nunca repetida dentro da mesma
   })
 })

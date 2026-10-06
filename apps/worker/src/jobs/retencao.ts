@@ -20,22 +20,23 @@ export async function agendarRetencao(boss: Pick<PgBoss, 'schedule'>): Promise<v
 }
 
 type Contagens = Record<string, number>
+export type ResultadoRetencao = { restaurantes: number; falhas: number; falharam: string[] }
 export type RetencaoDeps = { db: Db; log: Logger; now?: () => Date }
 
 /**
  * Aplica a retenção em todos os restaurantes: chama `app.aplicar_retencao` (cada chamada é uma transação própria) até
  * `pendente` voltar falso ou o teto de iterações, e audita `retencao.executada` (ator `sistema`; só contagens, sem PII).
- * Falha num restaurante é registrada e não impede os outros; o chamador decide se relança (`falhas > 0`).
+ * Falha num restaurante é registrada e não impede os outros; `falharam` lista quem falhou (para retentar só esses).
  */
 export async function aplicarRetencaoDiaria(
   deps: RetencaoDeps,
-  o: { lote?: number; maxIteracoes?: number } = {},
-): Promise<{ restaurantes: number; falhas: number }> {
+  o: { lote?: number; maxIteracoes?: number; restaurantes?: readonly string[] } = {},
+): Promise<ResultadoRetencao> {
   const lote = o.lote ?? RETENCAO_LOTE
   const max = o.maxIteracoes ?? RETENCAO_MAX_ITERACOES
   const agora = (deps.now ?? (() => new Date()))()
-  const ids = await restaurantesAtivos(deps.db)
-  let falhas = 0
+  const ids = o.restaurantes ?? await restaurantesAtivos(deps.db)
+  const falharam: string[] = []
   for (const restaurantId of ids) {
     try {
       const total: Contagens = {}
@@ -58,9 +59,24 @@ export async function aplicarRetencaoDiaria(
       if (pendente) deps.log.warn({ restaurantId, iteracoes }, 'retenção parou no teto de iterações; continua amanhã')
       else deps.log.info({ restaurantId, iteracoes }, 'retenção aplicada')
     } catch (err) {
-      falhas++
+      falharam.push(restaurantId)
       deps.log.error({ err, restaurantId }, 'falha ao aplicar a retenção')
     }
   }
-  return { restaurantes: ids.length, falhas }
+  return { restaurantes: ids.length, falhas: falharam.length, falharam }
+}
+
+/**
+ * Handler do job `retencao.diaria`: aplica em todos e retenta UMA vez só os restaurantes que falharam (falha passageira).
+ * Nunca relança: retentar o job inteiro repetiria quem já foi limpo e duplicaria `retencao.executada`. O que falhar de
+ * novo fica registrado em log de erro e é refeito na execução do dia seguinte (a retenção é idempotente).
+ */
+export async function executarRetencaoDiaria(deps: RetencaoDeps): Promise<ResultadoRetencao> {
+  const primeira = await aplicarRetencaoDiaria(deps)
+  if (primeira.falhas === 0) return primeira
+  const segunda = await aplicarRetencaoDiaria(deps, { restaurantes: primeira.falharam })
+  if (segunda.falhas > 0) {
+    deps.log.error({ falhas: segunda.falhas, restaurantes: segunda.falharam }, 'retenção falhou de novo; refeita amanhã')
+  }
+  return { restaurantes: primeira.restaurantes, falhas: segunda.falhas, falharam: segunda.falharam }
 }

@@ -9,7 +9,7 @@ import { createAuthAdmin, processarConvite } from './jobs/convite.ts'
 import { entregarRespostaHumana } from './jobs/deliver.ts'
 import { ingestDocument } from './jobs/ingest-document.ts'
 import { processConversation, type ProcessDeps } from './jobs/process-conversation.ts'
-import { agendarRetencao, aplicarRetencaoDiaria } from './jobs/retencao.ts'
+import { agendarRetencao, executarRetencaoDiaria } from './jobs/retencao.ts'
 import { startHeartbeat } from './heartbeat.ts'
 import { sanitizeJobError } from './job-error.ts'
 import { createLogger } from './logger.ts'
@@ -122,11 +122,11 @@ try {
     }
   })
 
-  // retenção diária (03:00 de São Paulo): idempotente e em lotes; restaurante que falhou faz o job ser retentado
+  // retenção diária (03:00 de São Paulo): idempotente e em lotes; retenta só quem falhou e nunca relança o job
   await boss.work(QUEUES.retencao, { localConcurrency: CONCORRENCIA.retencao }, async () => {
-    const r = await aplicarRetencaoDiaria({ db, log })
-    log.info(r, 'retenção diária executada')
-    if (r.falhas > 0) throw new Error(`retenção falhou em ${r.falhas} restaurante(s)`)
+    const r = await executarRetencaoDiaria({ db, log })
+    log.info({ restaurantes: r.restaurantes, falhas: r.falhas }, 'retenção diária executada')
+    if (r.falhas > 0) Sentry.captureMessage(`retenção falhou em ${r.falhas} restaurante(s)`, 'error')
   })
   await agendarRetencao(boss)
 
