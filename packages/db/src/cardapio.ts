@@ -132,13 +132,15 @@ export type ArquivoCardapio = {
   mime: string
   /** bytes */
   tamanho: number
+  /** do conteúdo enviado pelo painel: o worker confere antes de subir para a Meta */
+  sha256: string
   waMediaId: string | null
   waMediaExpiresAt: Date | null
 }
 
 const colunasArquivo = {
   id: menuFiles.id, unitId: menuFiles.unitId, titulo: menuFiles.titulo, storagePath: menuFiles.storagePath, mime: menuFiles.mime,
-  tamanho: menuFiles.tamanho, waMediaId: menuFiles.waMediaId, waMediaExpiresAt: menuFiles.waMediaExpiresAt,
+  tamanho: menuFiles.tamanho, sha256: menuFiles.sha256, waMediaId: menuFiles.waMediaId, waMediaExpiresAt: menuFiles.waMediaExpiresAt,
 }
 
 /** Arquivo ativo para enviar ao cliente: o da unidade, senão o geral; o mais recente de cada escopo. */

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { and, asc, count, eq, gt, gte, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import {
@@ -917,6 +918,11 @@ async function subirArquivo(deps: ProcessDeps, a: ArquivoCardapio, agora: Date) 
   // o conteúdo precisa ser do tipo gravado (o painel confere no upload; aqui é a última barreira antes da Meta)
   if (mimeDosBytes(bytes) !== a.mime) {
     deps.log.error({ arquivoId: a.id }, 'arquivo do cardápio no Storage não corresponde ao tipo gravado')
+    return 'sem_arquivo' as const
+  }
+  // o nome do objeto é o sha256, mas quem tem acesso ao Storage poderia ter gravado outro conteúdo ali antes
+  if (createHash('sha256').update(bytes).digest('hex') !== a.sha256) {
+    deps.log.error({ arquivoId: a.id }, 'arquivo do cardápio no Storage não confere com o sha256 gravado')
     return 'sem_arquivo' as const
   }
   const up = await deps.wa.uploadMedia(bytes, a.mime, nomeDoArquivo(a))

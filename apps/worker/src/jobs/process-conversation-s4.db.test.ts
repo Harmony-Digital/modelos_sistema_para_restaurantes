@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { asc, eq } from 'drizzle-orm'
 import { encryptPhone, keyFromBase64 } from '@atd/core'
@@ -18,6 +18,8 @@ const noopEnqueue: Enqueue = async () => undefined
 const log = createLogger('silent')
 const SEG_14H = new Date('2026-10-05T14:00:00-03:00')
 const DIA = 86_400_000
+const BYTES_PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46])
+const BYTES_JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0])
 
 type Item = TriageV5['itens'][number]
 const card = (extra: Partial<Item> = {}): Item => ({
@@ -56,7 +58,7 @@ async function setup(o: { arquivo?: 'pdf' | 'jpeg' | null; asaNorte?: boolean } 
     const pdf = (o.arquivo ?? 'pdf') === 'pdf'
     const [f] = await db.insert(schema.menuFiles).values({
       restaurantId, unitId: null, titulo: 'Cardápio da casa', storagePath: `cardapio/${restaurantId}/${pdf ? 'menu.pdf' : 'menu.jpg'}`,
-      mime: pdf ? 'application/pdf' : 'image/jpeg', tamanho: 4, sha256: 'a'.repeat(64),
+      mime: pdf ? 'application/pdf' : 'image/jpeg', tamanho: 4, sha256: createHash('sha256').update(pdf ? BYTES_PDF : BYTES_JPEG).digest('hex'),
     }).returning()
     arquivoId = f!.id
   }
@@ -105,8 +107,6 @@ function fakeWa(o: { recusarMidia?: boolean } = {}) {
   }
 }
 
-const BYTES_PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46])
-const BYTES_JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0])
 
 /** Storage falso: devolve bytes de acordo com a extensão (ou `conteudo`, para simular arquivo trocado). */
 function fakeStorage(conteudo?: Uint8Array) {
@@ -323,6 +323,18 @@ describe('S4 no worker — correções do Bloco B', () => {
     const conv = await receive(restaurantId, 'manda o cardápio')
     const wa = fakeWa()
     await processConversation(deps(fakeLlm([ENVIAR]).llm, wa, fakeStorage(new TextEncoder().encode('<html>'))), conv)
+    expect(wa.chamadas.some((c) => c.metodo === 'uploadMedia' || c.metodo === 'sendDocument')).toBe(false)
+    const out = await saidas(conv)
+    expect(out.map((m) => m.tipo)).toEqual(['texto', 'texto'])
+    expect(out[1]!.texto).toMatch(/^Nosso cardápio:/)
+  })
+
+  it('PDF no Storage com sha256 diferente do gravado (M8): não sobe à Meta; manda o resumo em texto', async () => {
+    const { restaurantId } = await setup()
+    const conv = await receive(restaurantId, 'manda o cardápio')
+    const wa = fakeWa()
+    const outroPdf = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x39])
+    await processConversation(deps(fakeLlm([ENVIAR]).llm, wa, fakeStorage(outroPdf)), conv)
     expect(wa.chamadas.some((c) => c.metodo === 'uploadMedia' || c.metodo === 'sendDocument')).toBe(false)
     const out = await saidas(conv)
     expect(out.map((m) => m.tipo)).toEqual(['texto', 'texto'])

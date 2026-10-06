@@ -176,7 +176,7 @@ describe('arquivos de cardápio (worker)', () => {
     const c = await arquivos()
     expect(await arquivoParaEnvio(db, { restaurantId: c.restaurantId, unitId: c.u1 })).toEqual({
       id: c.daU1.id, unitId: c.u1, titulo: 'Cardápio Asa Sul', storagePath: `cardapio/${c.restaurantId}/u1.pdf`,
-      mime: 'application/pdf', tamanho: expect.any(Number), waMediaId: null, waMediaExpiresAt: null,
+      mime: 'application/pdf', tamanho: expect.any(Number), sha256: expect.stringMatching(/^[0-9a-f]{64}$/), waMediaId: null, waMediaExpiresAt: null,
     })
     expect((await arquivoParaEnvio(db, { restaurantId: c.restaurantId, unitId: c.u2 }))?.id).toBe(c.geral.id)
     expect((await arquivoParaEnvio(db, { restaurantId: c.restaurantId, unitId: null }))?.id).toBe(c.geral.id)
