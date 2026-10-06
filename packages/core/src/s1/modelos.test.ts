@@ -68,6 +68,20 @@ describe('modelos', () => {
   })
 })
 
+describe('modelos de handoff (Etapa 06)', () => {
+  it('textos exatos', () => {
+    expect(renderModelo('handoff_dentro', {})).toBe('Vou passar você para alguém da nossa equipe. Já já te respondem por aqui.')
+    expect(renderModelo('handoff_fora', { proximo_horario: 'amanhã a partir das 9h' }))
+      .toBe('Vou passar você para alguém da nossa equipe. Nossa equipe atende amanhã a partir das 9h e te responde assim que voltar.')
+    expect(renderModelo('handoff_frustracao', {})).toBe('Desculpe pelo transtorno. Vou chamar alguém da nossa equipe para continuar com você.')
+  })
+  it('handoff_fora exige {proximo_horario}; os outros não têm variáveis', () => {
+    expect(validarModelo('handoff_fora', 'A equipe volta logo.')).toMatch(/\{proximo_horario\}/)
+    expect(validarModelo('handoff_fora', 'A equipe atende {proximo_horario}.')).toBeNull()
+    expect(validarModelo('handoff_dentro', 'Já te chamo {unidade}.')).toMatch(/não usa variáveis/)
+  })
+})
+
 describe('endereço', () => {
   it('junta as partes cadastradas', () => {
     expect(formatarEndereco({ endereco: 'SCLS 404 Bloco C', bairro: 'Asa Sul', cidade: 'Brasília', uf: 'DF' }))

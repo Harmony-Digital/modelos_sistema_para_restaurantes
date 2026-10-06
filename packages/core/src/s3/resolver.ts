@@ -285,7 +285,8 @@ export function resolverItensS3(
       }
       cancelados.add(p.id)
       const texto = m('evento_cancelado', { unidade: nomeDe(p.unitId), quando: minuscula(rotulo(p.data)) })
-      acoes.push({ tipo: 'cancelar_evento', pedidoId: p.id, texto, textoSeFalhar: m('evento_nao_encontrado') })
+      // o banco só não cancela se a equipe mexeu no pedido depois da leitura (ex.: confirmou): a equipe assume
+      acoes.push({ tipo: 'cancelar_evento', pedidoId: p.id, texto, textoSeFalhar: m('evento_ja_confirmado_humano'), handoffSeFalhar: true })
       respondidos++
       trechos.push(texto)
       return
@@ -330,6 +331,15 @@ export function perguntaVisivel(pergunta: PerguntaEventoComTexto | null, haLista
   if (!pergunta) return null
   if (pergunta.campo === 'unidade') return pergunta // a própria lista pergunta
   return haListaPendente ? null : pergunta
+}
+
+/**
+ * Toque numa lista de unidades antiga enquanto o pendente `pedido_evento` ainda vale: a unidade escolhida passa a ser a
+ * do pedido em coleta (nada foi registrado ainda), mantendo o que o cliente já disse. O worker resolve o item com
+ * `escolhidaId = unidade.id` (a unidade precisa estar entre as ativas do restaurante).
+ */
+export function itemDoPedidoNaUnidade(pergunta: PerguntaEvento, unidade: Pick<UnidadeS1, 'nome'>): ItemExtraido {
+  return { ...pergunta.item, tipo: 'pedido', unidade: unidade.nome }
 }
 
 export const perguntaSemTexto = (p: PerguntaEventoComTexto | null): PerguntaEvento | null =>

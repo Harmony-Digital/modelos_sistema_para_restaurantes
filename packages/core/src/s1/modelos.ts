@@ -90,6 +90,13 @@ export const MODELOS_S1 = {
   cardapio_parecido: { texto: 'Não encontrei esse item no cardápio. Temos parecido: {itens}. Quer saber o preço?', variaveis: ['itens'] },
   cardapio_enviando: { texto: 'Aqui está o nosso cardápio.', variaveis: [] },
   cardapio_sem_arquivo: { texto: 'Nosso cardápio:\n{categorias}', variaveis: ['categorias'] },
+  // Handoff (Etapa 06): `handoff_fora` em todo handoff fora do horário da equipe; `handoff_frustracao` dentro do horário
+  handoff_dentro: { texto: 'Vou passar você para alguém da nossa equipe. Já já te respondem por aqui.', variaveis: [] },
+  handoff_fora: {
+    texto: 'Vou passar você para alguém da nossa equipe. Nossa equipe atende {proximo_horario} e te responde assim que voltar.',
+    variaveis: ['proximo_horario'],
+  },
+  handoff_frustracao: { texto: 'Desculpe pelo transtorno. Vou chamar alguém da nossa equipe para continuar com você.', variaveis: [] },
 } as const satisfies Record<string, { texto: string; variaveis: readonly string[] }>
 
 export type ChaveModelo = keyof typeof MODELOS_S1
