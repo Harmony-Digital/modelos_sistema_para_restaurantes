@@ -34,6 +34,8 @@ export const eventSpaces = pgTable(
     check('event_spaces_capacidade_ck', sql`1 <= ${t.capacidadeMin} and ${t.capacidadeMin} <= ${t.capacidadeMax} and ${t.capacidadeMax} <= 1000`),
     uniqueIndex('event_spaces_unit_nome_uq').on(t.unitId, t.nome),
     index('event_spaces_restaurant_unit_idx').on(t.restaurantId, t.unitId),
+    // alvo da FK composta (space_id, unit_id) de event_requests
+    uniqueIndex('event_spaces_id_unit_uq').on(t.id, t.unitId),
   ],
 )
 
@@ -43,7 +45,9 @@ export const eventRequests = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     restaurantId: restaurantFk(),
     unitId: uuid('unit_id').notNull(),
-    spaceId: uuid('space_id').references(() => eventSpaces.id, { onDelete: 'set null' }),
+    // FK composta (space_id, unit_id) → event_spaces (id, unit_id) vive na migration custom 0025: o espaço é da mesma
+    // unidade do pedido, e ao apagar o espaço só space_id vira nulo (drizzle-kit não gera `set null (coluna)`)
+    spaceId: uuid('space_id'),
     customerId: uuid('customer_id').references(() => customers.id, { onDelete: 'set null' }),
     nome: text('nome'),
     data: date('data', { mode: 'string' }).notNull(),
@@ -55,6 +59,7 @@ export const eventRequests = pgTable(
     responsavelId: uuid('responsavel_id').references(() => authUsers.id, { onDelete: 'set null' }),
     notasInternas: text('notas_internas'),
     simulado: boolean('simulado').notNull().default(false),
+    anonimizado: boolean('anonimizado').notNull().default(false),
     ...timestamps,
   },
   (t) => [
@@ -66,5 +71,6 @@ export const eventRequests = pgTable(
     check('event_requests_notas_ck', sql`${t.notasInternas} is null or char_length(${t.notasInternas}) <= 2000`),
     index('event_requests_fila_idx').on(t.restaurantId, t.status, t.data),
     index('event_requests_unidade_idx').on(t.restaurantId, t.unitId, t.data),
+    index('event_requests_cliente_idx').on(t.customerId, t.data),
   ],
 )

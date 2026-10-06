@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { getTestDb, resetDb, seedRestaurant } from './test-utils.ts'
+import { withRole } from './rls.ts'
 import {
   cancelarPedidoDoCliente, espacosAtivos, pedidosDoCliente, registrarPedidoEvento, type GravarPedido,
 } from './eventos.ts'
@@ -78,5 +79,27 @@ describe('eventos do worker', () => {
     await expect(db.insert(eventSpaces).values({ restaurantId, unitId, nome: 'S', capacidadeMin: 30, capacidadeMax: 20 })).rejects.toMatchObject({ cause: { code: '23514' } })
     await db.insert(eventSpaces).values({ restaurantId, unitId, nome: 'S', capacidadeMin: 1, capacidadeMax: 1000 })
     await expect(db.insert(eventSpaces).values({ restaurantId, unitId, nome: 'S', capacidadeMin: 1, capacidadeMax: 10 })).rejects.toMatchObject({ cause: { code: '23505' } })
+  })
+
+  it('espaço do pedido é da mesma unidade (FK composta, como worker_app); apagar o espaço só zera space_id; anonimizado nasce false', async () => {
+    const { restaurantId, unitId } = await seedRestaurant(db)
+    const [u2] = await db.insert(units).values({ restaurantId, nome: 'Norte', slug: 'norte' }).returning()
+    const outro = await seedRestaurant(db)
+    const c = await cliente(restaurantId, 'h1')
+    const [daA, daB, deOutro] = await db.insert(eventSpaces).values([
+      { restaurantId, unitId, nome: 'Salão', capacidadeMin: 1, capacidadeMax: 80 },
+      { restaurantId, unitId: u2!.id, nome: 'Varanda', capacidadeMin: 1, capacidadeMax: 80 },
+      { restaurantId: outro.restaurantId, unitId: outro.unitId, nome: 'Alheio', capacidadeMin: 1, capacidadeMax: 80 },
+    ]).returning()
+    for (const esp of [daB!, deOutro!]) {
+      await expect(withRole(db, 'worker_app', (tx) => registrarPedidoEvento(tx, pedido(restaurantId, c, unitId, { spaceId: esp.id }))))
+        .rejects.toMatchObject({ cause: { code: '23503', constraint_name: 'event_requests_space_fk' } })
+    }
+    const p = await withRole(db, 'worker_app', (tx) => registrarPedidoEvento(tx, pedido(restaurantId, c, unitId, { spaceId: daA!.id })))
+    const [antes] = await db.select().from(eventRequests).where(eq(eventRequests.id, p.id))
+    expect(antes).toMatchObject({ spaceId: daA!.id, anonimizado: false })
+    await db.delete(eventSpaces).where(eq(eventSpaces.id, daA!.id)) // superusuário: a aplicação não tem DELETE
+    const [depois] = await db.select().from(eventRequests).where(eq(eventRequests.id, p.id))
+    expect(depois).toMatchObject({ spaceId: null, unitId, restaurantId })
   })
 })

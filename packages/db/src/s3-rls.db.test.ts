@@ -89,6 +89,9 @@ describe('RLS de event_spaces e event_requests', () => {
     await expect(withUserContext(db, as(dono), (tx) =>
       tx.update(eventRequests).set({ convidados: 99 }).where(eq(eventRequests.id, p!.id)),
     )).rejects.toMatchObject(negado)
+    await expect(withUserContext(db, as(dono), (tx) =>
+      tx.update(eventRequests).set({ anonimizado: true }).where(eq(eventRequests.id, p!.id)),
+    )).rejects.toMatchObject(negado)
     const r = await withUserContext(db, as(atendente, 'aal1'), (tx) =>
       tx.update(eventRequests).set({ status: 'em_contato', responsavelId: atendente, notasInternas: 'ligar' }).where(eq(eventRequests.id, p!.id)).returning({ id: eventRequests.id }),
     )

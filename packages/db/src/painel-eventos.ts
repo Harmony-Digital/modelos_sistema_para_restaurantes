@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import { decryptPhone } from '@atd/core'
 import type { Db } from './client.ts'
-import { exigirPapel, falha, ok, registrarAuditoria, semPermissaoVira, type ResultadoPainel } from './painel-comum.ts'
+import { exigirPapel, falha, ok, registrarAuditoria, semPermissaoVira, type ErroPainel, type ResultadoPainel } from './painel-comum.ts'
 import { withUserContext, type JwtClaims } from './rls.ts'
 import { customers } from './schema/conversation.ts'
 import { staff, units } from './schema/restaurant.ts'
@@ -38,8 +38,11 @@ export function listarEspacos(db: Db, claims: JwtClaims, unitId: string): Promis
   )
 }
 
-export function salvarEspaco(db: Db, claims: JwtClaims, id: string | null, v: DadosEspaco): Promise<ResultadoPainel<{ id: string }>> {
-  return semPermissaoVira(
+export type ResultadoSalvarEspaco = ResultadoPainel<{ id: string }> | { ok: false; erro: 'capacidade_invalida' }
+
+/** Nome repetido na unidade ⇒ `nome_duplicado`; capacidade fora de 1 ≤ mín ≤ máx ≤ 1000 ⇒ `capacidade_invalida`. */
+export function salvarEspaco(db: Db, claims: JwtClaims, id: string | null, v: DadosEspaco): Promise<ResultadoSalvarEspaco> {
+  return semPermissaoVira<ResultadoPainel<{ id: string }>, ErroPainel | 'capacidade_invalida'>(
     () => withUserContext(db, claims, async (tx) => {
       if (!(await exigirPapel(tx, GESTAO))) return falha('sem_permissao')
       const [u] = await tx.select({ restaurantId: units.restaurantId }).from(units).where(eq(units.id, v.unitId))
@@ -70,7 +73,7 @@ export function salvarEspaco(db: Db, claims: JwtClaims, id: string | null, v: Da
       await registrarAuditoria(tx, claims, { restaurantId: u.restaurantId, acao: 'espaco.atualizado', entidade: 'event_space', entidadeId: id, diff })
       return ok({ id })
     }),
-    { event_spaces_unit_nome_uq: 'nome_duplicado' },
+    { event_spaces_unit_nome_uq: 'nome_duplicado', event_spaces_capacidade_ck: 'capacidade_invalida' },
   )
 }
 

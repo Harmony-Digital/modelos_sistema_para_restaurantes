@@ -176,6 +176,13 @@
       "when": 1791253047817,
       "tag": "0024_eventos_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791253856348,
+      "tag": "0025_eventos_anonimizado_fk",
+      "breakpoints": true
     }
   ]
 }

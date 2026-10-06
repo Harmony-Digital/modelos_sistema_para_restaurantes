@@ -59,6 +59,17 @@ describe('painel de espaços', () => {
     expect((await logs(id)).map((l) => l.acao).sort()).toEqual(['espaco.atualizado', 'espaco.criado'])
   })
 
+  it('capacidade fora da regra ⇒ capacidade_invalida (criar e editar), sem gravar', async () => {
+    const c = await cenario()
+    expect(await salvarEspaco(db, as(c.dono), null, espaco(c.u1, { capacidadeMin: 50, capacidadeMax: 20 }))).toEqual({ ok: false, erro: 'capacidade_invalida' })
+    expect(await salvarEspaco(db, as(c.dono), null, espaco(c.u1, { capacidadeMax: 1001 }))).toEqual({ ok: false, erro: 'capacidade_invalida' })
+    const r = await salvarEspaco(db, as(c.dono), null, espaco(c.u1))
+    const id = r.ok ? r.valor.id : ''
+    expect(await salvarEspaco(db, as(c.dono), id, espaco(c.u1, { capacidadeMin: 0 }))).toEqual({ ok: false, erro: 'capacidade_invalida' })
+    expect(await db.select().from(eventSpaces)).toHaveLength(1)
+    expect((await logs(id)).map((l) => l.acao)).toEqual(['espaco.criado'])
+  })
+
   it('listarEspacos: por unidade, inclui inativos; gerente não lista outra unidade', async () => {
     const c = await cenario()
     await salvarEspaco(db, as(c.dono), null, espaco(c.u1, { nome: 'Varanda', ativo: false }))
