@@ -2,8 +2,9 @@ import { hostname } from 'node:os'
 import { createOpenRouterClient } from '@atd/ai'
 import { loadEnv, workerEnvSchema } from '@atd/config'
 import { keyFromBase64 } from '@atd/core'
-import { createBoss, createDb, ensureQueues, QUEUES, type IngestJob, type ProcessJob } from '@atd/db'
+import { createBoss, createDb, ensureQueues, QUEUES, type DeliverJob, type IngestJob, type ProcessJob } from '@atd/db'
 import { createWhatsAppClient } from '@atd/whatsapp'
+import { deliver } from './jobs/deliver.ts'
 import { ingestDocument } from './jobs/ingest-document.ts'
 import { processConversation, type ProcessDeps } from './jobs/process-conversation.ts'
 import { startHeartbeat } from './heartbeat.ts'
@@ -66,6 +67,20 @@ try {
         Sentry.captureException(err, { extra: { conversationId: job.data.conversationId } })
         // pg-boss retenta (retryLimit 3, backoff) e depois manda para a DLQ; o erro lançado vai para
         // pgboss.job.output, então nunca o erro bruto (params do drizzle com dados do cliente).
+        throw sanitizeJobError(err)
+      }
+    }
+  })
+
+  // resposta do atendente (painel): a action grava a mensagem `pendente` e enfileira; a entrega é a mesma da IA
+  await boss.work<DeliverJob>(QUEUES.deliver, { localConcurrency: 2 }, async (jobs) => {
+    for (const job of jobs) {
+      try {
+        await deliver(deps, job.data.conversationId)
+        log.info({ conversationId: job.data.conversationId }, 'entrega processada')
+      } catch (err) {
+        log.error({ err, conversationId: job.data.conversationId }, 'falha ao entregar mensagens da conversa')
+        Sentry.captureException(err, { extra: { conversationId: job.data.conversationId } })
         throw sanitizeJobError(err)
       }
     }

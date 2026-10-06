@@ -91,7 +91,7 @@ function fakeLlm(script: TriageV5[], aoChamar?: () => Promise<void>) {
       calls.push(p.user)
       if (aoChamar) await aoChamar()
       return {
-        ok: true as const, data: p.parse(script[Math.min(calls.length - 1, script.length - 1)]), model: 'fake/m',
+        ok: true as const, data: p.parse({ frustracao: false, ...script[Math.min(calls.length - 1, script.length - 1)] }), model: 'fake/m',
         usage: { tokensIn: 100, tokensOut: 20, tokensCache: 0, costUsd: '0.000200' }, latencyMs: 10,
       }
     },
@@ -121,7 +121,7 @@ const acoesAudit = async () =>
     .filter((a) => a.acao.startsWith('evento.') || a.acao.startsWith('conversa.'))
 
 describe('S3 no worker', () => {
-  it('pedido completo numa mensagem ⇒ "Recebemos seu pedido…", linha novo, triage-v5 e audit_log', async () => {
+  it('pedido completo numa mensagem ⇒ "Recebemos seu pedido…", linha novo, triage-v6 e audit_log', async () => {
     const { restaurantId, ids } = await setup()
     const conv = await receive(restaurantId, 'quero fazer um aniversário pra 40 pessoas na asa sul dia 20/10')
     const { llm, calls } = fakeLlm([triagem(ev(COMPLETO))])
@@ -140,7 +140,7 @@ describe('S3 no worker', () => {
     })
     expect(p!.customerId).toBe((await conversa(conv)).customerId)
     const [run] = await db.select().from(schema.aiRuns)
-    expect(run).toMatchObject({ promptVersion: 'triage-v5', intent: 'evento:pedido', itensValidos: 1, itensRespondidos: 1 })
+    expect(run).toMatchObject({ promptVersion: 'triage-v6', intent: 'evento:pedido', itensValidos: 1, itensRespondidos: 1 })
     expect(await acoesAudit()).toEqual([{ acao: 'evento.pedido_criado', entidade: 'event_request', atorTipo: 'ia', entidadeId: p!.id }])
     expect((await conversa(conv)).pendente).toBeNull()
   })
@@ -373,13 +373,15 @@ describe('S3 no worker', () => {
     await processConversation(deps(fakeLlm([triagem(cancelarEv())]).llm, wa), convB)
     expect(ultimoTexto(wa)).toBe('Não encontrei pedido de evento seu em andamento.')
 
-    // defeito simulado: o pedido de A chega ao commit de B ⇒ o banco recusa e a resposta diz o que ele fez
+    // defeito simulado: o pedido de A chega ao commit de B ⇒ o banco recusa; a resposta não promete o cancelamento
+    // e a equipe assume (mesmo caminho da corrida com a equipe, Etapa 06)
     injecao.pedidos = [{ id: pA!.id, unitId: pA!.unitId, spaceId: null, data: pA!.data, convidados: 40, tipo: 'aniversario', status: 'novo' }]
     await receive(restaurantId, 'cancela o pedido de evento', null, 'bia')
     await processConversation(deps(fakeLlm([triagem(cancelarEv())]).llm, wa), convB)
-    expect(ultimoTexto(wa)).toBe('Não encontrei pedido de evento seu em andamento.')
+    expect(ultimoTexto(wa)).toBe('Já temos um evento confirmado seu nesse dia. Vou chamar a equipe para te ajudar.')
     expect(await pedidos()).toMatchObject([{ id: pA!.id, status: 'novo' }])
-    expect((await acoesAudit()).map((a) => a.acao)).toEqual(['evento.pedido_criado'])
+    expect((await acoesAudit()).map((a) => a.acao)).toEqual(['evento.pedido_criado', 'conversa.handoff_evento'])
+    expect(await conversa(convB)).toMatchObject({ estado: 'aguardando_humano', handoffMotivo: 'servico' })
   })
 
   it('cancelar pedido confirmado ⇒ handoff (aguardando_humano), mensagem entregue, pedido intacto', async () => {
@@ -530,3 +532,92 @@ describe('S3 no worker — correções da homologação (Etapa 05)', () => {
   })
 })
 
+describe('S3 no worker — pendências da Etapa 04 (Etapa 06)', () => {
+  it('pendência 2: "pessoas" + evento na mesma mensagem ⇒ depois das pessoas, pergunta o que falta do evento', async () => {
+    const { restaurantId, ids } = await setup()
+    const conv = await receive(restaurantId, 'vou hoje na asa sul e quero fazer um aniversário lá dia 20/10')
+    const aviso = ev({ servico: 'aviso_presenca', tipo: 'registrar', unidade: 'asa sul', data: 'hoje' })
+    const { llm, calls } = fakeLlm([triagem(aviso, ev({ unidade: 'asa sul', data: '20/10', tipoEvento: 'aniversário' }))])
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    expect(ultimoTexto(wa)).toMatch(/Para quantas pessoas\?$/)
+    expect((await conversa(conv)).pendente).toMatchObject({
+      tipo: 'pessoas', eventoAdiado: { campo: 'convidados', unitId: ids['Asa Sul'], texto: 'Para quantos convidados?' },
+    })
+
+    await receive(restaurantId, '4')
+    await processConversation(deps(llm, wa), conv)
+    expect(calls).toHaveLength(1) // resposta de pessoas sem LLM
+    expect(ultimoTexto(wa)).toMatch(/4 pessoas[\s\S]*\n\nPara quantos convidados\?$/)
+    expect(await db.select().from(schema.attendanceNotices)).toHaveLength(1)
+    expect((await conversa(conv)).pendente).toMatchObject({
+      tipo: 'pedido_evento', campo: 'convidados', unitId: ids['Asa Sul'], item: { data: '2026-10-20', tipoEvento: 'aniversário' },
+    })
+  })
+
+  it('pendência 2: adiada pela lista de unidade de outro item ⇒ retomada depois da escolha', async () => {
+    const { restaurantId, ids } = await setup(4)
+    const conv = await receive(restaurantId, 'vou sábado e quero um aniversário na asa sul dia 20/10')
+    const aviso = ev({ servico: 'aviso_presenca', tipo: 'registrar', data: 'sábado', pessoas: 4 })
+    const { llm } = fakeLlm([triagem(aviso, ev({ unidade: 'asa sul', data: '20/10', tipoEvento: 'aniversário' }))])
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    expect((await conversa(conv)).pendente).toMatchObject({ tipo: 'unidade', eventoAdiado: { campo: 'convidados' } })
+    await receive(restaurantId, 'Lago Sul', ids['Lago Sul']!)
+    await processConversation(deps(llm, wa), conv)
+    expect(ultimoTexto(wa)).toMatch(/\n\nPara quantos convidados\?$/)
+    expect((await conversa(conv)).pendente).toMatchObject({ tipo: 'pedido_evento', campo: 'convidados', unitId: ids['Asa Sul'] })
+  })
+
+  it('pendência 3: toque numa lista antiga com pendente pedido_evento usa a unidade tocada (antes: "lista expirada")', async () => {
+    const { restaurantId, ids } = await setup(4)
+    const conv = await receive(restaurantId, 'quero fazer um evento dia 20/10 pra 40')
+    const { llm, calls } = fakeLlm([triagem(ev({ data: '20/10', convidados: 40 }))])
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    await receive(restaurantId, 'Asa Sul', ids['Asa Sul']!)
+    await processConversation(deps(llm, wa), conv)
+    expect((await conversa(conv)).pendente).toMatchObject({ tipo: 'pedido_evento', campo: 'tipo', unitId: ids['Asa Sul'] })
+
+    await receive(restaurantId, 'Asa Norte', ids['Asa Norte']!)
+    await processConversation(deps(llm, wa), conv)
+    expect(calls).toHaveLength(1)
+    expect(ultimoTexto(wa)).not.toMatch(/lista expirou/)
+    expect((await conversa(conv)).pendente).toMatchObject({
+      tipo: 'pedido_evento', unitId: ids['Asa Norte'], item: { unidade: 'Asa Norte', data: '2026-10-20', convidados: 40 },
+    })
+    expect((await conversa(conv)).unidadeContextoId).toBe(ids['Asa Norte'])
+  })
+
+  it('pendência 3: id que não é unidade ativa ⇒ "lista expirada" como antes', async () => {
+    const { restaurantId, ids } = await setup(4)
+    const conv = await receive(restaurantId, 'quero fazer um evento na asa sul')
+    const wa = fakeWa()
+    await processConversation(deps(fakeLlm([triagem(ev({ unidade: 'asa sul' }))]).llm, wa), conv)
+    expect((await conversa(conv)).pendente).toMatchObject({ tipo: 'pedido_evento', campo: 'data' })
+    await db.update(schema.units).set({ ativo: false }).where(eq(schema.units.id, ids['Asa Norte']!))
+    await receive(restaurantId, 'Asa Norte', ids['Asa Norte']!)
+    await processConversation(deps(fakeLlm([]).llm, wa), conv)
+    expect(ultimoTexto(wa)).toBe('Essa lista expirou. Pode me mandar a pergunta de novo?')
+  })
+
+  it('pendência 4: a equipe confirma o pedido durante a resposta ⇒ não cancela, avisa e passa para a equipe', async () => {
+    const { restaurantId } = await setup()
+    const conv = await receive(restaurantId, 'aniversário pra 40 na asa sul dia 20/10')
+    const wa = fakeWa()
+    await processConversation(deps(fakeLlm([triagem(ev(COMPLETO))]).llm, wa), conv)
+    const [p] = await pedidos()
+    // a leitura do worker ainda vê `novo`; no banco a equipe já confirmou
+    injecao.pedidos = [{ id: p!.id, unitId: p!.unitId, spaceId: null, data: p!.data, convidados: 40, tipo: 'aniversario', status: 'novo' }]
+    await db.update(schema.eventRequests).set({ status: 'confirmado' })
+    await receive(restaurantId, 'quero cancelar o evento')
+    await processConversation(deps(fakeLlm([triagem(cancelarEv())]).llm, wa), conv)
+    expect(ultimoTexto(wa)).toBe('Já temos um evento confirmado seu nesse dia. Vou chamar a equipe para te ajudar.')
+    expect(await pedidos()).toMatchObject([{ status: 'confirmado' }])
+    const c = await conversa(conv)
+    expect(c).toMatchObject({ estado: 'aguardando_humano', handoffMotivo: 'servico', pendente: null })
+    const ms = await db.select().from(schema.messages).where(eq(schema.messages.direcao, 'out')).orderBy(asc(schema.messages.id))
+    expect(ms.at(-1)).toMatchObject({ autor: 'sistema', statusEnvio: 'enviado' })
+    expect((await acoesAudit()).map((a) => a.acao)).toEqual(['evento.pedido_criado', 'conversa.handoff_evento'])
+  })
+})

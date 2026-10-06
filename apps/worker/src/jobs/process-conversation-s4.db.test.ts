@@ -79,7 +79,7 @@ function fakeLlm(script: TriageV5[]) {
     async completeJson(p) {
       calls.push({ user: p.user, schemaName: p.schemaName })
       return {
-        ok: true as const, data: p.parse(script[Math.min(calls.length - 1, script.length - 1)]), model: 'fake/m',
+        ok: true as const, data: p.parse({ frustracao: false, ...script[Math.min(calls.length - 1, script.length - 1)] }), model: 'fake/m',
         usage: { tokensIn: 100, tokensOut: 20, tokensCache: 0, costUsd: '0.000200' }, latencyMs: 10,
       }
     },
@@ -129,18 +129,18 @@ const metodos = (wa: ReturnType<typeof fakeWa>) => wa.chamadas.map((c) => c.meto
 const arquivo = async (id: string) => (await db.select().from(schema.menuFiles).where(eq(schema.menuFiles.id, id)))[0]!
 
 describe('S4 no worker — perguntas sobre o cardápio', () => {
-  it('"tem carne de sol?" ⇒ texto com o preço do banco; triage-v5 em ai_runs', async () => {
+  it('"tem carne de sol?" ⇒ texto com o preço do banco; triage-v6 em ai_runs', async () => {
     const { restaurantId } = await setup()
     const conv = await receive(restaurantId, 'tem carne de sol?')
     const { llm, calls } = fakeLlm([triagem(card({ consulta: 'carne de sol' }))])
     const wa = fakeWa()
     expect(await processConversation(deps(llm, wa), conv)).toBe('replied')
-    expect(calls[0]!.schemaName).toBe('triagem_v5')
+    expect(calls[0]!.schemaName).toBe('triagem_v6')
     const [m] = await saidas(conv)
     expect(m!.texto).toContain('Carne-de-sol')
     expect(m!.texto).toContain('R$ 59,90')
     const [run] = await db.select().from(schema.aiRuns)
-    expect(run).toMatchObject({ promptVersion: 'triage-v5', intent: 'cardapio:buscar', itensValidos: 1, itensRespondidos: 1 })
+    expect(run).toMatchObject({ promptVersion: 'triage-v6', intent: 'cardapio:buscar', itensValidos: 1, itensRespondidos: 1 })
     expect(metodos(wa)).not.toContain('uploadMedia')
   })
 
@@ -267,7 +267,7 @@ describe('S4 no worker — envio do arquivo', () => {
     }
     const llm: LlmClient = {
       async completeJson(p) {
-        return { ok: true as const, data: p.parse(ENVIAR), model: 'fake/m', usage: { tokensIn: 1, tokensOut: 1, tokensCache: 0, costUsd: '0' }, latencyMs: 1 }
+        return { ok: true as const, data: p.parse({ frustracao: false, ...ENVIAR }), model: 'fake/m', usage: { tokensIn: 1, tokensOut: 1, tokensCache: 0, costUsd: '0' }, latencyMs: 1 }
       },
     }
     // a decisão vê o arquivo; desativamos antes de processar de novo a entrega

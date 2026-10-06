@@ -77,7 +77,7 @@ function fakeLlm(script: TriageV5[], aoChamar?: () => Promise<void>) {
       calls.push(p.user)
       if (aoChamar) await aoChamar()
       return {
-        ok: true as const, data: p.parse(script[Math.min(calls.length - 1, script.length - 1)]), model: 'fake/m',
+        ok: true as const, data: p.parse({ frustracao: false, ...script[Math.min(calls.length - 1, script.length - 1)] }), model: 'fake/m',
         usage: { tokensIn: 100, tokensOut: 20, tokensCache: 0, costUsd: '0.000200' }, latencyMs: 10,
       }
     },
@@ -108,7 +108,7 @@ const acoesAudit = async () =>
     .filter((a) => a.acao.startsWith('aviso.'))
 
 describe('S2 no worker', () => {
-  it('registra o aviso, responde "Anotado…", grava triage-v5 e audit_log', async () => {
+  it('registra o aviso, responde "Anotado…", grava triage-v6 e audit_log', async () => {
     const { restaurantId, ids } = await setup()
     const conv = await receive(restaurantId, 'vou hoje com 4 pessoas lá pelas 20h')
     const { llm } = fakeLlm([triagem(av({ pessoas: 4, horario: '20h' }))])
@@ -118,7 +118,7 @@ describe('S2 no worker', () => {
     const [a] = await avisos()
     expect(a).toMatchObject({ restaurantId, unitId: ids['Asa Sul'], data: '2026-10-05', pessoas: 4, horarioAprox: '20:00', nome: 'Maria', origem: 'ia', simulado: false, status: 'ativo' })
     const [run] = await db.select().from(schema.aiRuns)
-    expect(run).toMatchObject({ promptVersion: 'triage-v5', intent: 'aviso_presenca:registrar', itensValidos: 1, itensRespondidos: 1 })
+    expect(run).toMatchObject({ promptVersion: 'triage-v6', intent: 'aviso_presenca:registrar', itensValidos: 1, itensRespondidos: 1 })
     const audit = await db.select().from(schema.auditLog).where(eq(schema.auditLog.acao, 'aviso.registrado'))
     expect(audit).toHaveLength(1)
     expect(audit[0]).toMatchObject({ atorTipo: 'ia', entidade: 'attendance_notice', entidadeId: a!.id, diff: null })

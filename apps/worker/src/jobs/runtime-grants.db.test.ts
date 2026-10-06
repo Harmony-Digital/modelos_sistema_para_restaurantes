@@ -9,6 +9,7 @@ import type { LlmClient, TriageV5 } from '@atd/ai'
 import type { SendResult } from '@atd/whatsapp'
 import { createLogger } from '../logger.ts'
 import { comMidiaProibida, storageProibido } from './midia-fake.ts'
+import { deliver } from './deliver.ts'
 import { processConversation, type ProcessDeps } from './process-conversation.ts'
 
 /**
@@ -75,7 +76,7 @@ function fakeLlm(step: TriageV5 | 'erro') {
         return { ok: false as const, error: 'upstream', retryable: true, status: 502, model: null, usage: null, latencyMs: 1 }
       }
       return {
-        ok: true as const, data: p.parse(step), model: 'fake/m',
+        ok: true as const, data: p.parse({ frustracao: false, ...step }), model: 'fake/m',
         usage: { tokensIn: 100, tokensOut: 5, tokensCache: 0, costUsd: '0.000200' }, latencyMs: 10,
       }
     },
@@ -140,10 +141,28 @@ describe('grants de runtime (web_app → worker_app)', () => {
     await processConversation(depsAsWorker(fakeLlm('erro').llm, fakeWa()), b.conversationId)
 
     const convs = await admin.db.select().from(schema.conversations).where(eq(schema.conversations.id, a.conversationId))
-    expect(convs[0]!.estado).toBe('aguardando_humano')
+    expect(convs[0]).toMatchObject({ estado: 'aguardando_humano', handoffMotivo: 'pedido' })
+    expect(convs[0]!.aguardandoDesde).toBeInstanceOf(Date)
     expect((await admin.db.select().from(schema.auditLog)).map((x) => x.acao)).toContain('conversa.handoff_pedido')
     const [dsr] = await admin.db.select().from(schema.dataSubjectRequests)
     expect(dsr!.tipo).toBe('exclusao')
+  })
+
+  it('worker_app entrega a resposta humana (trava a mensagem) e grava a unidade de contexto', async () => {
+    const rid = await seed()
+    const [u] = await admin.db.select().from(schema.units)
+    const { conversationId } = await receiveAsWeb(rid, 'vocês estão abertos?')
+    await processConversation(depsAsWorker(fakeLlm({ itens: [h('aberto_agora')], fora_escopo: false }).llm, fakeWa()), conversationId)
+    expect((await admin.db.select().from(schema.conversations))[0]!.unidadeContextoId).toBe(u!.id)
+    await admin.db.update(schema.conversations).set({ estado: 'humano' })
+    await admin.db.insert(schema.messages).values({
+      restaurantId: rid, conversationId, direcao: 'out', autor: 'humano', tipo: 'texto', texto: 'Oi, aqui é a Ana.', statusEnvio: 'pendente',
+    })
+    const wa = fakeWa()
+    await deliver({ db: worker.db, wa: comMidiaProibida(wa), storage: storageProibido, phoneKey, log }, conversationId)
+    expect(wa.sent).toEqual(['Oi, aqui é a Ana.'])
+    const humanas = await admin.db.select().from(schema.messages).where(eq(schema.messages.autor, 'humano'))
+    expect(humanas.map((m) => m.statusEnvio)).toEqual(['enviado'])
   })
 
   it('worker_app: LLM falha, reserva devolvida e handoff com resposta fixa', async () => {
@@ -153,7 +172,7 @@ describe('grants de runtime (web_app → worker_app)', () => {
     const llm = fakeLlm('erro')
     await processConversation(depsAsWorker(llm.llm, wa), conversationId)
     expect(llm.calls()).toBe(2)
-    expect(wa.sent.at(-1)).toMatch(/Tive um problema/)
+    expect(wa.sent.at(-1)).toBe('Vou passar você para alguém da nossa equipe. Já já te respondem por aqui.')
     const [c] = await admin.db.select().from(schema.conversations)
     expect(c!.estado).toBe('aguardando_humano')
     expect((await admin.db.select().from(schema.aiRuns)).map((r) => r.resultado)).toEqual(['erro', 'erro'])

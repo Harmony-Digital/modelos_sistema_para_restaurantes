@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import { decryptPhone } from '@atd/core'
+import { TRANSICOES_PEDIDO_EVENTO } from '@atd/core/s3'
 import type { Db } from './client.ts'
 import { exigirPapel, falha, ok, registrarAuditoria, semPermissaoVira, type ErroPainel, type ResultadoPainel } from './painel-comum.ts'
 import { withUserContext, type JwtClaims } from './rls.ts'
@@ -152,13 +153,8 @@ export function contarPedidosNovos(db: Db, claims: JwtClaims): Promise<number> {
 
 export type ResultadoAtualizarPedido = ResultadoPainel | { ok: false; erro: 'transicao_invalida' }
 
-const TRANSICOES: Record<StatusPedido, readonly StatusPedido[]> = {
-  novo: ['em_contato', 'confirmado', 'recusado', 'cancelado'],
-  em_contato: ['confirmado', 'recusado', 'cancelado'],
-  confirmado: ['cancelado'],
-  recusado: [],
-  cancelado: [],
-}
+// transições do status: uma fonte só (`@atd/core/s3`), a mesma do painel
+const TRANSICOES: Readonly<Record<StatusPedido, readonly StatusPedido[]>> = TRANSICOES_PEDIDO_EVENTO
 
 /** Equipe toda (dono, gerente, atendente) muda status, responsável e notas. Notas nunca vão para a auditoria. */
 export function atualizarPedido(
