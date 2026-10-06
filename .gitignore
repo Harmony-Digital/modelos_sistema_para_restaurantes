@@ -15,3 +15,7 @@ test-results/
 
 # Vercel CLI (link do projeto; nunca versionar)
 .vercel
+
+# resultados de evals (locais; só o .gitkeep vai para o git)
+packages/ai/evals/*/resultados/*
+!packages/ai/evals/*/resultados/.gitkeep
