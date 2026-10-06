@@ -117,8 +117,9 @@ const horariosLidos = z.object({
 
 /**
  * `semana` traz só os dias que o documento cita (dia fechado = turnos []), em ordem de 0 (domingo) a 6; dia repetido
- * junta os turnos. `hoje` (AAAA-MM-DD, fuso do restaurante): exceção de data passada, inválida ou repetida é descartada.
- * Unidade sem dia nem exceção válida é descartada.
+ * junta os turnos, e o mesmo dia lido fechado e aberto marca `conflito` (fica com os turnos). `hoje` (AAAA-MM-DD, fuso
+ * do restaurante): exceção de data passada, inválida ou repetida é descartada; exceção aberta sem turno válido também
+ * (não vira "fechado" sem o documento dizer). Unidade sem dia nem exceção válida é descartada.
  */
 export function parseLeituraHorarios(raw: unknown, hoje: string): RascunhoHorarios {
   const lida = horariosLidos.parse(raw)
@@ -126,19 +127,25 @@ export function parseLeituraHorarios(raw: unknown, hoje: string): RascunhoHorari
   for (const u of lida.unidades) {
     if (unidades.length >= L.unidadesHorario) break
     const porDia = new Map<number, { abre: string; fecha: string }[]>()
+    const fechadoLido = new Set<number>()
     for (const d of u.dias) {
       if (!Number.isInteger(d.dia) || d.dia < 0 || d.dia > 6) continue
+      if (d.turnos.length === 0) fechadoLido.add(d.dia)
       porDia.set(d.dia, [...(porDia.get(d.dia) ?? []), ...d.turnos])
     }
-    const semana = [...porDia.entries()].sort(([a], [b]) => a - b).map(([dia, ts]) => ({ dia, ...turnos(ts) }))
+    const semana = [...porDia.entries()].sort(([a], [b]) => a - b).map(([dia, ts]) => {
+      const t = turnos(ts)
+      return { dia, turnos: t.turnos, conflito: t.conflito || (fechadoLido.has(dia) && t.turnos.length > 0) }
+    })
     const excecoes: RascunhoHorarios['unidades'][number]['excecoes'] = []
     const vistas = new Set<string>()
     for (const e of u.excecoes) {
       if (excecoes.length >= L.excecoes) break
       const data = e.data.trim()
       if (!dataIsoValida(data) || data < hoje || vistas.has(data)) continue
-      vistas.add(data)
       const t = e.fechado ? { turnos: [], conflito: false } : turnos(e.turnos)
+      if (!e.fechado && t.turnos.length === 0) continue
+      vistas.add(data)
       excecoes.push({ data, fechado: t.turnos.length === 0, turnos: t.turnos, motivo: cortar(e.motivo, L.motivo), conflito: t.conflito })
     }
     if (!semana.length && !excecoes.length) continue
@@ -162,8 +169,9 @@ const capacidade = (n: number | null): number | null =>
   n !== null && Number.isInteger(n) && n >= L.capacidadeMin && n <= L.capacidadeMax ? n : null
 
 /**
- * Capacidade fora de 1–1000 ou fracionária conta como não lida. Só o máximo ⇒ mínimo 1; só o mínimo ⇒ máximo = mínimo
- * (a revisão mostra e a equipe ajusta); nenhuma ⇒ espaço descartado (o rascunho exige as duas). Mínimo > máximo é trocado.
+ * Capacidade fora de 1–1000 ou fracionária conta como não lida. Só uma lida ⇒ `capacidadeIncompleta: true` (a revisão
+ * pede conferência): só o máximo ("até N") ⇒ 1–N; só o mínimo ("mínimo N") ⇒ N–N. Nenhuma ⇒ espaço descartado (o
+ * rascunho exige as duas). Mínimo > máximo é trocado.
  */
 export function parseLeituraEspacos(raw: unknown): RascunhoEspacos {
   const lida = espacosLidos.parse(raw)
@@ -174,6 +182,7 @@ export function parseLeituraEspacos(raw: unknown): RascunhoEspacos {
     let min = capacidade(e.capacidadeMin)
     let max = capacidade(e.capacidadeMax)
     if (!nome || (min === null && max === null)) continue
+    const capacidadeIncompleta = min === null || max === null
     min ??= L.capacidadeMin
     max ??= min
     if (min > max) [min, max] = [max, min]
@@ -184,6 +193,7 @@ export function parseLeituraEspacos(raw: unknown): RascunhoEspacos {
       capacidadeMax: max,
       descricao: cortar(e.descricao, L.descricaoEspaco),
       condicoes: cortar(e.condicoes, L.condicoes),
+      ...(capacidadeIncompleta ? { capacidadeIncompleta: true } : {}),
       incluir: true,
     })
   }

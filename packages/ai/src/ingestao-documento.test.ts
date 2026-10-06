@@ -144,7 +144,7 @@ describe('lerDocumentoPorIa — escolha de prompt, schema e parse pelo alvo', ()
       alvo: 'espacos', modo: 'completo',
       rascunho: { espacos: [
         { unidade: 'Asa Sul', nome: 'Salão principal', capacidadeMin: 20, capacidadeMax: 80, descricao: 'Com palco', condicoes: null, incluir: true },
-        { unidade: null, nome: 'Varanda', capacidadeMin: 1, capacidadeMax: 30, descricao: null, condicoes: 'Consumação mínima', incluir: true },
+        { unidade: null, nome: 'Varanda', capacidadeMin: 1, capacidadeMax: 30, descricao: null, condicoes: 'Consumação mínima', capacidadeIncompleta: true, incluir: true },
       ] },
     })
     expect(llm.calls[0]!.schemaName).toBe('rascunho_espacos')
@@ -287,7 +287,7 @@ describe('parse por alvo — limites e normalização (a equipe revisa o resto)'
     expect(u.semana[1]!.conflito).toBe(true)
   })
 
-  it('horários: só exceções ⇒ semana [] (não mexe na semana cadastrada); exceção passada, inválida ou repetida descartada; fechado ⇔ sem turnos', () => {
+  it('horários: só exceções ⇒ semana [] (não mexe na semana cadastrada); exceção passada, inválida ou repetida descartada; aberta sem turno válido descartada (não vira fechada); fechado ⇔ sem turnos', () => {
     const r = parseLeituraHorarios({
       unidades: [{
         unidade: null,
@@ -299,6 +299,7 @@ describe('parse por alvo — limites e normalização (a equipe revisa o resto)'
           { data: '2026-10-06', fechado: false, turnos: [{ abre: '12:00', fecha: '15:00' }], motivo: 'hoje' },
           { data: '2026-10-06', fechado: true, turnos: [], motivo: 'repetida' },
           { data: '2026-11-02', fechado: false, turnos: [], motivo: 'Finados' },
+          { data: '2026-11-03', fechado: false, turnos: [{ abre: '25:00', fecha: '15:00' }], motivo: null },
           { data: '2026-11-15', fechado: true, turnos: [{ abre: '12:00', fecha: '15:00' }], motivo: null },
         ],
       }],
@@ -307,8 +308,17 @@ describe('parse por alvo — limites e normalização (a equipe revisa o resto)'
     expect(u.semana).toEqual([])
     expect(u.excecoes).toEqual([
       { data: '2026-10-06', fechado: false, turnos: [{ abre: '12:00', fecha: '15:00' }], motivo: 'hoje', conflito: false },
-      { data: '2026-11-02', fechado: true, turnos: [], motivo: 'Finados', conflito: false },
       { data: '2026-11-15', fechado: true, turnos: [], motivo: null, conflito: false },
+    ])
+  })
+
+  it('horários: o mesmo dia lido fechado e aberto no lote marca conflito e fica com os turnos', () => {
+    const r = parseLeituraHorarios({
+      unidades: [{ unidade: 'X', dias: [{ dia: 1, turnos: [] }, { dia: 1, turnos: [{ abre: '11:00', fecha: '15:00' }] }, { dia: 2, turnos: [] }, { dia: 2, turnos: [] }], excecoes: [] }],
+    }, HOJE)
+    expect(r.unidades[0]!.semana).toEqual([
+      { dia: 1, turnos: [{ abre: '11:00', fecha: '15:00' }], conflito: true },
+      { dia: 2, turnos: [], conflito: false },
     ])
   })
 
@@ -316,7 +326,7 @@ describe('parse por alvo — limites e normalização (a equipe revisa o resto)'
     expect(parseLeituraHorarios({ unidades: [{ unidade: 'X', dias: [], excecoes: [{ data: '2020-01-01', fechado: true, turnos: [], motivo: null }] }] }, HOJE).unidades).toEqual([])
   })
 
-  it('espaços: capacidade fora de 1–1000 ou fracionária não conta; só o mínimo ⇒ máximo = mínimo; nenhuma ou sem nome ⇒ descartado; mínimo > máximo é trocado', () => {
+  it('espaços: capacidade fora de 1–1000 ou fracionária não conta; só uma lida ⇒ capacidadeIncompleta ("até N" = 1–N, "mínimo N" = N–N); nenhuma ou sem nome ⇒ descartado; mínimo > máximo é trocado', () => {
     const r = parseLeituraEspacos({
       espacos: [
         { unidade: null, nome: 'A', capacidadeMin: 0, capacidadeMax: 1500, descricao: null, condicoes: null },
@@ -325,9 +335,12 @@ describe('parse por alvo — limites e normalização (a equipe revisa o resto)'
         { unidade: null, nome: ' ', capacidadeMin: 1, capacidadeMax: 2, descricao: null, condicoes: null },
         { unidade: null, nome: 'D', capacidadeMin: 12, capacidadeMax: null, descricao: null, condicoes: null },
         { unidade: null, nome: 'E', capacidadeMin: 5, capacidadeMax: 1001, descricao: null, condicoes: null },
+        { unidade: null, nome: 'F', capacidadeMin: null, capacidadeMax: 80, descricao: null, condicoes: null },
       ],
     })
-    expect(r.espacos.map((e) => [e.nome, e.capacidadeMin, e.capacidadeMax])).toEqual([['B', 10, 50], ['D', 12, 12], ['E', 5, 5]])
+    expect(r.espacos.map((e) => [e.nome, e.capacidadeMin, e.capacidadeMax, e.capacidadeIncompleta])).toEqual([
+      ['B', 10, 50, undefined], ['D', 12, 12, true], ['E', 5, 5, true], ['F', 1, 80, true],
+    ])
     expect(rascunhoEspacosSchema.parse(r)).toEqual(r)
   })
 
