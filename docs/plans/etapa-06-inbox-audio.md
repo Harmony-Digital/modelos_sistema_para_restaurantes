@@ -4,6 +4,8 @@
 >
 > **Processo acelerado:** interfaces, regras, testes obrigatórios e decisões; código completo só nos trechos delicados. **Revisão por bloco** (A–D) + revisão final. Testes de banco nunca em paralelo; tarefas sem banco podem rodar em worktree isolada. **Escopo fechado:** o que crescer vira item de etapa futura no PLAN.
 
+> **Mudança de escopo (06/10/2026, pedido do dono):** o **áudio (STT) saiu desta etapa** e virou melhoria futura (PLAN). Esta versão do produto é demonstração por simulação. Ficam fora: `core/audio`, `stt.ts`/`eval:stt`, `downloadMedia`, `AI_STT_*`, bucket `audios-simulados`, áudio no simulador e no e2e, modelos `audio_longo`/`audio_falhou`. Mensagem de áudio continua com a resposta atual (`midiaNaoSuportada`).
+
 **Goal:** a equipe atende pelo painel (lista em tempo real, assumir, responder pelo WhatsApp, devolver, encerrar); a IA passa a conversa por frustração, falhas e fora do horário informa quando a equipe volta; o cliente pode mandar áudio, que é transcrito e descartado.
 
 **Architecture:** DAL `painel-conversas.ts` (RLS por unidade de contexto) + Server Actions; resposta humana gravada como mensagem pendente e entregue por um job novo `conversation.deliver` no worker (token da Meta só no worker); triggers enviam Broadcast privado **sem conteúdo** (só ids) e o painel recarrega pela DAL; `triage-v6` com `frustracao`; worker baixa o áudio da Meta, mede a duração no Ogg, reserva orçamento, transcreve no OpenRouter e descarta os bytes.
@@ -198,28 +200,19 @@ export function transcrever(cfg: OpenRouterConfig, p: { bytes: Uint8Array; mime:
 - [ ] **Step 3–4:** `pnpm vitest run packages/ai && pnpm typecheck && pnpm lint`.
 - [ ] **Step 5: Commit** — "Adiciona a triagem v6 com frustração e o cliente de transcrição de áudio".
 
-### Task 4: Worker — handoff automático, entrega humana e áudio
+### Task 4: Worker — handoff automático e entrega humana
 
-**Files:** Modify `packages/whatsapp/src/client.ts` (+ teste), `packages/config/src/env.ts`, `apps/worker/src/main.ts`, `apps/worker/src/jobs/process-conversation.ts`; Create `apps/worker/src/jobs/deliver.ts`, `apps/worker/src/audio.ts` + testes `deliver.db.test.ts`, `process-conversation-handoff.db.test.ts`, `process-conversation-audio.db.test.ts`.
+**Files:** Modify `apps/worker/src/main.ts`, `apps/worker/src/jobs/process-conversation.ts`; Create `apps/worker/src/jobs/deliver.ts` + testes `deliver.db.test.ts`, `process-conversation-handoff.db.test.ts`.
 
-**Interfaces:**
-```ts
-// whatsapp
-export function downloadMedia(cfg, mediaId: string, p: { maxBytes: number }): Promise<{ ok: true; bytes: Uint8Array; mime: string } | { ok: false; code: string }> // GET /{media-id} ⇒ { url, mime_type, file_size }; recusa file_size > maxBytes antes de baixar; GET url com Bearer
-// env do worker: AI_STT_MODELS (csv opcional), AI_STT_USD_POR_MIN (número, padrão 0.01)
-// worker/audio.ts
-export function prepararAudio(deps, msg): Promise<{ tipo: 'texto'; texto: string; segundos: number; run: AiRunInput } | { tipo: 'resposta'; reply: 'midiaNaoSuportada' | 'audio_longo' | 'audio_falhou' | 'modoEconomico' }>
-```
+**Interfaces:** consome `enqueueDeliver`/`QUEUES.deliver` (Task 1), `proximoHorarioHumano`/`textoProximoHorario`/modelos de handoff (Task 2) e a `triage-v6` com `frustracao` (Task 3).
+
 **Regras:**
 - **Handoff:** todo handoff grava `estado 'aguardando_humano'`, `aguardando_desde = now()` (se nulo), `handoff_motivo`; a resposta usa `handoff_fora` (com `textoProximoHorario`) quando `proximoHorarioHumano(...).aberto === false && proximo != null`, senão `handoff_dentro` (ou `handoff_frustracao` para frustração dentro do horário). Gatilhos novos: `falhas_consecutivas` chegando a 2 ⇒ motivo `falhas`; `frustracao` ⇒ responde os itens respondíveis e acrescenta a mensagem de handoff (motivo `frustracao`). Pendência 1: as bolhas de handoff continuam autor `sistema` (a inbox mostra "Sistema")— decisão: nessa mensagem, as respostas dos itens também são gravadas com autor `sistema`, para o `deliver` não cancelá-las depois da mudança de estado (teste).
 - **Unidade de contexto:** gravar `unidade_contexto_id` com a unidade resolvida (S1–S4, escolha na lista, pendente) na mesma transação do commit.
 - **Entrega humana:** job `conversation.deliver` chama o `deliver()` existente (extraído para `deliver.ts` e reutilizado pelo process); `autor 'humano'` nunca é cancelado; conversa simulada ⇒ `simulado`.
-- **Áudio** (antes do pré-filtro de mídia): sem `AI_STT_MODELS` ⇒ `midiaNaoSuportada` (comportamento atual); baixa (`maxBytes` 16 MB; simulada ⇒ baixa do bucket `audios-simulados` pelo `storage.ts` e **apaga** o objeto em qualquer desfecho); `duracaoEstimada > 120` ⇒ `audio_longo`; reserva `custoSttUsd` (escopo `ia`) — sem saldo ⇒ caminho de modo econômico existente; `transcrever`; liquida pelo custo real (ou estimado se o provedor não informar) e estorna em falha; `ai_runs` `etapa 'stt'` com `audio_segundos`; grava `messages.texto` (redigido como texto comum na triagem), `transcrito = true`, `midia_ref = { mediaId, duracao_s }`; segue o fluxo normal. Bytes nunca vão para log/Sentry.
-- Mensagem de áudio da conversa que está com humano: transcreve mesmo assim (o atendente lê a transcrição) — reserva igual; sem STT ⇒ fica "🎤 Áudio não transcrito".
-
-- [ ] **Step 1: Testes (falham):** `downloadMedia` (sucesso, `file_size` grande recusado sem baixar, 401/404); handoff por 2 falhas, por frustração (itens respondidos + handoff), fora do horário (texto com próximo horário), `aguardando_desde`/`handoff_motivo` gravados; `unidade_contexto_id` gravada; `deliver` entrega humana (sucesso, falha ⇒ `falhou:*`, simulada ⇒ `simulado`, IA pendente cancelada com humano); áudio: sem STT, longo, download falhou, sem saldo (nenhuma chamada paga), sucesso (texto, `transcrito`, run `stt`, reserva liquidada, objeto do simulador apagado), conversa com humano transcreve sem responder.
-- [ ] **Step 2–4:** implementar; `pnpm vitest run --project db apps/worker && pnpm vitest run packages/whatsapp && pnpm typecheck && pnpm lint`.
-- [ ] **Step 5: Commit** — "Liga o handoff automático, a entrega da resposta humana e a transcrição de áudio no worker".
+- [ ] **Step 1: Testes (falham):** handoff por 2 falhas, por frustração (itens respondidos + handoff), fora do horário (texto com próximo horário), `aguardando_desde`/`handoff_motivo` gravados; `unidade_contexto_id` gravada; `deliver` entrega humana (sucesso, falha ⇒ `falhou:*`, simulada ⇒ `simulado`, IA pendente cancelada com humano).
+- [ ] **Step 2–4:** implementar; `pnpm vitest run --project db apps/worker && pnpm typecheck && pnpm lint`.
+- [ ] **Step 5: Commit** — "Liga o handoff automático e a entrega da resposta humana no worker".
 
 **Fim do Bloco B → revisão.**
 
@@ -244,13 +237,13 @@ export function prepararAudio(deps, msg): Promise<{ tipo: 'texto'; texto: string
 - [ ] **Step 2–4:** implementar; `pnpm vitest run apps/web && pnpm typecheck && pnpm lint`.
 - [ ] **Step 5: Commit** — "Adiciona a inbox de conversas com tempo real e avisos no painel".
 
-### Task 6: Atendimento humano, respostas rápidas, áudio no simulador e responsável do evento
+### Task 6: Atendimento humano, respostas rápidas e responsável do evento
 
-**Files:** Create `apps/web/app/(painel)/mais/atendimento-humano/{page.tsx,actions.ts,actions.test.ts}`, `components/painel/horario-humano.tsx`, `components/painel/respostas-rapidas.tsx`; Modify Conteúdo → Mensagens (seção "Respostas rápidas"), simulador (anexar áudio: upload para `audios-simulados` com o cliente do usuário, magic bytes de ogg/mp3/m4a/wav, ≤ 16 MB, cria mensagem simulada `tipo 'audio'`), seletor e DAL do responsável do pedido de evento (pendência 5: só quem acessa a unidade do pedido; DAL recusa `responsavel_sem_acesso`).
+**Files:** Create `apps/web/app/(painel)/mais/atendimento-humano/{page.tsx,actions.ts,actions.test.ts}`, `components/painel/horario-humano.tsx`, `components/painel/respostas-rapidas.tsx`; Modify Conteúdo → Mensagens (seção "Respostas rápidas"), seletor e DAL do responsável do pedido de evento (pendência 5: só quem acessa a unidade do pedido; DAL recusa `responsavel_sem_acesso`).
 
-- [ ] **Step 1: Testes (falham):** horário humano (só dono salva; validação de turnos; vazio permitido); respostas rápidas (CRUD, limite 30, atendente só lê); upload de áudio no simulador (tipo falso recusado, tamanho, cria mensagem e enfileira o processo); responsável sem acesso recusado.
+- [ ] **Step 1: Testes (falham):** horário humano (só dono salva; validação de turnos; vazio permitido); respostas rápidas (CRUD, limite 30, atendente só lê); responsável sem acesso recusado.
 - [ ] **Step 2–4:** implementar; `pnpm vitest run apps/web && pnpm vitest run --project db packages/db/src/painel-eventos.db.test.ts && pnpm typecheck && pnpm lint`; **`pnpm check`** no fim do bloco.
-- [ ] **Step 5: Commit** — "Adiciona o horário de atendimento humano, as respostas rápidas e o áudio no simulador".
+- [ ] **Step 5: Commit** — "Adiciona o horário de atendimento humano e as respostas rápidas".
 
 **Fim do Bloco C → revisão.**
 
@@ -260,8 +253,8 @@ export function prepararAudio(deps, msg): Promise<{ tipo: 'texto'; texto: string
 
 ### Task 7: E2E, homologação e registros
 
-- [ ] **E2E `apps/web/e2e/inbox.spec.ts`** (IA e STT falsos; o OpenRouter falso ganha `/audio/transcriptions` com texto fixo; worker do e2e com `AI_STT_MODELS=e2e/falso`): simulador "quero falar com um atendente" ⇒ em outra aba/contexto, Conversas → Aguardando mostra a conversa **sem recarregar** (com "Mostrar simulações") ⇒ assumir ⇒ responder ⇒ resposta aparece no simulador ⇒ devolver à IA ⇒ IA responde; gerente restrito não vê conversa de outra unidade; resposta rápida; horário humano salvo e handoff fora do horário com o texto do próximo horário (relógio simulado); áudio no simulador ⇒ "🎤 …" com a transcrição falsa e resposta da IA; 360 px.
-- [ ] **E2E completo verde; docs:** `docs/homologacao/etapa-06.md` (inbox, avisos — permitir notificação no navegador —, horário humano, respostas rápidas, áudio no simulador; observação: STT real precisa de `AI_STT_MODELS` e crédito, escolher pelo `eval:stt`; frustração medida pelo `eval:frustracao` com crédito; como iniciar painel e worker com a chave de serviço só no shell); PRD (spec §10 + adendo Etapa 06); PLAN (itens da Etapa 06 com data e evidência; pendências novas); CLAUDE "Onde paramos"; `cp CLAUDE.md AGENTS.md`.
+- [ ] **E2E `apps/web/e2e/inbox.spec.ts`** (IA falsa): simulador "quero falar com um atendente" ⇒ em outra aba/contexto, Conversas → Aguardando mostra a conversa **sem recarregar** (com "Mostrar simulações") ⇒ assumir ⇒ responder ⇒ resposta aparece no simulador ⇒ devolver à IA ⇒ IA responde; gerente restrito não vê conversa de outra unidade; resposta rápida; horário humano salvo e handoff fora do horário com o texto do próximo horário (relógio simulado); 360 px.
+- [ ] **E2E completo verde; docs:** `docs/homologacao/etapa-06.md` (inbox, avisos — permitir notificação no navegador —, horário humano, respostas rápidas; áudio fica para melhoria futura; frustração medida pelo `eval:frustracao` com crédito; como iniciar painel e worker com a chave de serviço só no shell); PRD (spec §10 + adendo Etapa 06); PLAN (itens da Etapa 06 com data e evidência; pendências novas); CLAUDE "Onde paramos"; `cp CLAUDE.md AGENTS.md`.
 - [ ] **Verificação final:** `pnpm check` + e2e; banco pronto (`db:migrate`, bootstrap se faltar, `demo:s1` com horário humano de demonstração seg–sex 9h–18h e 2 respostas rápidas).
 - [ ] **Commit** — "Adiciona o e2e e o roteiro de homologação da Etapa 06".
 

@@ -114,8 +114,8 @@ Spec aprovada: [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-
 - [x] Refinamento · Plano detalhado (06/10/2026) — spec [docs/specs/2026-10-06-etapa-06-inbox-audio-design.md](docs/specs/2026-10-06-etapa-06-inbox-audio-design.md); plano enxuto [docs/plans/etapa-06-inbox-audio.md](docs/plans/etapa-06-inbox-audio.md) (7 tarefas, 4 blocos; e-mail/push e templates fora; commit 09e0853)
 - [ ] Inbox em tempo real (Broadcast privado + RLS), assumir/devolver, notificações
 - [ ] Handoff por frustração/falhas; horário de atendimento humano
-- [ ] Áudio: download Meta, limite de duração, STT, descarte do arquivo
-- [ ] Evals de áudio · Homologação
+- [ ] ~~Áudio: download Meta, limite de duração, STT, descarte do arquivo~~ — **adiado (06/10/2026, decisão do dono):** a versão atual é demonstração por simulação; vira melhoria futura (ver "Melhorias futuras")
+- [ ] Homologação
 - [ ] Pendências menores da Etapa 04 (revisões; não bloqueiam): handoff da triagem grava todas as saídas com autor `sistema` (rever ao montar a inbox); "pessoas" e evento na mesma mensagem perdem o evento (só pergunta pessoas); lista de unidades antiga com pendente `pedido_evento` responde "lista expirada"; corrida com pedido confirmado pela equipe durante a coleta responde "não encontrei"; responsável do pedido pode ser alguém que não vê a unidade (validar no seletor/DAL); `TRANSICOES` de status duplicada em `apps/web/lib/eventos.ts` (extrair de um lugar só)
 
 ## Etapa 07 — Ingestão de documentos
@@ -140,3 +140,6 @@ Spec aprovada: [docs/specs/2026-10-05-etapa-02-s1-design.md](docs/specs/2026-10-
 - [ ] Política, LIA e RIPD revisados pelo jurídico; runbook de incidente
 - [ ] Número oficial em produção; Guardrail OpenRouter em produção
 - [ ] Checklist de produção 100% · Homologação final
+
+## Melhorias futuras
+- [ ] **Áudio do cliente (STT)** — adiado da Etapa 06: baixar da Meta, limite de 2 min, reserva de orçamento, transcrição no OpenRouter (`/api/v1/audio/transcriptions`, `pt`, deny/ZDR), descarte do arquivo, áudio no simulador, `eval:stt` para escolher o modelo. Desenho na spec `docs/specs/2026-10-06-etapa-06-inbox-audio-design.md` §4.
