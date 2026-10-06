@@ -205,10 +205,23 @@ scripts/producao/verificar.sh --bootstrap .env.production-bootstrap
 ```
 
 **Saída esperada:** o drizzle-kit aplica as migrations sem erro; o script mostra
-`OK migrations aplicadas: 38 de 38 (até 0037_…)`, `OK bucket cardapio existe e é privado`,
+`OK migrations aplicadas: 40 de 40 (até 0039_…)`, `OK bucket cardapio existe e é privado`,
 `OK bucket importacoes existe e é privado`, `OK role web_app existe com login`, `OK role worker_app existe com login`.
 **Se falhar:** erro de `MAINTAIN` → o banco não é PG 17 (passo 1); falha no meio → rode o mesmo comando de novo
 (o drizzle aplica só as que faltam) e, se repetir, pare e relate a mensagem do drizzle-kit. Nunca edite uma migration.
+
+**Atualizando uma amostra já publicada (worker já rodando no VPS):** pare o worker **antes** do `db:migrate` e suba a
+imagem nova **logo depois**. Motivo: a 0033 recria o tipo `budget_scope` (`DROP TYPE`), e um worker antigo com
+statements preparados passa a falhar nas reservas até reiniciar. Na ordem:
+
+```bash
+ssh <usuario>@<host> 'cd /opt/atendimento && docker compose --env-file .deploy.env -f docker-compose.prod.yml stop worker'
+( set -a; . ./.env.production-bootstrap; set +a; pnpm db:migrate )
+scripts/producao/verificar.sh --bootstrap .env.production-bootstrap
+```
+
+Depois suba a imagem nova pelo passo 8 (Caminho A ou B, que fazem `up -d`) e confira a linha `worker iniciado`.
+Enquanto o worker está parado, as mensagens ficam na fila e são respondidas quando ele volta.
 
 ## Passo 3 — Senhas dos roles e URLs de conexão
 
@@ -415,7 +428,7 @@ scripts/producao/verificar.sh --bootstrap .env.production-bootstrap --vercel .en
 **Saída esperada:** só `OK` (e `AVISO` apenas se você usou outra porta de propósito) e `Resultado: 0 falha(s)`;
 código de saída 0. O script confere: arquivos `600` e fora do git; variáveis obrigatórias e proibidas por destino;
 chaves de 32 bytes iguais nos dois destinos; `NEXT_PUBLIC_LIMITE_UPLOAD_MB=4`; `AI_PROVIDER=openai` e `OPENAI_API_KEY` no worker (sem `OPENROUTER_API_KEY`) e ausência de `OPENROUTER_DEV_SEM_ZDR`;
-login real como `web_app`/`worker_app`; Postgres 17; 38 migrations; buckets privados; roles com login; restaurante,
+login real como `web_app`/`worker_app`; Postgres 17; 40 migrations; buckets privados; roles com login; restaurante,
 dono, limites de gasto e demo; `RESTAURANT_ID` igual ao do banco; cadastro público desligado; Data API sem `public`;
 chave de serviço lendo o Storage; `/login` 200 e webhook recusando POST sem assinatura.
 **Se falhar:** cada `FALHA` traz a correção depois do `—`. Corrigiu variável da Vercel → cadastre de novo (passo 5) e redeploy.
@@ -526,7 +539,7 @@ convite** no painel.
 ```
 Amostra publicada.
 - Painel: https://<domínio> (Vercel, região gru1, deploy <id/URL do deploy>)
-- Supabase: projeto <ref> em sa-east-1, Postgres <versão>, 38 migrations, buckets privados
+- Supabase: projeto <ref> em sa-east-1, Postgres <versão>, 40 migrations, buckets privados
 - Worker: VPS <host>, imagem <tag>, status running, "worker iniciado" às <hora>
 - IA: OpenAI direto (`AI_PROVIDER=openai`, `store: false`, retenção padrão de 30 dias aceita pelo time); triagem gpt-4.1-mini; cardápio gpt-4.1-mini → gpt-4.1 (smoke:ia:prod: <resultado>; eval:prod: <resultado>)
 - verificar.sh: 0 falha(s) em <data/hora>

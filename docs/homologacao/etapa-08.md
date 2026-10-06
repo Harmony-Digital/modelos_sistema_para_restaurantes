@@ -41,7 +41,7 @@ O simulador usa a IA de verdade (OpenRouter no local) e precisa de `OPENROUTER_A
 2. Em **Gastos e limites → Simulação**, ponha o **Limite do dia** em `0,000001` (menor que o já gasto) e salve.
 3. No simulador, **Novo cliente** e outra pergunta ⇒ aparece "**Limite de simulação atingido hoje — ajuste em Gastos e limites**" (com link). A conversa simulada vai para a equipe (modo econômico), como acontece com o limite da IA.
 4. Enquanto isso, **clientes reais continuam sendo atendidos**: o limite da simulação não toca no limite da IA (o e2e confere isso com uma conversa real no mesmo minuto).
-5. **Alerta:** no topo do painel aparece a faixa "**Simulação: N% do limite do dia** — modo econômico até o próximo período ou até aumentar o limite", com **Ajustar limites**; o Início mostra o cartão **Alertas de gasto** com todos os alertas do período. Ao chegar a 80% (ou o % configurado) aparece o aviso de 80%. Os alertas valem até o fim do dia/mês; só dono e gerente veem. Não há e-mail nem push.
+5. **Alerta:** no topo do painel aparece a faixa "**Simulação: N% do limite do dia** — modo econômico até o próximo período ou até aumentar o limite", com **Ajustar limites**; o Início mostra o cartão **Alertas de gasto** com todos os alertas do período. Ao chegar a 80% (ou o % configurado) aparece o aviso de 80%. Os alertas valem até o fim do dia/mês; só dono e gerente veem. Não há e-mail nem push. **A faixa não se atualiza sozinha:** um alerta novo aparece ao recarregar a página (ou ao abrir o painel de novo).
 6. Volte o limite do dia da Simulação para 1,00.
 
 ## 4. Privacidade (Mais → **Privacidade (LGPD)**)
