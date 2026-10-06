@@ -20,7 +20,7 @@ import {
 } from '@atd/ai'
 import { deliver, type DeliverDeps } from './deliver.ts'
 
-const { aiRuns, auditLog, conversations, customers, dataSubjectRequests, messages, replyTemplates, restaurants } = schema
+const { aiRuns, auditLog, conversations, customers, dataSubjectRequests, messages, replyTemplates, restaurants, units } = schema
 
 export type ProcessDeps = DeliverDeps & {
   llm: LlmClient
@@ -875,6 +875,8 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision, now: Date): P
       await registrarLacunas(tx, { restaurantId, lacunas: d.lacunas, pergunta: d.pergunta ?? '' })
     }
 
+    // restaurante de uma unidade só: a conversa fica nela desde a primeira resposta (inclusive handoff sem item atendido)
+    const unidadeId = d.unidadeId ?? (ctx.conv.unidadeContextoId ? undefined : await unidadeUnica(tx, restaurantId))
     await tx
       .update(conversations)
       .set({
@@ -884,7 +886,7 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision, now: Date): P
         ...(d.falhas === 'incrementar' ? { falhasConsecutivas: sql`${conversations.falhasConsecutivas} + 1` } : {}),
         ...(d.falhas === 'zerar' ? { falhasConsecutivas: 0 } : {}),
         ...(pendente !== undefined ? { pendente } : {}),
-        ...(d.unidadeId ? { unidadeContextoId: d.unidadeId } : {}),
+        ...(unidadeId ? { unidadeContextoId: unidadeId } : {}),
       })
       .where(eq(conversations.id, conversationId))
 
@@ -894,6 +896,13 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision, now: Date): P
     }
     return d.replies.length + saidas.length > 0 ? 'replied' : 'nothing'
   })
+}
+
+/** Id da única unidade ativa do restaurante; `undefined` com zero ou várias. */
+async function unidadeUnica(tx: Tx, restaurantId: string): Promise<string | undefined> {
+  const ativas = await tx.select({ id: units.id }).from(units)
+    .where(and(eq(units.restaurantId, restaurantId), eq(units.ativo, true))).limit(2)
+  return ativas.length === 1 ? ativas[0]!.id : undefined
 }
 
 /** Troca um trecho (parágrafo) do texto composto; o substituto aparece uma vez só. */

@@ -320,6 +320,20 @@ describe('unidade de contexto da conversa', () => {
     expect((await conversa(conv)).unidadeContextoId).toBe(ids['Asa Sul'])
   })
 
+  it('restaurante de uma unidade só: handoff na primeira mensagem já grava a unidade', async () => {
+    const { restaurantId, ids } = await setup()
+    const conv = await receive(restaurantId, 'quero falar com um atendente')
+    await processConversation(deps(fakeLlm([]).llm, fakeWa()), conv)
+    expect(await conversa(conv)).toMatchObject({ estado: 'aguardando_humano', unidadeContextoId: ids['Asa Sul'] })
+  })
+
+  it('várias unidades ativas: handoff sem item não escolhe unidade', async () => {
+    const { restaurantId } = await setup({ unidades: ['Asa Norte'] })
+    const conv = await receive(restaurantId, 'quero falar com um atendente')
+    await processConversation(deps(fakeLlm([]).llm, fakeWa()), conv)
+    expect(await conversa(conv)).toMatchObject({ estado: 'aguardando_humano', unidadeContextoId: null })
+  })
+
   it('aviso de presença à espera de "quantas pessoas" grava a unidade do pendente', async () => {
     const { restaurantId, ids } = await setup({ unidades: ['Asa Norte'] })
     const conv = await receive(restaurantId, 'vou hoje na asa norte')
