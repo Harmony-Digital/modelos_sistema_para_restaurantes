@@ -27,6 +27,11 @@ Você (agente no Claude Code de quem publica) segue este arquivo sozinho, do pas
    siga "Se falhar"; se continuar falhando, pare e relate ao humano (comando + mensagem de erro **sem** segredos).
 5. Comandos rodam na raiz do repositório, num shell **sem** as variáveis do `.env` local de desenvolvimento.
    Carregue arquivos de env só dentro de subshell `( … )`, para nada vazar para o shell seguinte.
+6. **Nunca** rode `vercel deploy` (nem `vercel` sem subcomando) na sua máquina: a CLI envia a pasta local e
+   **não** respeita o `.gitignore`, então os arquivos de segredo iriam junto. O build de produção da Vercel é
+   sempre feito **a partir do Git** (branch `main`), como no passo 5. A CLI só serve para `link`, `env` e `inspect`.
+7. Use uma máquina de **uso pessoal**: alguns comandos (`psql` nos passos 3 e 9) recebem a URL com senha na
+   linha de comando, visível no `ps` de outros usuários da mesma máquina.
 
 **Resultado esperado:** painel em `https://<domínio>` com o dono logando por TOTP; Início com "IA: Online";
 simulador respondendo S1–S4; handoff aparecendo em Conversas em tempo real; importação de CSV funcionando;
@@ -68,7 +73,11 @@ Formato dos exemplos: só a forma, nunca o valor real. "Gerar" = o agente gera c
 
 Consulta à API pública do OpenRouter (`/api/v1/models` e `/api/v1/endpoints/zdr`): só entram modelos com
 endpoint **ZDR** que aceita **`structured_outputs`**, sem data de expiração anunciada. O cliente manda em toda
-chamada `provider: { data_collection: 'deny', zdr: true }` e `response_format: json_schema` estrito.
+chamada `provider: { data_collection: 'deny', zdr: true, require_parameters: true }` e `response_format:
+json_schema` estrito. O `require_parameters` impede que o pedido caia num provedor que ignora o schema (ex.: Io Net
+no `mistral-nemo`, sem saída estruturada). Como os modelos sem raciocínio não aceitam o campo `reasoning`, o
+cliente repete a chamada uma vez sem ele quando o OpenRouter responde "No endpoints found that can handle the
+requested parameters" (404, sem custo).
 
 - **Triagem** — `AI_TRIAGE_MODELS=mistralai/mistral-nemo,mistralai/mistral-small-3.2-24b-instruct`
   - `mistral-nemo` (principal): ZDR em DekaLLM, DeepInfra, Parasail, Novita e Mistral (UE), todos com saída
@@ -93,7 +102,8 @@ chamada `provider: { data_collection: 'deny', zdr: true }` e `response_format: j
 ## Passo 0 — Preparar a máquina e o repositório
 
 **Pré-condição:** acesso ao repositório (branch `main` já com este runbook mesclado), Node 24, pnpm,
-Docker, `psql` (cliente PostgreSQL 15+; sem ele o script usa Docker), `openssl`, `curl`, CLI da Vercel (`pnpm dlx vercel`).
+Docker, `psql` (cliente PostgreSQL 15+; sem ele o script usa Docker), `openssl`, `curl`, CLI da Vercel
+(`pnpm dlx vercel@62`, sem instalar). Sempre chame a CLI como `pnpm dlx vercel@62 …`.
 
 ```bash
 git fetch origin && git switch main && git pull --ff-only
@@ -105,11 +115,37 @@ pnpm install --frozen-lockfile
 **Saída esperada:** `runbook-ok`; Node `v24.*`; demais comandos com versão. **Se falhar:** o runbook ainda não
 está na `main` → 🔑 peça ao humano para mesclar o PR da branch `producao-amostra`; ferramenta ausente → instale-a.
 
-🔑 **Peça ao humano:** (a) o **domínio** do painel (ex.: `https://<projeto>.vercel.app` ou domínio próprio);
-(b) o **e-mail do dono** e o nome dele; (c) o **nome do restaurante**; (d) um segundo e-mail para o
-**gerente restrito** (checklist). **Observação para o humano:** o SMTP padrão do Supabase só entrega e-mail para
-membros da equipe da organização no Supabase e com poucos envios por hora; use e-mails de membros da equipe
-ou configure SMTP próprio (Authentication → Emails → SMTP Settings).
+🔑 **Peça ao humano:** (a) o **e-mail do dono** e o nome dele; (b) o **nome do restaurante**; (c) um segundo
+e-mail para o **gerente restrito** (checklist). **Observação para o humano:** o SMTP padrão do Supabase só entrega
+e-mail para membros da equipe da organização no Supabase e com poucos envios por hora; use e-mails de membros da
+equipe ou configure SMTP próprio (Authentication → Emails → SMTP Settings).
+
+🔑 **Peça ao humano que crie agora o projeto na Vercel** (o domínio `*.vercel.app` só existe depois disso, e a
+Site URL do passo 1 e o `--politica` do passo 4 dependem dele). Painel da Vercel, time da empresa:
+
+1. **Add New → Project** → importar o repositório do GitHub (production branch **`main`**).
+2. Antes de confirmar: **Root Directory = `apps/web`** (Edit), framework **Next.js**; em Root Directory deixar
+   ligado **"Include files outside the root directory in the Build Step"** (o build precisa de `packages/*`, do
+   `pnpm-lock.yaml` e do `pnpm-workspace.yaml` da raiz). Não mexa em Build/Install Command (o padrão usa o pnpm do lockfile).
+3. **Deploy**. Esse primeiro build **pode falhar** ou subir sem configuração (ainda não há variáveis): é esperado,
+   ele é refeito no passo 5.
+4. **Settings → Build and Deployment → Node.js Version = 24.x**; **Settings → Functions → Function Region = `gru1` (São Paulo)**.
+5. Informar a você (não são segredos): o **slug do time**, o **nome do projeto** e o **domínio** de produção
+   (`https://<projeto>.vercel.app` em Settings → Domains, ou o domínio próprio, se já for usar um).
+6. Rodar `pnpm dlx vercel@62 login` na sua máquina, se a CLI ainda não estiver autenticada.
+
+Ligue a **raiz do repositório** ao projeto (nunca `apps/web`: o Root Directory já é aplicado pela Vercel) e confira:
+
+```bash
+pnpm dlx vercel@62 link --yes --team <slug-do-time> --project <nome-do-projeto>
+test -f .vercel/project.json && git check-ignore -q .vercel && echo link-ok
+pnpm dlx vercel@62 project inspect <nome-do-projeto>
+```
+
+**Saída esperada:** `link-ok`; no `project inspect`, `Root Directory  apps/web` e `Node.js Version  24.x`.
+**Se falhar:** `Root Directory .` ou outra versão do Node → 🔑 o humano corrige em Settings e você confere de novo;
+`link` pedindo confirmação → faltou `--team`/`--project` (copie os valores exatos do painel); o `.vercel/` apareceu
+em `git status` → **não** commite, confira o `.gitignore` da `main`.
 
 Crie os três arquivos vazios protegidos (o humano e você vão preenchendo):
 
@@ -123,7 +159,7 @@ git check-ignore -q .env.production-bootstrap .env.vercel-producao .env.worker-p
 
 ## Passo 1 — Supabase de produção 🔑
 
-**Pré-condição:** domínio definido (passo 0).
+**Pré-condição:** projeto da Vercel criado e domínio conhecido (passo 0).
 
 🔑 **Peça ao humano** (painel `supabase.com/dashboard`) e confirme cada item com ele:
 
@@ -208,6 +244,11 @@ A conexão com essas URLs é conferida pelo script no passo 7.
 
 **Pré-condição:** passos 1–3; Site URL e template de convite configurados (o convite sai agora).
 
+⚠️ **O convite vale 1 hora** ("Email OTP Expiration" = 3600 no passo 1) e o painel só funciona depois do passo 5.
+🔑 **Avise o humano já:** o dono **não** deve abrir o e-mail antes de você dizer que o passo 5 terminou (painel
+Ready); combinem de fazer os passos 4 e 5 em sequência e o login do dono logo em seguida. Se o link expirar (ou
+for aberto cedo demais), siga a **recuperação do convite** abaixo.
+
 ```bash
 pnpm --filter @atd/db bootstrap:prod --restaurante "<Nome do restaurante>" --dono <email-do-dono> --nome-dono "<Nome do dono>" --politica https://<domínio>/privacidade
 pnpm --filter @atd/db demo:s1:prod
@@ -216,7 +257,18 @@ pnpm --filter @atd/db demo:s1:prod
 **Saída esperada:** `Restaurante <uuid> pronto; convite enviado para o dono.` (anote o uuid: é o `RESTAURANT_ID`)
 e `Demonstração de S1 pronta: 4 unidades, 6 informações e cardápio com 7 itens, …`. Os dois são idempotentes.
 **Se falhar:** `.env.production-bootstrap: not found` → rode da raiz e confira o arquivo; erro de convite
-(SMTP/limite) → 🔑 o humano reenvia em Authentication → Users → Invite ou configura SMTP; "Mais de um restaurante" → pare e relate.
+(SMTP/limite) → 🔑 o humano configura SMTP e você segue a recuperação abaixo; "Mais de um restaurante" → pare e relate.
+
+**Recuperação do convite** (link expirado, e-mail que não chegou ou aberto antes do painel no ar). Rodar o
+`bootstrap:prod` de novo **sozinho não reenvia**: com o usuário já existente ele imprime
+`dono já existia; convite não reenviado.`. Por isso:
+
+1. 🔑 O humano apaga o usuário do dono em **Authentication → Users → (e-mail do dono) → Delete user**. É seguro
+   antes do primeiro login: o vínculo em `staff` é apagado junto (`on delete cascade`) e restaurante, unidades e
+   dados de demonstração ficam.
+2. Você roda **o mesmo** `pnpm --filter @atd/db bootstrap:prod …` acima (idempotente: devolve o mesmo
+   `RESTAURANT_ID`, recria o vínculo do dono e envia um convite novo).
+3. **Saída esperada:** `convite enviado para o dono.` e o mesmo uuid de antes (se o uuid mudou, pare e relate).
 
 Gere os valores compartilhados e grave **o mesmo valor** nos dois arquivos (Vercel e worker):
 
@@ -236,9 +288,9 @@ RID='<uuid impresso pelo bootstrap:prod>'
 🔑 **Avise o humano:** guardar `PHONE_ENC_KEY` e `WA_ID_PEPPER` no cofre da empresa (ele copia do arquivo).
 Perder a chave = perder os telefones cifrados.
 
-## Passo 5 — Vercel
+## Passo 5 — Vercel (variáveis e build de produção pelo Git)
 
-**Pré-condição:** passos 1–4; você tem a Publishable key.
+**Pré-condição:** passos 0–4 (projeto criado e `link-ok` no passo 0); você tem a Publishable key.
 
 Complete o `.env.vercel-producao` (só valores públicos aqui):
 
@@ -248,46 +300,52 @@ printf 'NEXT_PUBLIC_SUPABASE_URL=%s\nNEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=%s\nNE
   "$SUPA" '<publishable key>' >> .env.vercel-producao
 ```
 
-🔑 **Peça ao humano** (painel da Vercel, time da empresa), se o projeto ainda não existir: **Add New → Project**
-→ importar o repositório → **Root Directory `apps/web`** (framework Next.js; deixar ligado "Include files outside
-the root directory") → **não fazer deploy ainda** (ou deixar o primeiro falhar; ele será refeito). Depois:
-**Settings → Functions → Function Region = `gru1` (São Paulo)**. Peça também que ele rode `vercel login` na
-sua máquina, se a CLI ainda não estiver autenticada.
-
-Ligue o diretório e cadastre as variáveis **só em Production**, lendo do arquivo (nada no histórico do shell):
+Cadastre as variáveis **só em Production**, **na raiz do repositório**, lendo do arquivo (nada no histórico do shell):
 
 ```bash
-cd apps/web && pnpm dlx vercel link && cd ../..
+pnpm dlx vercel@62 project inspect <nome-do-projeto> | grep -E 'Name|Root Directory'   # alvo certo antes de mudar algo
 (
   set -euo pipefail
-  cd apps/web
   # IFS= + cortes manuais: base64 termina em "=" e um read com IFS='=' perderia esse caractere
   while IFS= read -r linha; do
     case "$linha" in ''|\#*) continue ;; esac
     nome="${linha%%=*}"; valor="${linha#*=}"
-    printf '%s' "$valor" | pnpm dlx vercel env add "$nome" production --force --yes >/dev/null
+    printf '%s' "$valor" | pnpm dlx vercel@62 env add "$nome" production --force --yes >/dev/null
     echo "cadastrada: $nome"
-  done < ../../.env.vercel-producao
+  done < .env.vercel-producao
 )
-cd apps/web && pnpm dlx vercel env ls production && cd ../..
+pnpm dlx vercel@62 env ls production
 ```
 
-**Saída esperada:** `cadastrada:` para as 11 variáveis (`DATABASE_URL`, `PHONE_ENC_KEY`, `WA_ID_PEPPER`,
-`WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `RESTAURANT_ID`, `LOG_LEVEL`,
-`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_LIMITE_UPLOAD_MB`), todas em
-Production. **Nunca** cadastre `SUPABASE_SERVICE_ROLE_KEY`, `WHATSAPP_ACCESS_TOKEN` ou `OPENROUTER_*` na Vercel.
-Se a sua versão da CLI não aceitar `--force`, remova antes com `vercel env rm <NOME> production --yes`.
+**Saída esperada:** `Name <nome-do-projeto>` e `Root Directory apps/web`; `cadastrada:` para as 11 variáveis
+(`DATABASE_URL`, `PHONE_ENC_KEY`, `WA_ID_PEPPER`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`,
+`WHATSAPP_PHONE_NUMBER_ID`, `RESTAURANT_ID`, `LOG_LEVEL`, `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_LIMITE_UPLOAD_MB`) e as 11 no `env ls`, todas em Production.
+**Nunca** cadastre `SUPABASE_SERVICE_ROLE_KEY`, `WHATSAPP_ACCESS_TOKEN` ou `OPENROUTER_*` na Vercel.
+Se a CLI não aceitar `--force`, remova antes com `pnpm dlx vercel@62 env rm <NOME> production --yes`.
 
-Deploy de produção (as `NEXT_PUBLIC_*` são embutidas **no build** — por isso vêm antes):
+**Build de produção** (as `NEXT_PUBLIC_*` são embutidas **no build**, por isso vêm antes). O build é feito pela
+Vercel a partir do Git, nunca enviado da sua máquina (regra 6). 🔑 **Peça ao humano**, no painel do projeto:
+**Deployments** → o deploy de **Production** mais recente (o do passo 0) → **⋯ → Redeploy**, com **"Use existing
+Build Cache" desmarcado** → Redeploy. Espere o status **Ready** e confira você:
 
 ```bash
-cd apps/web && pnpm dlx vercel deploy --prod && cd ../..
+pnpm dlx vercel@62 inspect https://<domínio>          # esperado: status Ready, target production, criado agora
+curl -s -o /dev/null -w '%{http_code}\n' https://<domínio>/login   # esperado: 200
 ```
 
-**Saída esperada:** URL de produção e status Ready. Se o domínio é próprio, 🔑 o humano o associa em
-Settings → Domains. Mudou uma `NEXT_PUBLIC_*` depois? Faça **novo deploy** (o valor antigo fica no build).
-**Se falhar:** build quebrou → `vercel inspect --logs <url>`; erro "Variáveis de ambiente inválidas" nos logs de
-função → rode o passo 7 e corrija a variável apontada.
+**Saída esperada:** `Ready` com horário posterior ao cadastro das variáveis e `200`. Se o domínio é próprio,
+🔑 o humano o associa em Settings → Domains (e a Site URL do passo 1 precisa ser esse domínio). Mudou uma
+`NEXT_PUBLIC_*` depois? Cadastre de novo e peça **novo Redeploy** (o valor antigo fica no build).
+**Se falhar:**
+- build quebrou → `pnpm dlx vercel@62 inspect --logs https://<domínio>` (ou o log no painel) e:
+  - "Cannot find module '@atd/…'" ou lockfile não encontrado → Root Directory sem "Include files outside the root
+    directory" (passo 0, item 2);
+  - erro de versão do pnpm (o `packageManager` da raiz pede pnpm 11) → 🔑 o humano adiciona a variável
+    `ENABLE_EXPERIMENTAL_COREPACK=1` em Production e faz Redeploy de novo;
+  - erro de versão do Node → Settings → Node.js Version = 24.x;
+- `inspect` mostra um deploy antigo → o Redeploy ainda não terminou ou foi feito em Preview: peça para refazer em Production;
+- erro "Variáveis de ambiente inválidas" nos logs de função → rode o passo 7 e corrija a variável apontada.
 
 ## Passo 6 — OpenRouter 🔑
 
@@ -299,27 +357,25 @@ função → rode o passo 7 e corrija a variável apontada.
 3. **Keys → Create key** de produção com **limite mensal** (ex.: US$ 10); colar **direto** no `.env.worker-producao`
    como `OPENROUTER_API_KEY=sk-or-v1-…`.
 
-Complete o worker e rode o **smoke test** (uma chamada mínima por modelo, com ZDR e saída estruturada):
+Complete o worker e rode o **smoke test**. Ele usa **o mesmo cliente do worker** (`createOpenRouterClient`:
+`deny` + `zdr` + `require_parameters`, `json_schema` estrito, `reasoning` desligado com a repetição do cliente) e
+chama cada modelo sozinho e depois cada lista (triagem e cardápio), exigindo `{"ok":true}` em todas:
 
 ```bash
 printf 'AI_TRIAGE_MODELS=mistralai/mistral-nemo,mistralai/mistral-small-3.2-24b-instruct\nAI_INGEST_MODELS=google/gemini-3.1-flash-lite,openai/gpt-4.1-mini\n' >> .env.worker-producao
-(
-  set -a; . ./.env.worker-producao; set +a
-  for m in mistralai/mistral-nemo mistralai/mistral-small-3.2-24b-instruct google/gemini-3.1-flash-lite openai/gpt-4.1-mini; do
-    curl -s https://openrouter.ai/api/v1/chat/completions \
-      -H @<(printf 'Authorization: Bearer %s\n' "$OPENROUTER_API_KEY") -H 'content-type: application/json' \
-      -d "{\"model\":\"$m\",\"messages\":[{\"role\":\"user\",\"content\":\"Responda ok=true.\"}],\"max_tokens\":50,\"reasoning\":{\"enabled\":false},
-           \"provider\":{\"data_collection\":\"deny\",\"zdr\":true},
-           \"response_format\":{\"type\":\"json_schema\",\"json_schema\":{\"name\":\"t\",\"strict\":true,\"schema\":{\"type\":\"object\",\"properties\":{\"ok\":{\"type\":\"boolean\"}},\"required\":[\"ok\"],\"additionalProperties\":false}}}}" \
-      | python3 -c 'import json,sys; d=json.load(sys.stdin); print(sys.argv[1], d.get("provider"), (d.get("choices") or [{}])[0].get("message",{}).get("content"), d.get("error",{}).get("message",""))' "$m"
-  done
-)
+pnpm --filter @atd/worker smoke:openrouter:prod; echo "saida=$?"
 ```
 
-**Saída esperada:** para cada modelo, o provedor e `{"ok":true}` (ou `{"ok": true}`). **Se falhar:** "No endpoints
-found matching your data policy" → a conta/Guardrail ou o modelo não tem ZDR: troque o modelo por outro da lista
-(seção Modelos) e registre; conteúdo vazio/cortado no Gemini → inverta a ordem em `AI_INGEST_MODELS`; 401/402 →
-🔑 chave ou crédito.
+**Saída esperada:** seis linhas `OK <modelo> → <modelo usado> (US$ …, … ms)` (quatro modelos sozinhos e as duas
+listas), `Resultado: OK` e `saida=0`. O custo total fica abaixo de US$ 0,01. **Se falhar** (`saida=1`; cada `FALHA`
+traz o erro do OpenRouter):
+- "No endpoints found matching your data policy" → a conta/Guardrail ou o modelo não tem ZDR: troque o modelo por
+  outro da seção Modelos e registre;
+- "No endpoints found that can handle the requested parameters" mesmo depois da repetição → nenhum provedor ZDR
+  desse modelo tem saída estruturada hoje: troque o modelo (confira em `openrouter.ai/<modelo>` → Providers, coluna
+  structured outputs + ZDR) e registre;
+- `saida_invalida`/`saida_truncada` no Gemini → inverta a ordem em `AI_INGEST_MODELS` (`openai/gpt-4.1-mini` primeiro);
+- `HTTP 401`/`402` → 🔑 chave ou crédito; `.env.worker-producao: not found` → rode da raiz.
 
 ## Passo 7 — Conferência antes do worker
 
@@ -353,7 +409,9 @@ ssh <usuario>@<host> 'docker version --format "{{.Server.Version}}" && docker co
 - **VPS novo e dedicado:** 🔑 o humano roda como root `bash infra/vps/bootstrap.sh deploy "<chave pública do deploy>" "<chave pública do admin>"`
   (endurece SSH, firewall só SSH, Docker). Ele confirma o acesso por chave numa segunda sessão antes de fechar a primeira.
 - **VPS compartilhado** (já tem outros serviços): **não** rode `bootstrap.sh` (ele muda sshd e firewall).
-  Basta Docker + Compose v2 e o diretório `/opt/atendimento` do usuário de deploy (🔑 se precisar de `sudo`).
+  Basta Docker + Compose v2 e o diretório `/opt/atendimento` do usuário de deploy. Se o `install -d` abaixo der
+  "Permission denied", 🔑 peça ao humano para rodar no VPS (com o usuário SSH no lugar de `<usuario>`):
+  `sudo install -d -m 750 -o <usuario> -g <usuario> /opt/atendimento`.
 
 Copie os arquivos (o `.env` vai com permissão 600):
 
@@ -402,7 +460,7 @@ Rode e anote cada item. 🔑 O humano faz os itens de navegador (ou acompanha vo
 | # | Item | Como | Evidência a anotar |
 |---|---|---|---|
 | 1 | Script verde | `scripts/producao/verificar.sh --bootstrap .env.production-bootstrap --vercel .env.vercel-producao --worker .env.worker-producao --dominio https://<domínio>` | última linha `Resultado: 0 falha(s)` |
-| 2 | Login com TOTP | 🔑 dono abre o convite, define senha (≥ 12), cadastra o autenticador e entra | "dono entrou com TOTP" |
+| 2 | Login com TOTP | 🔑 dono abre o convite (vale 1 h; expirado → recuperação do convite, passo 4), define senha (≥ 12), cadastra o autenticador e entra | "dono entrou com TOTP" |
 | 3 | IA Online | Início mostra **IA: Online** (heartbeat do worker) | print ou texto do cartão |
 | 4 | Simulador S1–S4 | botão "Abrir simulador de WhatsApp" do painel: "que horas abre a Asa Sul hoje?" (S1), "vou chegar às 20h com 4 pessoas" (S2), "quero fazer um aniversário para 30 pessoas" (S3), "quanto custa a picanha?" (S4) | uma linha por serviço: pergunta → resumo da resposta |
 | 5 | Handoff em tempo real | no simulador: "quero falar com um atendente"; com Conversas aberta em outra aba, a conversa aparece **sem recarregar** | "apareceu em N s sem recarregar" |
@@ -417,14 +475,20 @@ Authentication → Users → **Invite user**; depois você vincula, com a conex�
 ( set -a; . ./.env.production-bootstrap; set +a
   psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -v email='<email-do-gerente>' -v nome='Gerente Asa Sul' <<'SQL'
 insert into staff (user_id, restaurant_id, nome, papel, unidades_permitidas)
-select u.id, r.id, :'nome', 'gerente', array[(select id from units where slug = 'asa-sul')]
-from auth.users u cross join restaurants r where lower(u.email) = lower(:'email')
+select u.id, r.id, :'nome', 'gerente', array[un.id]
+from auth.users u
+cross join restaurants r
+join units un on un.restaurant_id = r.id and un.slug = 'asa-sul'
+where lower(u.email) = lower(:'email')
 on conflict (user_id) do nothing;
 SQL
 )
 ```
 
-Saída esperada: `INSERT 0 1`. O gerente entra (convite + TOTP) e só enxerga a Asa Sul.
+Saída esperada: `INSERT 0 1`. O gerente entra (convite + TOTP; o convite também vale 1 h) e só enxerga a Asa Sul.
+**Se falhar:** `INSERT 0 0` → (a) o humano ainda não convidou ou o e-mail difere do convidado (confira em
+Authentication → Users e rode de novo com o e-mail exato); (b) a unidade `asa-sul` não existe (o `demo:s1:prod`
+do passo 4 não rodou: rode-o e repita); (c) o usuário já está em `staff` (convidado antes como dono?) → pare e relate.
 
 **Mensagem de "pronto" para devolver ao humano** (preencha; sem segredos):
 

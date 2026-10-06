@@ -12,3 +12,6 @@ supabase/.temp/
 playwright-report/
 test-results/
 *.tsbuildinfo
+
+# Vercel CLI (link do projeto; nunca versionar)
+.vercel
