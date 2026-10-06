@@ -89,7 +89,7 @@ describe('listarInbox', () => {
     await conversa({ restaurantId: c.restaurantId, unitId: c.unitId, nome: 'Fechada', estado: 'encerrada', lastMessageAt: minutos(60) })
     await conversa({ restaurantId: c.restaurantId, unitId: c.unitId, nome: 'Antiquíssima', estado: 'encerrada', lastMessageAt: minutos(60 * 24 * 31) })
     const eu = as(c.atendente, 'aal1')
-    const comigo = await listarInbox(db, eu, { aba: 'comigo' })
+    const comigo = await listarInbox(db, eu, { aba: 'em_atendimento' })
     expect(comigo.itens.map((i) => [i.nome, i.atendente])).toEqual([['Minha', 'Ana']])
     expect((await listarInbox(db, eu, { aba: 'ia' })).itens.map((i) => i.nome)).toEqual(['IA nova', 'IA velha'])
     expect((await listarInbox(db, eu, { aba: 'encerradas' })).itens.map((i) => i.nome)).toEqual(['Fechada'])

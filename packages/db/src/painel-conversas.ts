@@ -12,7 +12,7 @@ export type HandoffMotivo = (typeof handoffMotivo.enumValues)[number]
 export type Autor = (typeof messageAuthor.enumValues)[number]
 export type TipoMensagem = (typeof messageType.enumValues)[number]
 
-export type AbaInbox = 'aguardando' | 'comigo' | 'ia' | 'encerradas'
+export type AbaInbox = 'aguardando' | 'em_atendimento' | 'ia' | 'encerradas'
 export type ItemInbox = {
   id: string
   nome: string | null
@@ -101,7 +101,7 @@ export function listarInbox(
     const filtros: SQL[] = []
     if (p.aba === 'aguardando') filtros.push(eq(conversations.estado, 'aguardando_humano'))
     else if (p.aba === 'ia') filtros.push(eq(conversations.estado, 'ia'))
-    else if (p.aba === 'comigo') filtros.push(eq(conversations.estado, 'humano'), eq(conversations.atendenteId, claims.sub))
+    else if (p.aba === 'em_atendimento') filtros.push(eq(conversations.estado, 'humano'), eq(conversations.atendenteId, claims.sub))
     else filtros.push(eq(conversations.estado, 'encerrada'), gte(conversations.lastMessageAt, sql`now() - make_interval(days => ${DIAS_ENCERRADAS})`))
     if (!p.simulacoes) filtros.push(eq(conversations.simulada, false))
     if (p.unitId) filtros.push(eq(conversations.unidadeContextoId, p.unitId))
