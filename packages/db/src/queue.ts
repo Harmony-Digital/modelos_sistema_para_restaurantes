@@ -2,9 +2,16 @@ import { sql } from 'drizzle-orm'
 import { fromDrizzle, PgBoss } from 'pg-boss'
 import type { Tx } from './rls.ts'
 
-export const QUEUES = { process: 'conversation.process', processDlq: 'conversation.process.dlq' } as const
+export const QUEUES = {
+  process: 'conversation.process',
+  processDlq: 'conversation.process.dlq',
+  ingest: 'document.ingest',
+  ingestDlq: 'document.ingest.dlq',
+} as const
 export const PROCESS_DELAY_SECONDS = 4
 export type ProcessJob = { conversationId: string }
+/** Leitura por IA de uma importação de cardápio (knowledge_documents `enviado`, origem `arquivo`). */
+export type IngestJob = { importacaoId: string }
 export type Enqueue = (tx: Tx, conversationId: string) => Promise<unknown>
 
 export function createBoss(
@@ -35,6 +42,15 @@ export async function ensureQueues(boss: PgBoss): Promise<void> {
     expireInSeconds: 120,
     deadLetter: QUEUES.processDlq,
   })
+  await boss.createQueue(QUEUES.ingestDlq, { policy: 'standard' })
+  await boss.createQueue(QUEUES.ingest, {
+    policy: 'stately', // 1 job enfileirado + 1 ativo por singletonKey (= importação); o status `enviado` evita a leitura dupla
+    retryLimit: 2,
+    retryDelay: 30,
+    retryBackoff: true,
+    expireInSeconds: 300, // leitura de PDF pela IA (até 120 s) + download
+    deadLetter: QUEUES.ingestDlq,
+  })
 }
 
 export function enqueueProcess(boss: PgBoss): Enqueue {
@@ -44,4 +60,10 @@ export function enqueueProcess(boss: PgBoss): Enqueue {
       startAfter: PROCESS_DELAY_SECONDS,
       db: fromDrizzle(tx, sql),
     })
+}
+
+/** Enfileira a leitura da importação (Server Action, depois de `criarImportacao` com origem `arquivo`). */
+export function enqueueIngest(boss: PgBoss): (importacaoId: string) => Promise<unknown> {
+  return (importacaoId) =>
+    boss.send(QUEUES.ingest, { importacaoId } satisfies IngestJob, { singletonKey: importacaoId })
 }

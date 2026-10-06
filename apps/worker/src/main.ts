@@ -2,13 +2,15 @@ import { hostname } from 'node:os'
 import { createOpenRouterClient } from '@atd/ai'
 import { loadEnv, workerEnvSchema } from '@atd/config'
 import { keyFromBase64 } from '@atd/core'
-import { createBoss, createDb, ensureQueues, QUEUES, type ProcessJob } from '@atd/db'
+import { createBoss, createDb, ensureQueues, QUEUES, type IngestJob, type ProcessJob } from '@atd/db'
 import { createWhatsAppClient } from '@atd/whatsapp'
+import { ingestDocument } from './jobs/ingest-document.ts'
 import { processConversation, type ProcessDeps } from './jobs/process-conversation.ts'
 import { startHeartbeat } from './heartbeat.ts'
 import { sanitizeJobError } from './job-error.ts'
 import { createLogger } from './logger.ts'
 import { initSentry, Sentry } from './sentry.ts'
+import { createStorage } from './storage.ts'
 
 const VERSION = process.env.APP_VERSION ?? 'dev'
 const env = loadEnv(workerEnvSchema)
@@ -30,14 +32,18 @@ try {
   await boss.start()
   await ensureQueues(boss)
 
+  const llm = createOpenRouterClient({
+    apiKey: env.OPENROUTER_API_KEY,
+    appTitle: 'ia-atendimento',
+    ...(env.OPENROUTER_BASE_URL ? { baseUrl: env.OPENROUTER_BASE_URL } : {}),
+    ...(env.OPENROUTER_DEV_SEM_ZDR ? { semZdrDev: true } : {}),
+  })
+  // chave de serviço só aqui (processo do worker); nunca em log
+  const storage = createStorage({ url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY })
   const deps: ProcessDeps = {
     db,
-    llm: createOpenRouterClient({
-      apiKey: env.OPENROUTER_API_KEY,
-      appTitle: 'ia-atendimento',
-      ...(env.OPENROUTER_BASE_URL ? { baseUrl: env.OPENROUTER_BASE_URL } : {}),
-      ...(env.OPENROUTER_DEV_SEM_ZDR ? { semZdrDev: true } : {}),
-    }),
+    llm,
+    storage,
     wa: createWhatsAppClient({
       accessToken: env.WHATSAPP_ACCESS_TOKEN,
       phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID,
@@ -60,6 +66,21 @@ try {
         Sentry.captureException(err, { extra: { conversationId: job.data.conversationId } })
         // pg-boss retenta (retryLimit 3, backoff) e depois manda para a DLQ; o erro lançado vai para
         // pgboss.job.output, então nunca o erro bruto (params do drizzle com dados do cliente).
+        throw sanitizeJobError(err)
+      }
+    }
+  })
+
+  if (!env.AI_INGEST_MODELS) log.warn('AI_INGEST_MODELS vazio: importação de cardápio por IA desligada (só CSV)')
+  await boss.work<IngestJob>(QUEUES.ingest, { localConcurrency: 1 }, async (jobs) => {
+    for (const job of jobs) {
+      try {
+        const outcome = await ingestDocument({ db, llm, storage, ingestModels: env.AI_INGEST_MODELS, log }, job.data.importacaoId)
+        log.info({ importacaoId: job.data.importacaoId, outcome }, 'importação processada')
+      } catch (err) {
+        // só falha antes de marcar `processando` chega aqui (depois disso o job grava `erro` e não lança)
+        log.error({ err, importacaoId: job.data.importacaoId }, 'falha ao processar importação')
+        Sentry.captureException(err, { extra: { importacaoId: job.data.importacaoId } })
         throw sanitizeJobError(err)
       }
     }

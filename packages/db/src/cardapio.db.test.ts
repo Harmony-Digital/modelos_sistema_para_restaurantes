@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
 import { getTestDb, resetDb, seedRestaurant } from './test-utils.ts'
 import { withRole } from './rls.ts'
-import { arquivoParaEnvio, buscarCardapio, guardarMidiaMeta, resumoCardapio } from './cardapio.ts'
+import { arquivoAtivoPorId, arquivoParaEnvio, buscarCardapio, guardarMidiaMeta, limparMidiaMeta, resumoCardapio } from './cardapio.ts'
 import { menuCategories, menuFiles, menuItems, menuItemUnits, units } from './schema/index.ts'
 
 const { db, sql } = getTestDb()
@@ -145,7 +145,7 @@ describe('arquivos de cardápio (worker)', () => {
     const c = await arquivos()
     expect(await arquivoParaEnvio(db, { restaurantId: c.restaurantId, unitId: c.u1 })).toEqual({
       id: c.daU1.id, unitId: c.u1, titulo: 'Cardápio Asa Sul', storagePath: `cardapio/${c.restaurantId}/u1.pdf`,
-      mime: 'application/pdf', waMediaId: null, waMediaExpiresAt: null,
+      mime: 'application/pdf', tamanho: expect.any(Number), waMediaId: null, waMediaExpiresAt: null,
     })
     expect((await arquivoParaEnvio(db, { restaurantId: c.restaurantId, unitId: c.u2 }))?.id).toBe(c.geral.id)
     expect((await arquivoParaEnvio(db, { restaurantId: c.restaurantId, unitId: null }))?.id).toBe(c.geral.id)
@@ -161,6 +161,19 @@ describe('arquivos de cardápio (worker)', () => {
     await withRole(db, 'worker_app', (tx) => guardarMidiaMeta(tx, { arquivoId: c.daU1.id, waMediaId: 'MEDIA123', expiraEm: expira }))
     const a = await withRole(db, 'worker_app', (tx) => arquivoParaEnvio(tx, { restaurantId: c.restaurantId, unitId: c.u1 }))
     expect(a).toMatchObject({ waMediaId: 'MEDIA123', waMediaExpiresAt: expira })
+    await withRole(db, 'worker_app', (tx) => limparMidiaMeta(tx, c.daU1.id))
+    expect(await arquivoAtivoPorId(db, { restaurantId: c.restaurantId, arquivoId: c.daU1.id }))
+      .toMatchObject({ id: c.daU1.id, waMediaId: null, waMediaExpiresAt: null })
+  })
+
+  it('arquivoAtivoPorId: só ativo e do próprio restaurante', async () => {
+    const c = await arquivos()
+    const a = await withRole(db, 'worker_app', (tx) => arquivoAtivoPorId(tx, { restaurantId: c.restaurantId, arquivoId: c.geral.id }))
+    expect(a).toMatchObject({ id: c.geral.id, unitId: null, mime: 'application/pdf' })
+    const b = await seedRestaurant(db)
+    expect(await arquivoAtivoPorId(db, { restaurantId: b.restaurantId, arquivoId: c.geral.id })).toBeNull()
+    await db.update(menuFiles).set({ ativo: false }).where(eq(menuFiles.id, c.geral.id))
+    expect(await arquivoAtivoPorId(db, { restaurantId: c.restaurantId, arquivoId: c.geral.id })).toBeNull()
   })
 })
 

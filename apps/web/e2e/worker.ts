@@ -23,6 +23,10 @@ export async function iniciarWorkerE2e(openrouterUrl: string): Promise<ChildProc
     throw new Error('Há um worker rodando neste banco. Pare o "pnpm --filter @atd/worker dev" antes do e2e: ele chamaria a IA de verdade.')
   }
   const env = process.env
+  // Storage do worker: a chave de serviço vem do shell (`pnpm exec supabase status -o env` → SERVICE_ROLE_KEY); nunca em arquivo
+  if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error('Defina SUPABASE_SERVICE_ROLE_KEY no shell antes do e2e (valor de SERVICE_ROLE_KEY em "pnpm exec supabase status -o env").')
+  }
   const filho = spawn(process.execPath, ['src/main.ts'], {
     cwd: PASTA_WORKER,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -39,6 +43,9 @@ export async function iniciarWorkerE2e(openrouterUrl: string): Promise<ChildProc
       OPENROUTER_DEV_SEM_ZDR: '0', // o OpenRouter falso exige deny + zdr
       OPENROUTER_BASE_URL: openrouterUrl,
       AI_TRIAGE_MODELS: 'e2e/falso',
+      SUPABASE_URL: env.SUPABASE_URL ?? env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321',
+      SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
+      AI_INGEST_MODELS: env.AI_INGEST_MODELS ?? '', // vazio = importação por IA desligada; com valor, também vai ao OpenRouter falso
       LOG_LEVEL: 'info',
       SENTRY_DSN: '',
     },

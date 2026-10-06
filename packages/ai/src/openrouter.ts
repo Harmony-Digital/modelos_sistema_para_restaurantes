@@ -26,6 +26,11 @@ export interface LlmClient {
     maxTokens: number
     /** Sobrepõe o timeout do cliente (leitura de documento é mais lenta que a triagem). */
     timeoutMs?: number
+    /**
+     * Padrão false: manda `reasoning: { enabled: false }` — modelo de raciocínio gastava o max_tokens pensando e
+     * devolvia `content: null`. true: não manda o campo (o provedor decide).
+     */
+    reasoning?: boolean
   }): Promise<JsonCallResult<T>>
 }
 
@@ -136,34 +141,42 @@ export function createOpenRouterClient(cfg: {
       const started = performance.now()
       const elapsed = () => Math.round(performance.now() - started)
       const usuario = mensagemUsuario(p.user, p.userParts)
+      const pedir = (desligarRaciocinio: boolean) => doFetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${cfg.apiKey}`,
+          'Content-Type': 'application/json',
+          'X-Title': cfg.appTitle,
+        },
+        body: JSON.stringify({
+          models: p.models,
+          messages: [
+            { role: 'system', content: p.system },
+            { role: 'user', content: usuario.content },
+          ],
+          ...(usuario.plugins ? { plugins: usuario.plugins } : {}),
+          response_format: {
+            type: 'json_schema',
+            json_schema: { name: p.schemaName, strict: true, schema: p.jsonSchema },
+          },
+          // LGPD: em produção sempre deny + zdr; o modo dev só existe na máquina do desenvolvedor
+          ...(cfg.semZdrDev ? {} : { provider: { data_collection: 'deny', zdr: true } }),
+          ...(desligarRaciocinio ? { reasoning: { enabled: false } } : {}),
+          temperature: 0,
+          max_tokens: p.maxTokens,
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(p.timeoutMs ?? cfg.timeoutMs ?? 20_000),
+      })
       let res: Response
       try {
-        res = await doFetch(endpoint, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${cfg.apiKey}`,
-            'Content-Type': 'application/json',
-            'X-Title': cfg.appTitle,
-          },
-          body: JSON.stringify({
-            models: p.models,
-            messages: [
-              { role: 'system', content: p.system },
-              { role: 'user', content: usuario.content },
-            ],
-            ...(usuario.plugins ? { plugins: usuario.plugins } : {}),
-            response_format: {
-              type: 'json_schema',
-              json_schema: { name: p.schemaName, strict: true, schema: p.jsonSchema },
-            },
-            // LGPD: em produção sempre deny + zdr; o modo dev só existe na máquina do desenvolvedor
-            ...(cfg.semZdrDev ? {} : { provider: { data_collection: 'deny', zdr: true } }),
-            temperature: 0,
-            max_tokens: p.maxTokens,
-            stream: false,
-          }),
-          signal: AbortSignal.timeout(p.timeoutMs ?? cfg.timeoutMs ?? 20_000),
-        })
+        const desligar = p.reasoning !== true
+        res = await pedir(desligar)
+        // modelo com raciocínio obrigatório recusa o desligamento (400 antes de rotear): repete uma vez sem o campo
+        if (desligar && res.status === 400) {
+          const erro = (await res.clone().json().catch(() => ({}))) as ApiResponse
+          if (/reasoning/i.test(erro.error?.message ?? '')) res = await pedir(false)
+        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'erro de rede'
         return { ok: false, error: msg, retryable: true, status: null, model: null, usage: null, latencyMs: elapsed() }

@@ -15,6 +15,9 @@ export type TriagemFalsa = {
     convidados?: number | null
     tipoEvento?: string | null
     espaco?: string | null
+    // triagem v5 (Etapa 05): idem
+    consulta?: string | null
+    tag?: string | null
   }[]
   fora_escopo: boolean
 }
@@ -55,7 +58,7 @@ export async function iniciarOpenRouterFalso(responder: (mensagem: string, user:
       const r = responder(mensagem, user)
       const triagem = {
         ...r,
-        itens: r.itens.map((i) => ({ convidados: null, tipoEvento: null, espaco: null, ...i })),
+        itens: r.itens.map((i) => ({ convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null, ...i })),
       }
       return responderJson(200, {
         model: 'e2e/falso',

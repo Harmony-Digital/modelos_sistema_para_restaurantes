@@ -30,7 +30,16 @@ export function espacosAtivos(db: Db | Tx, restaurantId: string): Promise<Espaco
 }
 
 const ATIVOS = ['novo', 'em_contato', 'confirmado'] as const
-export type PedidoAtivo = { id: string; unitId: string; data: string; convidados: number; tipo: TipoEvento; status: (typeof ATIVOS)[number] }
+export type PedidoAtivo = {
+  id: string
+  unitId: string
+  /** espaço do pedido (null = sem espaço): o core compara com o espaço citado numa mudança */
+  spaceId: string | null
+  data: string
+  convidados: number
+  tipo: TipoEvento
+  status: (typeof ATIVOS)[number]
+}
 
 /** Pedidos em andamento (novo/em contato/confirmado) do cliente de `aPartirDe` (YYYY-MM-DD) em diante. */
 export async function pedidosDoCliente(
@@ -39,8 +48,8 @@ export async function pedidosDoCliente(
 ): Promise<PedidoAtivo[]> {
   const rows = await db
     .select({
-      id: eventRequests.id, unitId: eventRequests.unitId, data: eventRequests.data, convidados: eventRequests.convidados,
-      tipo: eventRequests.tipo, status: eventRequests.status,
+      id: eventRequests.id, unitId: eventRequests.unitId, spaceId: eventRequests.spaceId, data: eventRequests.data,
+      convidados: eventRequests.convidados, tipo: eventRequests.tipo, status: eventRequests.status,
     })
     .from(eventRequests)
     .where(and(
@@ -93,6 +102,27 @@ export async function cancelarPedidoDoCliente(
       eq(eventRequests.restaurantId, p.restaurantId),
       eq(eventRequests.customerId, p.customerId),
       inArray(eventRequests.status, ['novo', 'em_contato']),
+    ))
+    .returning({ id: eventRequests.id })
+  return r.length > 0
+}
+
+/** Mudança pedida pelo cliente num pedido em andamento: acrescenta a observação (texto nosso) sem passar de 300. */
+export async function observarPedidoDoCliente(
+  tx: Tx,
+  p: { restaurantId: string; customerId: string; pedidoId: string; observacao: string },
+): Promise<boolean> {
+  const r = await tx
+    .update(eventRequests)
+    .set({
+      observacoes: sql`left(concat_ws(${'\n'}, nullif(${eventRequests.observacoes}, ''), ${p.observacao}::text), 300)`,
+      updatedAt: sql`now()`,
+    })
+    .where(and(
+      eq(eventRequests.id, p.pedidoId),
+      eq(eventRequests.restaurantId, p.restaurantId),
+      eq(eventRequests.customerId, p.customerId),
+      inArray(eventRequests.status, [...ATIVOS]),
     ))
     .returning({ id: eventRequests.id })
   return r.length > 0

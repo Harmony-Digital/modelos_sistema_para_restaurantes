@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm'
 import { getTestDb, resetDb, seedRestaurant } from './test-utils.ts'
 import { withRole } from './rls.ts'
 import {
-  cancelarPedidoDoCliente, espacosAtivos, pedidosDoCliente, registrarPedidoEvento, type GravarPedido,
+  cancelarPedidoDoCliente, espacosAtivos, observarPedidoDoCliente, pedidosDoCliente, registrarPedidoEvento, type GravarPedido,
 } from './eventos.ts'
 import { customers, eventRequests, eventSpaces, units } from './schema/index.ts'
 
@@ -49,8 +49,8 @@ describe('eventos do worker', () => {
     expect(linha).toMatchObject({ status: 'novo', simulado: false, tipoTexto: 'Formatura', nome: 'Ana', customerId: c })
     const r = await pedidosDoCliente(db, { restaurantId, customerId: c, aPartirDe: '2026-10-05' })
     expect(r).toEqual([
-      { id: p2.id, unitId, data: '2026-11-20', convidados: 40, tipo: 'aniversario', status: 'novo' },
-      { id: p1.id, unitId, data: '2026-12-01', convidados: 40, tipo: 'outro', status: 'novo' },
+      { id: p2.id, unitId, spaceId: null, data: '2026-11-20', convidados: 40, tipo: 'aniversario', status: 'novo' },
+      { id: p1.id, unitId, spaceId: null, data: '2026-12-01', convidados: 40, tipo: 'outro', status: 'novo' },
     ])
     await db.update(eventRequests).set({ status: 'recusado' }).where(eq(eventRequests.id, p2.id))
     expect((await pedidosDoCliente(db, { restaurantId, customerId: c, aPartirDe: '2026-10-05' })).map((x) => x.id)).toEqual([p1.id])
@@ -101,5 +101,27 @@ describe('eventos do worker', () => {
     await db.delete(eventSpaces).where(eq(eventSpaces.id, daA!.id)) // superusuário: a aplicação não tem DELETE
     const [depois] = await db.select().from(eventRequests).where(eq(eventRequests.id, p.id))
     expect(depois).toMatchObject({ spaceId: null, unitId, restaurantId })
+  })
+
+  it('observar: acrescenta a observação (worker_app), nunca passa de 300 e só em pedido ativo do próprio cliente', async () => {
+    const { restaurantId, unitId } = await seedRestaurant(db)
+    const c = await cliente(restaurantId, 'h1')
+    const outro = await cliente(restaurantId, 'h2')
+    const p = await db.transaction((tx) => registrarPedidoEvento(tx, pedido(restaurantId, c, unitId, { observacoes: 'Bolo sem glúten' })))
+    const vazio = await db.transaction((tx) => registrarPedidoEvento(tx, pedido(restaurantId, c, unitId, { data: '2026-11-21' })))
+    const obs = async (id: string) => (await db.select().from(eventRequests).where(eq(eventRequests.id, id)))[0]!.observacoes
+    const observar = (pedidoId: string, observacao: string, customerId = c) =>
+      withRole(db, 'worker_app', (tx) => observarPedidoDoCliente(tx, { restaurantId, customerId, pedidoId, observacao }))
+
+    expect(await observar(p.id, 'Cliente pediu: 60 convidados')).toBe(true)
+    expect(await obs(p.id)).toBe('Bolo sem glúten\nCliente pediu: 60 convidados')
+    expect(await observar(vazio.id, 'Cliente pediu: data 21/11/2026')).toBe(true)
+    expect(await obs(vazio.id)).toBe('Cliente pediu: data 21/11/2026')
+    expect(await observar(p.id, 'x'.repeat(300))).toBe(true)
+    expect(await obs(p.id)).toHaveLength(300)
+    expect(await observar(p.id, 'outra', outro)).toBe(false)
+    await db.update(eventRequests).set({ status: 'cancelado' }).where(eq(eventRequests.id, vazio.id))
+    expect(await observar(vazio.id, 'depois de cancelado')).toBe(false)
+    expect(await obs(vazio.id)).toBe('Cliente pediu: data 21/11/2026')
   })
 })

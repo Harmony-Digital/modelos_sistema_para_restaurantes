@@ -4,9 +4,10 @@ import { eq } from 'drizzle-orm'
 import { encryptPhone, keyFromBase64 } from '@atd/core'
 import { ingestInbound, schema, type Enqueue } from '@atd/db'
 import { getTestDb, resetDb, seedRestaurant } from '@atd/db/test-utils'
-import type { LlmClient, TriageV4 } from '@atd/ai'
+import type { LlmClient, TriageV5 } from '@atd/ai'
 import type { SendResult } from '@atd/whatsapp'
 import { createLogger } from '../logger.ts'
+import { comMidiaProibida, storageProibido } from './midia-fake.ts'
 import { processConversation, type ProcessDeps } from './process-conversation.ts'
 
 const { db, sql } = getTestDb()
@@ -47,12 +48,12 @@ async function receive(restaurantId: string, msgs: Msg[]) {
   return conversationId
 }
 
-type Scripted = TriageV4 | 'erro_temporario'
+type Scripted = TriageV5 | 'erro_temporario'
 const item = (servico: string, tipo: string | null = null) =>
-  ({ servico, tipo, unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null }) as TriageV4['itens'][number]
-const FORA: TriageV4 = { itens: [], fora_escopo: true }
-const LISTA: TriageV4 = { itens: [item('horario_unidades', 'lista_unidades')], fora_escopo: false }
-const CARDAPIO: TriageV4 = { itens: [item('cardapio')], fora_escopo: false }
+  ({ servico, tipo, unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null }) as TriageV5['itens'][number]
+const FORA: TriageV5 = { itens: [], fora_escopo: true }
+const LISTA: TriageV5 = { itens: [item('horario_unidades', 'lista_unidades')], fora_escopo: false }
+const CARDAPIO: TriageV5 = { itens: [item('cardapio')], fora_escopo: false }
 function fakeLlm(script: Scripted[]) {
   const calls: { user: string }[] = []
   const llm: LlmClient = {
@@ -89,7 +90,7 @@ function fakeWa(behaviour?: (n: number) => SendResult | undefined) {
 }
 
 function deps(llm: LlmClient, wa: ReturnType<typeof fakeWa>): ProcessDeps {
-  return { db, llm, wa, phoneKey, triageModels: ['fake/m'], log, requeue: async () => undefined }
+  return { db, llm, wa: comMidiaProibida(wa), storage: storageProibido, phoneKey, triageModels: ['fake/m'], log, requeue: async () => undefined }
 }
 
 const outMessages = () =>
@@ -142,7 +143,7 @@ describe('processConversation', () => {
     expect(wa.sent.at(-1)!.text).toMatch(/só consigo ajudar com assuntos do Casa Teste/)
     const runs = await db.select().from(schema.aiRuns)
     expect(runs.map((r) => [r.etapa, r.intent, r.costUsd, r.promptVersion])).toEqual([
-      ['triagem', 'fora_escopo', '0.000200', 'triage-v4'],
+      ['triagem', 'fora_escopo', '0.000200', 'triage-v5'],
     ])
     const counters = await db.select().from(schema.budgetCounters).orderBy(schema.budgetCounters.periodo)
     expect(counters.map((c) => [c.reservado, c.gasto])).toEqual([
@@ -151,14 +152,15 @@ describe('processConversation', () => {
     ])
   })
 
-  it('pedido de cardápio (S4 ainda não implementado): resposta "em breve" de S1, sem contar item', async () => {
+  it('pedido de cardápio sem cardápio cadastrado: lacuna (S4 ligado; nada de "em breve"), conta o item sem responder', async () => {
     const rid = await setup()
     const conv = await receive(rid, ['tem carne de sol?'])
     const wa = fakeWa()
     await processConversation(deps(fakeLlm([CARDAPIO]).llm, wa), conv)
-    expect(wa.sent.at(-1)!.text).toBe('Sobre o cardápio, ainda estou aprendendo e em breve vou conseguir responder por aqui.')
+    expect(wa.sent.at(-1)!.text).toBe('Ainda não tenho essa informação; vou verificar com a equipe.')
     const [run] = await db.select().from(schema.aiRuns)
-    expect(run).toMatchObject({ itensValidos: 0, itensRespondidos: 0 })
+    expect(run).toMatchObject({ itensValidos: 1, itensRespondidos: 0 })
+    expect((await db.select().from(schema.knowledgeGaps)).map((g) => g.chaveNormalizada)).toEqual(['cardapio'])
   })
 
   it('conversa em atendimento humano: IA não responde nem gasta (I5)', async () => {
@@ -307,7 +309,7 @@ describe('processConversation', () => {
       sendLocation: wa.sendLocation.bind(wa),
       sendList: wa.sendList.bind(wa),
     }
-    const d: ProcessDeps = { ...deps(fakeLlm([]).llm, wa), wa: racing, requeue: async (id) => void requeued.push(id) }
+    const d: ProcessDeps = { ...deps(fakeLlm([]).llm, wa), wa: comMidiaProibida(racing), requeue: async (id) => void requeued.push(id) }
     await processConversation(d, conv)
     expect(requeued).toEqual([conv])
   })

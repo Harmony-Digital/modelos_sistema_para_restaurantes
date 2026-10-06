@@ -5,9 +5,10 @@ import { encryptPhone, keyFromBase64 } from '@atd/core'
 import { abrirSimulacao, enviarMensagemSimulada, ingestInbound, schema, type Enqueue } from '@atd/db'
 import { getTestDb, resetDb, seedRestaurant, seedStaff } from '@atd/db/test-utils'
 import type * as DbModule from '@atd/db'
-import type { LlmClient, TriageV4 } from '@atd/ai'
+import type { LlmClient, TriageV5 } from '@atd/ai'
 import type { SendResult } from '@atd/whatsapp'
 import { createLogger } from '../logger.ts'
+import { comMidiaProibida, storageProibido } from './midia-fake.ts'
 import { processConversation, type ProcessDeps } from './process-conversation.ts'
 
 // defeito simulado: a leitura dos avisos devolve avisos de outro cliente (testa a guarda do commit)
@@ -33,11 +34,11 @@ const noopEnqueue: Enqueue = async () => undefined
 const log = createLogger('silent')
 const SEG_14H = new Date('2026-10-05T14:00:00-03:00')
 
-type Item = TriageV4['itens'][number]
+type Item = TriageV5['itens'][number]
 const av = (extra: Partial<Item> = {}): Item =>
-  ({ servico: 'aviso_presenca', tipo: 'registrar', unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, ...extra }) as Item
+  ({ servico: 'aviso_presenca', tipo: 'registrar', unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null, ...extra }) as Item
 const cancelar = (extra: Partial<Item> = {}) => av({ tipo: 'cancelar', ...extra })
-const triagem = (...itens: Item[]): TriageV4 => ({ itens, fora_escopo: false })
+const triagem = (...itens: Item[]): TriageV5 => ({ itens, fora_escopo: false })
 
 async function setup(nUnidades: 1 | 4 = 1) {
   const { restaurantId, unitId } = await seedRestaurant(db)
@@ -69,7 +70,7 @@ async function receive(restaurantId: string, texto: string, interativoId: string
   return r.conversationId
 }
 
-function fakeLlm(script: TriageV4[], aoChamar?: () => Promise<void>) {
+function fakeLlm(script: TriageV5[], aoChamar?: () => Promise<void>) {
   const calls: string[] = []
   const llm: LlmClient = {
     async completeJson(p) {
@@ -95,8 +96,8 @@ function fakeWa() {
   }
 }
 
-const deps = (llm: LlmClient, wa: ProcessDeps['wa']): ProcessDeps =>
-  ({ db, llm, wa, phoneKey, triageModels: ['fake/m'], log, requeue: async () => undefined, now: () => SEG_14H })
+const deps = (llm: LlmClient, wa: Parameters<typeof comMidiaProibida>[0]): ProcessDeps =>
+  ({ db, llm, wa: comMidiaProibida(wa), storage: storageProibido, phoneKey, triageModels: ['fake/m'], log, requeue: async () => undefined, now: () => SEG_14H })
 const conversa = async (id: string) => (await db.select().from(schema.conversations).where(eq(schema.conversations.id, id)))[0]!
 const avisos = () => db.select().from(schema.attendanceNotices).orderBy(asc(schema.attendanceNotices.createdAt))
 const ativos = async () => (await avisos()).filter((a) => a.status === 'ativo')
@@ -107,7 +108,7 @@ const acoesAudit = async () =>
     .filter((a) => a.acao.startsWith('aviso.'))
 
 describe('S2 no worker', () => {
-  it('registra o aviso, responde "Anotado…", grava triage-v4 e audit_log', async () => {
+  it('registra o aviso, responde "Anotado…", grava triage-v5 e audit_log', async () => {
     const { restaurantId, ids } = await setup()
     const conv = await receive(restaurantId, 'vou hoje com 4 pessoas lá pelas 20h')
     const { llm } = fakeLlm([triagem(av({ pessoas: 4, horario: '20h' }))])
@@ -117,7 +118,7 @@ describe('S2 no worker', () => {
     const [a] = await avisos()
     expect(a).toMatchObject({ restaurantId, unitId: ids['Asa Sul'], data: '2026-10-05', pessoas: 4, horarioAprox: '20:00', nome: 'Maria', origem: 'ia', simulado: false, status: 'ativo' })
     const [run] = await db.select().from(schema.aiRuns)
-    expect(run).toMatchObject({ promptVersion: 'triage-v4', intent: 'aviso_presenca:registrar', itensValidos: 1, itensRespondidos: 1 })
+    expect(run).toMatchObject({ promptVersion: 'triage-v5', intent: 'aviso_presenca:registrar', itensValidos: 1, itensRespondidos: 1 })
     const audit = await db.select().from(schema.auditLog).where(eq(schema.auditLog.acao, 'aviso.registrado'))
     expect(audit).toHaveLength(1)
     expect(audit[0]).toMatchObject({ atorTipo: 'ia', entidade: 'attendance_notice', entidadeId: a!.id, diff: null })
@@ -362,7 +363,7 @@ describe('S2 no worker', () => {
   it('S1 e S2 na mesma mensagem: responde o horário e registra o aviso', async () => {
     const { restaurantId } = await setup()
     const conv = await receive(restaurantId, 'que horas fecha hoje? vou com 2')
-    const h = { servico: 'horario_unidades', tipo: 'horario_dia', unidade: null, data: 'hoje', tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null } as Item
+    const h = { servico: 'horario_unidades', tipo: 'horario_dia', unidade: null, data: 'hoje', tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null } as Item
     const { llm } = fakeLlm([triagem(h, av({ pessoas: 2 }))])
     const wa = fakeWa()
     await processConversation(deps(llm, wa), conv)

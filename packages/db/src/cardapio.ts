@@ -112,8 +112,15 @@ export type ArquivoCardapio = {
   /** `<bucket>/<restaurant_id>/<arquivo>` */
   storagePath: string
   mime: string
+  /** bytes */
+  tamanho: number
   waMediaId: string | null
   waMediaExpiresAt: Date | null
+}
+
+const colunasArquivo = {
+  id: menuFiles.id, unitId: menuFiles.unitId, titulo: menuFiles.titulo, storagePath: menuFiles.storagePath, mime: menuFiles.mime,
+  tamanho: menuFiles.tamanho, waMediaId: menuFiles.waMediaId, waMediaExpiresAt: menuFiles.waMediaExpiresAt,
 }
 
 /** Arquivo ativo para enviar ao cliente: o da unidade, senão o geral; o mais recente de cada escopo. */
@@ -123,16 +130,30 @@ export async function arquivoParaEnvio(
 ): Promise<ArquivoCardapio | null> {
   const escopo = p.unitId === null ? isNull(menuFiles.unitId) : or(eq(menuFiles.unitId, p.unitId), isNull(menuFiles.unitId))
   const [r] = await db
-    .select({
-      id: menuFiles.id, unitId: menuFiles.unitId, titulo: menuFiles.titulo, storagePath: menuFiles.storagePath, mime: menuFiles.mime,
-      waMediaId: menuFiles.waMediaId, waMediaExpiresAt: menuFiles.waMediaExpiresAt,
-    })
+    .select(colunasArquivo)
     .from(menuFiles)
     .where(and(eq(menuFiles.restaurantId, p.restaurantId), eq(menuFiles.ativo, true), escopo))
     // unidade antes do geral (nulls last), depois o mais recente
     .orderBy(sql`${menuFiles.unitId} nulls last`, desc(menuFiles.createdAt), desc(menuFiles.id))
     .limit(1)
   return r ?? null
+}
+
+/** Arquivo ainda ativo do restaurante, pelo id (entrega da mensagem de mídia gravada antes). */
+export async function arquivoAtivoPorId(
+  db: Db | Tx,
+  p: { restaurantId: string; arquivoId: string },
+): Promise<ArquivoCardapio | null> {
+  const [r] = await db
+    .select(colunasArquivo)
+    .from(menuFiles)
+    .where(and(eq(menuFiles.id, p.arquivoId), eq(menuFiles.restaurantId, p.restaurantId), eq(menuFiles.ativo, true)))
+  return r ?? null
+}
+
+/** Esquece o media id da Meta (a Meta recusou o id guardado: o próximo envio sobe o arquivo de novo). */
+export async function limparMidiaMeta(db: Db | Tx, arquivoId: string): Promise<void> {
+  await db.update(menuFiles).set({ waMediaId: null, waMediaExpiresAt: null }).where(eq(menuFiles.id, arquivoId))
 }
 
 /** Guarda o media id da Meta (válido por 30 dias; quem chama passa a validade com folga). */

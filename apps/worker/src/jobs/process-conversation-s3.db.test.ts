@@ -5,9 +5,10 @@ import { encryptPhone, keyFromBase64 } from '@atd/core'
 import { abrirSimulacao, enviarMensagemSimulada, ingestInbound, schema, type Enqueue, type EspacoS3, type PedidoAtivo } from '@atd/db'
 import { getTestDb, resetDb, seedRestaurant, seedStaff } from '@atd/db/test-utils'
 import type * as DbModule from '@atd/db'
-import type { LlmClient, TriageV4 } from '@atd/ai'
+import type { LlmClient, TriageV5 } from '@atd/ai'
 import type { SendResult } from '@atd/whatsapp'
 import { createLogger } from '../logger.ts'
+import { comMidiaProibida, storageProibido } from './midia-fake.ts'
 import { processConversation, type ProcessDeps } from './process-conversation.ts'
 
 // defeitos simulados do core/leitura: pedidos de outro cliente; espaço atribuído à unidade errada
@@ -39,13 +40,13 @@ const noopEnqueue: Enqueue = async () => undefined
 const log = createLogger('silent')
 const SEG_14H = new Date('2026-10-05T14:00:00-03:00')
 
-type Item = TriageV4['itens'][number]
+type Item = TriageV5['itens'][number]
 const ev = (extra: Partial<Item> = {}): Item => ({
   servico: 'evento', tipo: 'pedido', unidade: null, data: null, tema: null, pessoas: null, horario: null,
   convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null, ...extra,
 })
 const cancelarEv = (extra: Partial<Item> = {}) => ev({ tipo: 'cancelar', ...extra })
-const triagem = (...itens: Item[]): TriageV4 => ({ itens, fora_escopo: false })
+const triagem = (...itens: Item[]): TriageV5 => ({ itens, fora_escopo: false })
 const COMPLETO = { unidade: 'asa sul', data: '20/10', convidados: 40, tipoEvento: 'aniversário' } as const
 
 async function setup(nUnidades: 1 | 4 = 1) {
@@ -83,7 +84,7 @@ async function receive(restaurantId: string, texto: string, interativoId: string
   return r.conversationId
 }
 
-function fakeLlm(script: TriageV4[], aoChamar?: () => Promise<void>) {
+function fakeLlm(script: TriageV5[], aoChamar?: () => Promise<void>) {
   const calls: string[] = []
   const llm: LlmClient = {
     async completeJson(p) {
@@ -109,8 +110,8 @@ function fakeWa() {
   }
 }
 
-const deps = (llm: LlmClient, wa: ProcessDeps['wa']): ProcessDeps =>
-  ({ db, llm, wa, phoneKey, triageModels: ['fake/m'], log, requeue: async () => undefined, now: () => SEG_14H })
+const deps = (llm: LlmClient, wa: Parameters<typeof comMidiaProibida>[0]): ProcessDeps =>
+  ({ db, llm, wa: comMidiaProibida(wa), storage: storageProibido, phoneKey, triageModels: ['fake/m'], log, requeue: async () => undefined, now: () => SEG_14H })
 const conversa = async (id: string) => (await db.select().from(schema.conversations).where(eq(schema.conversations.id, id)))[0]!
 const pedidos = () => db.select().from(schema.eventRequests).orderBy(asc(schema.eventRequests.createdAt))
 const ultimoTexto = (wa: ReturnType<typeof fakeWa>) => wa.enviados.at(-1)!.corpo as string
@@ -120,7 +121,7 @@ const acoesAudit = async () =>
     .filter((a) => a.acao.startsWith('evento.') || a.acao.startsWith('conversa.'))
 
 describe('S3 no worker', () => {
-  it('pedido completo numa mensagem ⇒ "Recebemos seu pedido…", linha novo, triage-v4 e audit_log', async () => {
+  it('pedido completo numa mensagem ⇒ "Recebemos seu pedido…", linha novo, triage-v5 e audit_log', async () => {
     const { restaurantId, ids } = await setup()
     const conv = await receive(restaurantId, 'quero fazer um aniversário pra 40 pessoas na asa sul dia 20/10')
     const { llm, calls } = fakeLlm([triagem(ev(COMPLETO))])
@@ -139,7 +140,7 @@ describe('S3 no worker', () => {
     })
     expect(p!.customerId).toBe((await conversa(conv)).customerId)
     const [run] = await db.select().from(schema.aiRuns)
-    expect(run).toMatchObject({ promptVersion: 'triage-v4', intent: 'evento:pedido', itensValidos: 1, itensRespondidos: 1 })
+    expect(run).toMatchObject({ promptVersion: 'triage-v5', intent: 'evento:pedido', itensValidos: 1, itensRespondidos: 1 })
     expect(await acoesAudit()).toEqual([{ acao: 'evento.pedido_criado', entidade: 'event_request', atorTipo: 'ia', entidadeId: p!.id }])
     expect((await conversa(conv)).pendente).toBeNull()
   })
@@ -296,27 +297,33 @@ describe('S3 no worker', () => {
     expect(await pedidos()).toMatchObject([{ tipo: 'outro', tipoTexto: 'formatura', spaceId: espaco['Salão'] }])
   })
 
-  it('pedido já registrado: "quero o salão" e o pedido repetido não duplicam (1 linha só)', async () => {
+  it('pedido já registrado: o pedido repetido não duplica (1 linha só)', async () => {
     const { restaurantId } = await setup()
     const conv = await receive(restaurantId, 'quero fazer um aniversário pra 40 pessoas na asa sul dia 20/10')
-    const { llm } = fakeLlm([
-      triagem(ev(COMPLETO)),
-      triagem(ev({ unidade: 'asa sul', data: '20/10', espaco: 'salão' })),
-      triagem(ev(COMPLETO)),
-    ])
+    const { llm } = fakeLlm([triagem(ev(COMPLETO)), triagem(ev(COMPLETO))])
     const wa = fakeWa()
     await processConversation(deps(llm, wa), conv)
     expect(ultimoTexto(wa)).toMatch(/^Recebemos seu pedido/)
     const ja = /^Já temos seu pedido de aniversário para 40 convidados na unidade Asa Sul, .*\. Nossa equipe vai entrar em contato para confirmar\.$/
-    await receive(restaurantId, 'quero o salão')
-    await processConversation(deps(llm, wa), conv)
-    expect(ultimoTexto(wa)).toMatch(ja)
     await receive(restaurantId, 'quero fazer um aniversário pra 40 pessoas na asa sul dia 20/10')
     await processConversation(deps(llm, wa), conv)
     expect(ultimoTexto(wa)).toMatch(ja)
     expect(ultimoTexto(wa)).not.toMatch(/confirmad|reservad/i)
     expect(await pedidos()).toHaveLength(1)
     expect((await conversa(conv)).pendente).toBeNull()
+  })
+
+  it('pedido já registrado sem espaço e o cliente cita um ("quero o salão"): é mudança — equipe + observação, sem duplicar', async () => {
+    const { restaurantId } = await setup()
+    const conv = await receive(restaurantId, 'quero fazer um aniversário pra 40 pessoas na asa sul dia 20/10')
+    const { llm } = fakeLlm([triagem(ev(COMPLETO)), triagem(ev({ unidade: 'asa sul', data: '20/10', espaco: 'salão' }))])
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    await receive(restaurantId, 'quero o salão')
+    await processConversation(deps(llm, wa), conv)
+    expect(ultimoTexto(wa)).toBe('Anotei o que você pediu e vou chamar a equipe para ajustar seu pedido de evento.')
+    expect(await pedidos()).toMatchObject([{ spaceId: null, observacoes: 'Cliente pediu: espaço Salão' }])
+    expect((await conversa(conv)).estado).toBe('aguardando_humano')
   })
 
   it('espaço citado que comporta ⇒ grava o space_id', async () => {
@@ -367,7 +374,7 @@ describe('S3 no worker', () => {
     expect(ultimoTexto(wa)).toBe('Não encontrei pedido de evento seu em andamento.')
 
     // defeito simulado: o pedido de A chega ao commit de B ⇒ o banco recusa e a resposta diz o que ele fez
-    injecao.pedidos = [{ id: pA!.id, unitId: pA!.unitId, data: pA!.data, convidados: 40, tipo: 'aniversario', status: 'novo' }]
+    injecao.pedidos = [{ id: pA!.id, unitId: pA!.unitId, spaceId: null, data: pA!.data, convidados: 40, tipo: 'aniversario', status: 'novo' }]
     await receive(restaurantId, 'cancela o pedido de evento', null, 'bia')
     await processConversation(deps(fakeLlm([triagem(cancelarEv())]).llm, wa), convB)
     expect(ultimoTexto(wa)).toBe('Não encontrei pedido de evento seu em andamento.')
@@ -445,7 +452,7 @@ describe('S3 no worker', () => {
     expect(calls[1]).not.toContain('<pergunta_pendente>')
   })
 
-  it('pendente de pessoas (S2) também vai à triagem v4 com a pergunta e o que já se sabe (horário normalizado)', async () => {
+  it('pendente de pessoas (S2) também vai à triagem v5 com a pergunta e o que já se sabe (horário normalizado)', async () => {
     const { restaurantId } = await setup()
     const conv = await receive(restaurantId, 'vou hoje lá pelas 20h')
     const av = ev({ servico: 'aviso_presenca', tipo: 'registrar', horario: 'lá pelas 20h' })
@@ -459,3 +466,67 @@ describe('S3 no worker', () => {
     expect(calls[1]).toContain('{"servico":"aviso_presenca","unidade":"Asa Sul","data":"2026-10-05","horario":"20:00"}')
   })
 })
+
+describe('S3 no worker — correções da homologação (Etapa 05)', () => {
+  async function comPedido(status: 'novo' | 'confirmado', spaceId: string | null = null) {
+    const { restaurantId, ids, espaco } = await setup()
+    const conv = await receive(restaurantId, 'oi')
+    const { customerId } = await conversa(conv)
+    const [p] = await db.insert(schema.eventRequests).values({
+      restaurantId, customerId, unitId: ids['Asa Sul']!, spaceId, data: '2026-10-20', convidados: 40, tipo: 'aniversario',
+      status, observacoes: 'Bolo sem glúten', nome: 'Maria',
+    }).returning()
+    // o "oi" só criou a conversa e o cliente: o teste manda a próxima mensagem
+    await db.delete(schema.messages).where(eq(schema.messages.conversationId, conv))
+    return { restaurantId, ids, espaco, conv, pedido: p! }
+  }
+
+  it('mudança num pedido em andamento ⇒ aguardando humano + observação no pedido (sem novo pedido), auditado', async () => {
+    const { restaurantId, conv, pedido } = await comPedido('novo')
+    await receive(restaurantId, 'na verdade vão ser 60 pessoas')
+    const { llm } = fakeLlm([triagem(ev({ tema: 'mudanca', convidados: 60 }))])
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    expect(ultimoTexto(wa)).toBe('Anotei o que você pediu e vou chamar a equipe para ajustar seu pedido de evento.')
+    expect((await conversa(conv)).estado).toBe('aguardando_humano')
+    const todos = await pedidos()
+    expect(todos).toHaveLength(1)
+    expect(todos[0]).toMatchObject({ id: pedido.id, convidados: 40, status: 'novo', observacoes: 'Bolo sem glúten\nCliente pediu: 60 convidados' })
+    expect(await acoesAudit()).toEqual([
+      { acao: 'evento.pedido_observado', entidade: 'event_request', atorTipo: 'ia', entidadeId: pedido.id },
+      { acao: 'conversa.handoff_evento', entidade: 'conversation', atorTipo: 'sistema', entidadeId: conv },
+    ])
+  })
+
+  it('o espaço do pedido vem do banco: citar o mesmo espaço não é mudança; outro espaço é', async () => {
+    const { restaurantId, conv, espaco } = await comPedido('novo', null)
+    await db.update(schema.eventRequests).set({ spaceId: espaco['Salão'] })
+    await receive(restaurantId, 'pedido no salão dia 20/10 pra 40, aniversário')
+    const { llm } = fakeLlm([
+      triagem(ev({ ...COMPLETO, espaco: 'salão' })),
+      triagem(ev({ ...COMPLETO, espaco: 'varanda', convidados: 20 })),
+    ])
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    expect((await conversa(conv)).estado).toBe('ia')
+    expect((await pedidos())[0]!.observacoes).toBe('Bolo sem glúten')
+    await receive(restaurantId, 'melhor na varanda, 20 pessoas')
+    await processConversation(deps(llm, wa), conv)
+    expect((await conversa(conv)).estado).toBe('aguardando_humano')
+    expect((await pedidos())[0]!.observacoes).toBe('Bolo sem glúten\nCliente pediu: 20 convidados, espaço Varanda')
+  })
+
+  it('pedido já confirmado no dia ⇒ handoff, sem novo pedido nem observação', async () => {
+    const { restaurantId, conv } = await comPedido('confirmado')
+    await receive(restaurantId, 'quero um aniversário pra 40 na asa sul dia 20/10')
+    const { llm } = fakeLlm([triagem(ev(COMPLETO))])
+    const wa = fakeWa()
+    await processConversation(deps(llm, wa), conv)
+    expect((await conversa(conv)).estado).toBe('aguardando_humano')
+    const todos = await pedidos()
+    expect(todos).toHaveLength(1)
+    expect(todos[0]).toMatchObject({ status: 'confirmado', observacoes: 'Bolo sem glúten' })
+    expect((await acoesAudit()).map((a) => a.acao)).toEqual(['conversa.handoff_evento'])
+  })
+})
+

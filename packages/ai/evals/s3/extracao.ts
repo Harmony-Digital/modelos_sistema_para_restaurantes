@@ -1,18 +1,21 @@
 /**
- * Evals S3 — camada 1: extração de pedidos de evento e respostas a pergunta pendente (triage-v4) com modelo real via OpenRouter.
- * Uso: pnpm --filter @atd/ai eval:s3 [--modelos a,b,c] [--teto 0.50]
+ * Evals S3 — camada 1: extração de pedidos de evento e respostas a pergunta pendente (padrão triage-v5) com modelo real via OpenRouter.
+ * Uso: pnpm --filter @atd/ai eval:s3 [--modelos a,b,c] [--teto 0.50] [--triagem v5|v4] (padrão v5)
  * Custo real, com teto por execução. Grava o relatório em evals/s3/resultados/AAAA-MM-DD-extracao.md.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import { createOpenRouterClient } from '../../src/openrouter.ts'
-import { triageV4 } from '../../src/triage.ts'
+import { triageV4, triageV5 } from '../../src/triage.ts'
+import { lerTriagem } from '../triagem.ts'
 import { custoDaChamada } from '../s1/custo.ts'
 import { FRASES } from './casos.ts'
 import { extracaoCorretaS3 } from './comparar.ts'
 import { CONTEXTO, ESPACOS } from './fixture.ts'
 
-const { values } = parseArgs({ options: { modelos: { type: 'string' }, teto: { type: 'string', default: '0.50' }, 'max-chamadas': { type: 'string', default: '500' } } })
+const { values } = parseArgs({ options: { modelos: { type: 'string' }, triagem: { type: 'string' }, teto: { type: 'string', default: '0.50' }, 'max-chamadas': { type: 'string', default: '500' } } })
+/** padrão v5 (produção); --triagem v4 mede a versão anterior */
+const extrair = lerTriagem(values.triagem, 'v4') === 'v5' ? triageV5 : triageV4
 const apiKey = process.env.OPENROUTER_API_KEY
 if (!apiKey) throw new Error('Defina OPENROUTER_API_KEY (no .env da raiz ou no ambiente)')
 const modelos = (values.modelos ?? process.env.AI_TRIAGE_MODELS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
@@ -48,7 +51,7 @@ for (const modelo of modelos) {
       break
     }
     chamadas++
-    const r = await triageV4(llm, { models: [modelo], restaurante: CONTEXTO.restaurante, text: caso.mensagem, ...(caso.pendente ? { pendente: caso.pendente } : {}) })
+    const r = await extrair(llm, { models: [modelo], restaurante: CONTEXTO.restaurante, text: caso.mensagem, ...(caso.pendente ? { pendente: caso.pendente } : {}) })
     feitos++
     const usd = custoDaChamada(r.usage)
     custo += usd

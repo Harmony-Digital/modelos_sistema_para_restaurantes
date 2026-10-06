@@ -2,27 +2,33 @@ import { and, asc, count, eq, gt, gte, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import {
   agoraLocal, decryptPhone, encontrarUnidade, escolhaDeUnidade, ESPACO_QUALQUER, normalizarHorario, normalizeText, lerPessoas, MAX_PESSOAS, normalizarTipoEvento, prefilter, redactPii,
-  renderModelo, renderReply, resolverAtendimento, rotuloTipoEvento, SERVICOS, TAGS_CARDAPIO, TIPOS_S1, TIPOS_S2, TIPOS_S3, TIPOS_S4,
-  type AcaoS2, type AcaoS3, type InboundItem, type ItemExtraido, type UnidadeS1, type Lacuna, type ListaUnidades, type Localizacao, type ReplyKey,
-  type ResultadoAtendimento,
+  renderModelo, renderReply, resolverAtendimento, resolverS4, rotuloTipoEvento, SERVICOS, TAGS_CARDAPIO, TIPOS_S1, TIPOS_S2, TIPOS_S3,
+  TIPOS_S4, unidadesOrdenadas,
+  type AcaoS2, type AcaoS3, type AcaoS4, type ContextoAtendimentoS4, type ContextoS1, type InboundItem, type ItemExtraido, type UnidadeS1,
+  type Lacuna, type ListaUnidades, type Localizacao, type ReplyKey, type ResultadoAtendimento,
 } from '@atd/core'
 import {
-  avisosAtivosDoCliente, cancelarAvisoDoCliente, cancelarPedidoDoCliente, carregarContextoS1, espacosAtivos, pedidosDoCliente,
-  registrarAviso, registrarLacunas, registrarPedidoEvento, releaseBudget, reserveBudget, schema, settleBudget, type Db, type Reservation,
+  arquivoAtivoPorId, arquivoParaEnvio, avisosAtivosDoCliente, buscarCardapio, cancelarAvisoDoCliente, cancelarPedidoDoCliente,
+  carregarContextoS1, espacosAtivos, guardarMidiaMeta, limparMidiaMeta, observarPedidoDoCliente, pedidosDoCliente, registrarAviso,
+  registrarLacunas, registrarPedidoEvento, releaseBudget, reserveBudget, resumoCardapio, schema, settleBudget, type ArquivoCardapio,
+  type Db, type ItemEncontrado, type Reservation, type ResumoCardapioDb,
 } from '@atd/db'
 import {
-  TRIAGE_BUDGET_ESTIMATE_USD, TRIAGE_V4_PROMPT_VERSION, triageV4, type JsonCallResult, type LlmClient, type PendenteTriagem,
-  type TriageV4,
+  TRIAGE_BUDGET_ESTIMATE_USD, TRIAGE_V5_PROMPT_VERSION, triageV5, type JsonCallResult, type LlmClient, type PendenteTriagem,
+  type TriageV5,
 } from '@atd/ai'
-import type { WhatsAppClient } from '@atd/whatsapp'
+import type { SendResult, WhatsAppClient } from '@atd/whatsapp'
 import type { Logger } from '../logger.ts'
+import type { Storage } from '../storage.ts'
 
 const { aiRuns, auditLog, conversations, customers, dataSubjectRequests, messages, restaurants } = schema
 
 export type ProcessDeps = {
   db: Db
   llm: LlmClient
-  wa: Pick<WhatsAppClient, 'sendText' | 'sendLocation' | 'sendList'>
+  wa: Pick<WhatsAppClient, 'sendText' | 'sendLocation' | 'sendList' | 'sendDocument' | 'sendImage' | 'uploadMedia'>
+  /** arquivos do cardápio (bucket privado) para subir à Meta */
+  storage: Pick<Storage, 'baixarObjeto'>
   phoneKey: Buffer
   triageModels: string[]
   log: Logger
@@ -41,6 +47,10 @@ type Saida =
   | { tipo: 'texto'; texto: string }
   | { tipo: 'localizacao'; texto: string; payload: Localizacao }
   | { tipo: 'lista'; texto: string; payload: Pick<ListaUnidades, 'botao' | 'opcoes'> }
+  /** arquivo do cardápio: `texto` é o título; `alternativa` é o resumo em texto se a mídia não puder ser entregue */
+  | { tipo: 'documento' | 'imagem'; texto: string; payload: MidiaPayload }
+
+type MidiaPayload = { arquivoId: string; alternativa: string }
 
 /** Pergunta nossa guardada no pendente: cabe a de capacidade com todas as sugestões (nunca cortar a pergunta). */
 const MAX_PERGUNTA_ENVIADA = 2000
@@ -99,6 +109,7 @@ const listaPayload = z.object({
   opcoes: z.array(z.object({ id: z.string(), titulo: z.string(), descricao: z.string() })).min(1).max(10),
 })
 const interativoSchema = z.object({ interativoId: z.string() })
+const midiaPayload = z.object({ arquivoId: z.uuid(), alternativa: z.string().min(1) })
 
 const PENDENTE_MIN = 30
 const PENDENTE_EVENTO_MIN = 60
@@ -274,6 +285,84 @@ async function carregarAtendimento(deps: ProcessDeps, ctx: Ctx, now: Date) {
   return { s1, avisos, s3: { espacos, pedidos } }
 }
 
+type Atendimento = Awaited<ReturnType<typeof carregarAtendimento>>
+
+type DadosS4 = {
+  contexto: ContextoAtendimentoS4
+  resumo: ResumoCardapioDb
+  /** arquivo ativo para a unidade (o da unidade, senão o geral) */
+  arquivoDe: (unitId: string | null) => ArquivoCardapio | null
+}
+
+/** Imagem acima disso a Meta não aceita como imagem: vai como documento. */
+const MAX_IMAGEM_META = 5 * 1024 * 1024
+const ITEM_ENVIAR: ItemExtraido = {
+  servico: 'cardapio', tipo: 'enviar', unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null,
+  tipoEvento: null, espaco: null, consulta: null, tag: null,
+}
+const temConsulta = (i: ItemExtraido) => !!i.consulta?.trim()
+
+/**
+ * Dados do cardápio para os itens S4 da mensagem (antes de resolver): a busca de cada item (por índice), o arquivo de
+ * cada unidade citada (e o geral) e o resumo (só quando algum item é de envio). Sem item de cardápio, nada é lido.
+ */
+async function carregarS4(
+  deps: ProcessDeps,
+  ctx: Ctx,
+  itens: readonly ItemExtraido[],
+  s1: ContextoS1,
+  escolhidaId: string | undefined,
+): Promise<DadosS4 | undefined> {
+  const doCardapio = itens.flatMap((item, indice) => (item.servico === 'cardapio' ? [{ item, indice }] : []))
+  if (doCardapio.length === 0) return undefined
+  const restaurantId = ctx.restaurant.id
+  const unidades = unidadesOrdenadas(s1)
+  const unidadeDe = (i: ItemExtraido) =>
+    (escolhidaId ? unidades.find((u) => u.id === escolhidaId)?.id : undefined) ?? encontrarUnidade(i.unidade, unidades)?.id ?? null
+  const achados = new Map<number, ItemEncontrado[]>()
+  for (const { item, indice } of doCardapio) {
+    if (item.tipo === 'enviar' || (!temConsulta(item) && !item.tag)) continue
+    // filtro por tag: só a tag (a consulta do modelo costuma repetir o nome da tag)
+    const consulta = item.tipo === 'filtro' && item.tag ? null : item.consulta
+    achados.set(indice, await buscarCardapio(deps.db, { restaurantId, consulta, tag: item.tag }))
+  }
+  const envios = doCardapio.filter(({ item }) => item.tipo === 'enviar' || (!temConsulta(item) && !item.tag))
+  const arquivos = new Map<string | null, ArquivoCardapio | null>()
+  for (const unitId of new Set([null, ...envios.map(({ item }) => unidadeDe(item))])) {
+    arquivos.set(unitId, await arquivoParaEnvio(deps.db, { restaurantId, unitId }))
+  }
+  const resumo = envios.length ? await resumoCardapio(deps.db, restaurantId, unidadeDe(envios[0]!.item)) : []
+  const arquivoDe = (unitId: string | null) => (arquivos.has(unitId) ? arquivos.get(unitId)! : (arquivos.get(null) ?? null))
+  return { contexto: { achados, resumo, temArquivo: (unitId) => arquivoDe(unitId) !== null }, resumo, arquivoDe }
+}
+
+/** Mensagens de mídia das ações do S4 (o texto "Aqui está…" já veio do core), cada uma com o resumo para o caso de falha. */
+function midiasS4(acoes: readonly AcaoS4[], dados: DadosS4 | undefined, s1: ContextoS1): Saida[] {
+  if (!dados) return []
+  return acoes.flatMap((a): Saida[] => {
+    const arquivo = dados.arquivoDe(a.unitId)
+    if (!arquivo) return []
+    const semArquivo = resolverS4([ITEM_ENVIAR], s1, new Map(), dados.resumo, () => false, a.unitId ?? undefined)
+    const alternativa = semArquivo.texto ?? renderModelo('lacuna', {}, s1.modelos)
+    const imagem = (arquivo.mime === 'image/jpeg' || arquivo.mime === 'image/png') && arquivo.tamanho <= MAX_IMAGEM_META
+    return [{ tipo: imagem ? 'imagem' : 'documento', texto: arquivo.titulo, payload: { arquivoId: arquivo.id, alternativa } }]
+  })
+}
+
+/** Resolve S1–S4 da mesma mensagem (lê o cardápio antes, se houver item de cardápio). */
+async function atender(
+  deps: ProcessDeps,
+  ctx: Ctx,
+  { s1, avisos, s3 }: Atendimento,
+  itens: readonly ItemExtraido[],
+  now: Date,
+  escolhidaId: string | undefined,
+): Promise<{ r: ResultadoAtendimento; midias: Saida[] }> {
+  const s4 = await carregarS4(deps, ctx, itens, s1, escolhidaId)
+  const r = resolverAtendimento(itens, s1, now, avisos, escolhidaId, s3, s4?.contexto)
+  return { r, midias: midiasS4(r.acoesS4, s4, s1) }
+}
+
 const DATA_ISO = /^\d{4}-\d{2}-\d{2}$/
 
 /**
@@ -357,17 +446,17 @@ async function respostaDaLista(deps: ProcessDeps, ctx: Ctx, pending: Pending[], 
   }
   const texto = ultimo.texto?.trim() ?? ''
   if (!idLista && (!texto || texto.split(/\s+/).length > MAX_PALAVRAS_ESCOLHA)) return null
-  const { s1, avisos, s3 } = await carregarAtendimento(deps, ctx, now)
-  const opcoes = s1.unidades.filter((u) => p.opcoes.includes(u.id))
+  const atendimento = await carregarAtendimento(deps, ctx, now)
+  const opcoes = atendimento.s1.unidades.filter((u) => p.opcoes.includes(u.id))
   const escolhida = idLista ? opcoes.find((u) => u.id === idLista) : escolhaDeUnidade(texto, opcoes)
   if (!escolhida) return null
   // o pedido de evento sem unidade segue a coleta: a decisão guarda o pendente do próximo campo
-  const r = resolverAtendimento(p.itens, s1, now, avisos, escolhida.id, s3)
+  const { r, midias } = await atender(deps, ctx, atendimento, p.itens, now, escolhida.id)
   const run: AiRunRow = {
     etapa: 'resposta', modelo: 'deterministico', promptVersion: 's1-lista', costUsd: '0', intent: 'escolha_unidade', resultado: 'ok',
   }
   // o pendente da decisão vale: o aviso escolhido sem pessoas passa a esperar "Para quantas pessoas?"
-  return { ...decisaoAtendimento(r, now, p.pergunta), runs: [run] }
+  return { ...decisaoAtendimento(r, now, p.pergunta, midias), runs: [run] }
 }
 
 /** Resposta curta ("4", "só eu") ao "Para quantas pessoas?": registra o aviso guardado sem chamar o LLM. */
@@ -377,11 +466,10 @@ async function respostaDePessoas(deps: ProcessDeps, ctx: Ctx, pending: Pending[]
   if (p?.tipo !== 'pessoas' || new Date(p.expiraEm) <= now) return null
   const n = lerPessoas(pending[0]!.texto ?? '')
   if (n === null) return null // resposta ambígua: a triagem decide (e substitui o pendente)
-  const { s1, avisos, s3 } = await carregarAtendimento(deps, ctx, now)
   // "somos 80": o core responde o limite (aviso_pessoas_invalido) e não guarda pendente ⇒ sem laço
   const pessoas = n === 'fora' ? MAX_PESSOAS + 1 : n
   // unidade pelo id guardado: não reabre a lista nem confunde nomes parecidos
-  const r = resolverAtendimento([{ ...p.item, pessoas }], s1, now, avisos, p.unitId, s3)
+  const { r } = await atender(deps, ctx, await carregarAtendimento(deps, ctx, now), [{ ...p.item, pessoas }], now, p.unitId)
   const run: AiRunRow = {
     etapa: 'resposta', modelo: 'deterministico', promptVersion: 's2-pessoas', costUsd: '0', intent: 'resposta_pessoas', resultado: 'ok',
   }
@@ -391,9 +479,10 @@ async function respostaDePessoas(deps: ProcessDeps, ctx: Ctx, pending: Pending[]
 /** A pergunta que espera resposta sai por último no texto composto (um parágrafo). */
 const ultimoTrecho = (texto: string | null) => (texto?.split('\n\n').at(-1) ?? '').slice(0, MAX_PERGUNTA_ENVIADA)
 
-function decisaoAtendimento(r: ResultadoAtendimento, now: Date, pergunta: string): Decision {
+function decisaoAtendimento(r: ResultadoAtendimento, now: Date, pergunta: string, midias: readonly Saida[] = []): Decision {
   const saidas: Saida[] = []
   if (r.texto) saidas.push({ tipo: 'texto', texto: r.texto })
+  saidas.push(...midias) // o arquivo do cardápio logo depois do "Aqui está o nosso cardápio."
   for (const l of r.localizacoes) saidas.push({ tipo: 'localizacao', texto: `${l.nome}: ${l.endereco}`, payload: l })
   if (r.lista) saidas.push({ tipo: 'lista', texto: r.lista.corpo, payload: { botao: r.lista.botao, opcoes: r.lista.opcoes } })
   const expira = (min: number) => new Date(now.getTime() + min * 60_000).toISOString()
@@ -442,23 +531,23 @@ const RESERVE_USD = fmt(2 * ESTIMATE_MICROS)
 
 // Custo desconhecido (null) de chamada possivelmente cobrada é contabilizado pela estimativa;
 // falha sem uso reportado (502, rede) não custa nada.
-function runCostMicros(r: JsonCallResult<TriageV4>): number {
+function runCostMicros(r: JsonCallResult<TriageV5>): number {
   if (r.usage?.costUsd != null) return micros(r.usage.costUsd)
   const maybeBilled = r.ok || r.usage !== null
   return maybeBilled ? ESTIMATE_MICROS : 0
 }
 
 
-function resumoItens(t: TriageV4): string {
+function resumoItens(t: TriageV5): string {
   if (t.itens.length === 0) return 'fora_escopo'
   return [...new Set(t.itens.map((i) => (i.tipo ? `${i.servico}:${i.tipo}` : i.servico)))].join(',')
 }
 
-function toRun(r: JsonCallResult<TriageV4>, fallbackModel: string): AiRunRow {
+function toRun(r: JsonCallResult<TriageV5>, fallbackModel: string): AiRunRow {
   return {
     etapa: 'triagem',
     modelo: r.model ?? fallbackModel,
-    promptVersion: TRIAGE_V4_PROMPT_VERSION,
+    promptVersion: TRIAGE_V5_PROMPT_VERSION,
     tokensIn: r.usage?.tokensIn ?? 0,
     tokensOut: r.usage?.tokensOut ?? 0,
     tokensCache: r.usage?.tokensCache ?? 0,
@@ -486,10 +575,10 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, now: Da
   // a resposta a uma pergunta nossa vai com o contexto (Decisão 3); pendente vencido não conta
   const pendenteAtual = lerPendente(ctx.conv.pendente)
   const contexto = pendenteDaTriagem(pendenteAtual, now)
-  let result: JsonCallResult<TriageV4>
+  let result: JsonCallResult<TriageV5>
   const runs: AiRunRow[] = []
   try {
-    const call = () => triageV4(deps.llm, {
+    const call = () => triageV5(deps.llm, {
       models: deps.triageModels, restaurante: ctx.restaurant.nome, text, ...(contexto ? { pendente: contexto } : {}),
     })
     const fallbackModel = deps.triageModels[0]!
@@ -521,10 +610,10 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, now: Da
   }
   if (itens.length === 0) return { replies: ['foraEscopo'], autor: 'ia', falhas: 'zerar', runs, budget, pendente: null }
   try {
-    const { s1, avisos, s3 } = await carregarAtendimento(deps, ctx, now)
-    const c = completarDoPendente(itens, contexto ? pendenteAtual : null, s1.unidades)
-    const r = resolverAtendimento(c.itens, s1, now, avisos, c.escolhidaId, s3)
-    return { ...decisaoAtendimento(r, now, perguntaMascarada(text)), runs, budget }
+    const atendimento = await carregarAtendimento(deps, ctx, now)
+    const c = completarDoPendente(itens, contexto ? pendenteAtual : null, atendimento.s1.unidades)
+    const { r, midias } = await atender(deps, ctx, atendimento, c.itens, now, c.escolhidaId)
+    return { ...decisaoAtendimento(r, now, perguntaMascarada(text), midias), runs, budget }
   } catch (err) {
     await compensate(deps, reservation, spentMicros, ctx.conv.id)
     throw err
@@ -593,6 +682,10 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision): Promise<Outc
         const ok = await cancelarPedidoDoCliente(tx, { restaurantId, customerId: ctx.customer.id, pedidoId: a.pedidoId })
         if (ok) await tx.insert(auditLog).values({ restaurantId, atorTipo: 'ia', acao: 'evento.pedido_cancelado', entidade: 'event_request', entidadeId: a.pedidoId })
         else saidas = trocarTrecho(saidas, a.texto, a.textoSeFalhar)
+      } else {
+        // mudança pedida: a IA não altera o pedido; só anota (texto nosso, ≤ 300) para a equipe que assume
+        const ok = await observarPedidoDoCliente(tx, { restaurantId, customerId: ctx.customer.id, pedidoId: a.pedidoId, observacao: a.observacao })
+        if (ok) await tx.insert(auditLog).values({ restaurantId, atorTipo: 'ia', acao: 'evento.pedido_observado', entidade: 'event_request', entidadeId: a.pedidoId })
       }
     }
 
@@ -665,6 +758,7 @@ async function deliver(deps: ProcessDeps, conversationId: string) {
   const pendingOut = await db
     .select({
       id: messages.id,
+      restaurantId: messages.restaurantId,
       autor: messages.autor,
       replyKey: messages.replyKey,
       texto: messages.texto,
@@ -699,13 +793,19 @@ async function deliver(deps: ProcessDeps, conversationId: string) {
       await marcarAvisoEnviado(deps, m)
       continue
     }
-    const r = await enviar(deps, to, m)
-    if (r === 'payload_invalido') {
+    const entregue = m.tipo === 'documento' || m.tipo === 'imagem' ? await entregarMidia(deps, to, m) : await enviarSimples(deps, to, m)
+    if (entregue === 'payload_invalido') {
       await db.update(messages).set({ statusEnvio: 'falhou:payload_invalido' }).where(eq(messages.id, m.id))
-      deps.log.warn({ conversationId, messageId: m.id }, 'payload de mensagem interativa inválido; envio descartado')
+      deps.log.warn({ conversationId, messageId: m.id }, 'payload de mensagem inválido; envio descartado')
       continue
     }
-    if (r.ok) {
+    const { r, alternativa } = entregue
+    if (r.ok && alternativa !== null) {
+      // a mídia não pôde ser entregue e o resumo saiu em texto: o registro mostra o que o cliente recebeu
+      await db.update(messages)
+        .set({ tipo: 'texto', texto: alternativa, payload: null, wamid: r.wamid, statusEnvio: 'enviado' })
+        .where(eq(messages.id, m.id))
+    } else if (r.ok) {
       await db.update(messages).set({ wamid: r.wamid, statusEnvio: 'enviado' }).where(eq(messages.id, m.id))
       await marcarAvisoEnviado(deps, m)
     } else if (!r.retryable) {
@@ -722,6 +822,11 @@ async function marcarAvisoEnviado(deps: ProcessDeps, m: { replyKey: string | nul
   await deps.db.update(customers).set({ privacyNoticeSentAt: deps.now?.() ?? new Date() }).where(eq(customers.id, m.customerId))
 }
 
+async function enviarSimples(deps: ProcessDeps, to: string, m: { tipo: string; texto: string | null; payload: unknown }): Promise<Entrega | 'payload_invalido'> {
+  const r = await enviar(deps, to, m)
+  return r === 'payload_invalido' ? r : { r, alternativa: null }
+}
+
 function enviar(deps: ProcessDeps, to: string, m: { tipo: string; texto: string | null; payload: unknown }) {
   if (m.tipo === 'localizacao') {
     const p = localizacaoPayload.safeParse(m.payload)
@@ -733,3 +838,78 @@ function enviar(deps: ProcessDeps, to: string, m: { tipo: string; texto: string 
   }
   return deps.wa.sendText(to, m.texto ?? '')
 }
+
+// ---------------------------------------------------------------- mídia do cardápio
+
+/** O media id da Meta vale 30 dias; guardamos com um dia de folga. */
+const VALIDADE_MIDIA_MS = 29 * 86_400_000
+/** Mídia recusada pela Meta (id vencido ou inválido, falha de upload/tipo): sobe o arquivo de novo uma vez. */
+const MIDIA_RECUSADA = new Set([100, 131009, 131053])
+const EXTENSAO: Readonly<Record<string, string>> = { 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
+
+/** Nome do arquivo que o cliente vê: o título, sem caracteres que quebram nomes de arquivo. */
+function nomeDoArquivo(a: ArquivoCardapio): string {
+  const base = a.titulo.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100) || 'cardapio'
+  return `${base}.${EXTENSAO[a.mime] ?? 'pdf'}`
+}
+
+type Entrega = { r: SendResult; alternativa: string | null }
+
+/**
+ * Envia o arquivo do cardápio: usa o media id guardado se ainda vale; senão baixa do Storage e sobe para a Meta (e
+ * guarda o id). Mídia recusada: esquece o id e sobe de novo uma vez. Sem como entregar o arquivo (desativado, Storage
+ * fora, Meta recusando), manda o resumo em texto (`alternativa`). Falha temporária volta para o job tentar de novo.
+ */
+async function entregarMidia(
+  deps: ProcessDeps,
+  to: string,
+  m: { id: number; tipo: string; payload: unknown; restaurantId: string },
+): Promise<Entrega | 'payload_invalido'> {
+  const p = midiaPayload.safeParse(m.payload)
+  if (!p.success) return 'payload_invalido'
+  const { arquivoId, alternativa } = p.data
+  const emTexto = async (): Promise<Entrega> => ({ r: await deps.wa.sendText(to, alternativa), alternativa })
+  const arquivo = await arquivoAtivoPorId(deps.db, { restaurantId: m.restaurantId, arquivoId })
+  if (!arquivo) return emTexto()
+  const agora = deps.now?.() ?? new Date()
+  let mediaId = arquivo.waMediaId && arquivo.waMediaExpiresAt && arquivo.waMediaExpiresAt > agora ? arquivo.waMediaId : null
+  for (let tentativa = 0; ; tentativa++) {
+    if (!mediaId) {
+      const up = await subirArquivo(deps, arquivo, agora)
+      if (up === 'sem_arquivo') return emTexto()
+      if (!up.ok) {
+        if (up.retryable) return { r: up, alternativa: null }
+        deps.log.warn({ messageId: m.id, code: up.code }, 'Meta recusou o upload do cardápio; enviando o resumo em texto')
+        return emTexto()
+      }
+      mediaId = up.mediaId
+    }
+    const r = m.tipo === 'imagem'
+      ? await deps.wa.sendImage(to, { mediaId, caption: arquivo.titulo })
+      : await deps.wa.sendDocument(to, { mediaId, filename: nomeDoArquivo(arquivo), caption: arquivo.titulo })
+    if (r.ok || r.retryable || r.code === null || !MIDIA_RECUSADA.has(r.code)) return { r, alternativa: null }
+    // o id recusado sai do cache em qualquer caso
+    await limparMidiaMeta(deps.db, arquivo.id)
+    if (tentativa >= 1) {
+      deps.log.warn({ messageId: m.id, code: r.code }, 'Meta recusou a mídia do cardápio de novo; enviando o resumo em texto')
+      return emTexto()
+    }
+    mediaId = null
+  }
+}
+
+/** Baixa o arquivo do bucket privado e sobe para a Meta; guarda o media id. `sem_arquivo`: Storage não entregou. */
+async function subirArquivo(deps: ProcessDeps, a: ArquivoCardapio, agora: Date) {
+  const [bucket, ...resto] = a.storagePath.split('/')
+  let bytes: Uint8Array
+  try {
+    bytes = await deps.storage.baixarObjeto(bucket!, resto.join('/'))
+  } catch (err) {
+    deps.log.error({ err, arquivoId: a.id }, 'falha ao baixar o arquivo do cardápio do Storage')
+    return 'sem_arquivo' as const
+  }
+  const up = await deps.wa.uploadMedia(bytes, a.mime, nomeDoArquivo(a))
+  if (up.ok) await guardarMidiaMeta(deps.db, { arquivoId: a.id, waMediaId: up.mediaId, expiraEm: new Date(agora.getTime() + VALIDADE_MIDIA_MS) })
+  return up
+}
+

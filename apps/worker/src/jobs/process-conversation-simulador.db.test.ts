@@ -3,8 +3,9 @@ import { asc, eq } from 'drizzle-orm'
 import { keyFromBase64, periodStarts } from '@atd/core'
 import { abrirSimulacao, enviarMensagemSimulada, schema, type Enqueue } from '@atd/db'
 import { getTestDb, resetDb, seedRestaurant, seedStaff } from '@atd/db/test-utils'
-import type { LlmClient, TriageV4 } from '@atd/ai'
+import type { LlmClient, TriageV5 } from '@atd/ai'
 import { createLogger } from '../logger.ts'
+import { comMidiaProibida, storageProibido } from './midia-fake.ts'
 import { agoraDaConversa, processConversation, type ProcessDeps } from './process-conversation.ts'
 
 const { db, sql } = getTestDb()
@@ -18,11 +19,11 @@ const SEG_14H = new Date('2026-10-05T14:00:00-03:00')
 const DOM_12H = new Date('2026-10-11T12:00:00-03:00')
 
 const item = (tipo: string) =>
-  ({ servico: 'horario_unidades', tipo, unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null }) as TriageV4['itens'][number]
+  ({ servico: 'horario_unidades', tipo, unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null }) as TriageV5['itens'][number]
 const servico = (s: string) =>
-  ({ servico: s, tipo: null, unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null }) as TriageV4['itens'][number]
+  ({ servico: s, tipo: null, unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null }) as TriageV5['itens'][number]
 
-function fakeLlm(script: TriageV4[]) {
+function fakeLlm(script: TriageV5[]) {
   let n = 0
   const llm: LlmClient = {
     async completeJson(p) {
@@ -41,7 +42,7 @@ const waProibido = {
 }
 
 const deps = (llm: LlmClient): ProcessDeps =>
-  ({ db, llm, wa: waProibido, phoneKey, triageModels: ['fake/m'], log, requeue: async () => undefined, now: () => SEG_14H })
+  ({ db, llm, wa: comMidiaProibida(waProibido), storage: storageProibido, phoneKey, triageModels: ['fake/m'], log, requeue: async () => undefined, now: () => SEG_14H })
 
 async function setup() {
   const { restaurantId, unitId } = await seedRestaurant(db)

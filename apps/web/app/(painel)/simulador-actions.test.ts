@@ -9,8 +9,11 @@ const enqueue = vi.fn()
 const m = {
   abrirSimulacao: vi.fn(), novoClienteSimulado: vi.fn(), enviarMensagemSimulada: vi.fn(),
   definirRelogioSimulado: vi.fn(), mensagensSimuladas: vi.fn(), detalhesSimulacao: vi.fn(),
-  registrarAuditoria: vi.fn(),
+  registrarAuditoria: vi.fn(), listarCardapio: vi.fn(),
 }
+const createSignedUrl = vi.fn()
+const from = vi.fn(() => ({ createSignedUrl }))
+vi.mock('@/lib/supabase/server', () => ({ createClient: async () => ({ storage: { from } }) }))
 vi.mock('@/lib/dal', () => ({ requireStaff }))
 vi.mock('@/lib/server/db', () => ({ getDb: () => db }))
 vi.mock('@/lib/server/boss', () => ({ getBoss: async () => 'boss' }))
@@ -128,5 +131,37 @@ describe('Server Actions do simulador', () => {
       ok: true,
       data: [{ id: 1, etapa: 'triagem', modelo: 'm', promptVersion: 'v', intent: 'x', resultado: 'ok', erro: null, costUsd: '0.000100', latenciaMs: 812, itensValidos: 1, itensRespondidos: 1, criadaEm: '2026-10-05T17:00:00.000Z' }],
     })
+  })
+
+  it('documento do cardápio: URL assinada curta gerada com o cliente do usuário, só para arquivo que ele pode ver', async () => {
+    const R = '00000000-0000-4000-8000-0000000000aa'
+    const em = new Date('2026-10-05T17:00:00Z')
+    m.mensagensSimuladas.mockResolvedValue({
+      ...vazio, cursor: 9,
+      mensagens: [
+        { id: 8, direcao: 'out', tipo: 'documento', texto: 'Cardápio', payload: { arquivoId: 'f1', alternativa: 'x' }, createdAt: em },
+        { id: 9, direcao: 'out', tipo: 'imagem', texto: 'Oculto', payload: { arquivoId: 'f-outro', alternativa: 'x' }, createdAt: em },
+      ],
+    })
+    m.listarCardapio.mockResolvedValue({ arquivos: [{ id: 'f1', titulo: 'Cardápio', storagePath: `cardapio/${R}/menu.pdf`, mime: 'application/pdf' }] })
+    createSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://s/assinada' }, error: null })
+    const r = await a.buscarSimuladorAction(CONV, 7)
+    expect(m.listarCardapio).toHaveBeenCalledWith(db, sessao.claims)
+    expect(from).toHaveBeenCalledWith('cardapio')
+    expect(createSignedUrl).toHaveBeenCalledWith(`${R}/menu.pdf`, 600)
+    expect(r.ok && r.data!.mensagens.map((x) => x.midia ?? null)).toEqual([{ titulo: 'Cardápio', url: 'https://s/assinada' }, null])
+  })
+
+  it('sem mensagem de mídia não lê o cardápio nem o Storage; erro do Storage deixa a URL nula', async () => {
+    await a.buscarSimuladorAction(CONV, 0)
+    expect(m.listarCardapio).not.toHaveBeenCalled()
+    expect(from).not.toHaveBeenCalled()
+    m.mensagensSimuladas.mockResolvedValue({
+      ...vazio, mensagens: [{ id: 8, direcao: 'out', tipo: 'documento', texto: 'C', payload: { arquivoId: 'f1' }, createdAt: new Date() }],
+    })
+    m.listarCardapio.mockResolvedValue({ arquivos: [{ id: 'f1', titulo: 'C', storagePath: 'cardapio/r/a.pdf', mime: 'application/pdf' }] })
+    createSignedUrl.mockResolvedValue({ data: null, error: new Error('x') })
+    const r = await a.buscarSimuladorAction(CONV, 0)
+    expect(r.ok && r.data!.mensagens[0]!.midia).toEqual({ titulo: 'C', url: null })
   })
 })
