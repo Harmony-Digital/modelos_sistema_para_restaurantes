@@ -4,7 +4,7 @@ import { chaveItemS2, extracaoCorretaS2, horasInventadasS2 } from './comparar.ts
 import { CONTEXTO } from './fixture.ts'
 
 const agora = new Date('2026-10-05T14:00:00-03:00')
-const base = { unidade: null, data: null, tema: null, pessoas: null, horario: null }
+const base = { unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null }
 const reg = (extra: Partial<ItemExtraido> = {}): ItemExtraido => ({ servico: 'aviso_presenca', tipo: 'registrar', ...base, ...extra })
 const can = (extra: Partial<ItemExtraido> = {}): ItemExtraido => reg({ tipo: 'cancelar', ...extra })
 const k = (i: ItemExtraido) => chaveItemS2(i, CONTEXTO, agora)

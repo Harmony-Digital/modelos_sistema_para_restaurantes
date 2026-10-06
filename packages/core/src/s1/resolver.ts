@@ -11,9 +11,8 @@ import {
   type TipoS1, type UnidadeS1,
 } from './tipos.ts'
 
-// aviso_presenca é resolvido pelo S2 (@atd/core/s2): aqui é ignorado
+// aviso_presenca é resolvido pelo S2 (@atd/core/s2) e evento pelo S3 (@atd/core/s3): aqui são ignorados
 const NOME_SERVICO: Partial<Record<Servico, string>> = {
-  evento: 'eventos',
   cardapio: 'o cardápio',
 }
 const SEGUNDA_A_DOMINGO = [1, 2, 3, 4, 5, 6, 0] as const
@@ -30,8 +29,11 @@ export function unidadesOrdenadas(ctx: ContextoS1): UnidadeS1[] {
   return [...ctx.unidades].sort((a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome, 'pt-BR'))
 }
 
-/** Lista interativa "Ver unidades" (as mesmas opções para pendentes do S1 e do S2; muda só o texto). */
-export function listaDeUnidades(ctx: ContextoS1, corpo: 'escolher_unidade' | 'escolher_unidade_aviso' = 'escolher_unidade'): ListaUnidades {
+/** Lista interativa "Ver unidades" (as mesmas opções para pendentes do S1, S2 e S3; muda só o texto). */
+export function listaDeUnidades(
+  ctx: ContextoS1,
+  corpo: 'escolher_unidade' | 'escolher_unidade_aviso' | 'evento_pergunta_unidade' = 'escolher_unidade',
+): ListaUnidades {
   return {
     corpo: renderModelo(corpo, {}, ctx.modelos),
     botao: BOTAO_LISTA,
@@ -179,7 +181,7 @@ export function resolverS1(itens: readonly ItemExtraido[], ctx: ContextoS1, agor
     if (item.servico !== 'horario_unidades') {
       const nome = NOME_SERVICO[item.servico]
       if (nome) trechos.push(m('em_breve', { servico: nome }))
-      continue // humano/lgpd: tratados pelo worker antes daqui; aviso_presenca: S2
+      continue // humano/lgpd: tratados pelo worker antes daqui; aviso_presenca: S2; evento: S3
     }
     const tipo: TipoS1 = ehTipoS1(item.tipo) ? item.tipo : 'info'
 

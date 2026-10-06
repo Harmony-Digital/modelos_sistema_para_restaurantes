@@ -43,7 +43,8 @@ const itemSchema = z
     data: cortar(60),
     tema: cortar(120),
   })
-  .transform((i) => ({ ...i, pessoas: null, horario: null })) // v2 não extrai avisos de presença
+  // v2 não extrai avisos de presença nem eventos
+  .transform((i) => ({ ...i, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null }))
 const triageV2Schema = z.object({
   itens: z.array(itemSchema).transform((a) => a.slice(0, 5)),
   fora_escopo: z.boolean(),
@@ -79,7 +80,7 @@ const itemV3Schema = z.object({
   // acima de 60 passa: o core responde o limite (aviso_pessoas_invalido) em vez de virar saída inválida
   pessoas: z.number().int().min(1).max(1000).nullable(),
   horario: cortar(40),
-})
+}).transform((i) => ({ ...i, convidados: null, tipoEvento: null, espaco: null })) // v3 não extrai eventos
 const triageV3Schema = z.object({
   itens: z.array(itemV3Schema).transform((a) => a.slice(0, 5)),
   fora_escopo: z.boolean(),

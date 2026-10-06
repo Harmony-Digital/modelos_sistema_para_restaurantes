@@ -2,7 +2,7 @@ import { and, asc, count, eq, gt, gte, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import {
   agoraLocal, decryptPhone, escolhaDeUnidade, lerPessoas, MAX_PESSOAS, prefilter, redactPii, renderModelo, renderReply, resolverAtendimento,
-  SERVICOS, TIPOS_S1, TIPOS_S2,
+  SERVICOS, TIPOS_S1, TIPOS_S2, TIPOS_S3,
   type AcaoS2, type InboundItem, type Lacuna, type ListaUnidades, type Localizacao, type ReplyKey,
   type ResultadoAtendimento,
 } from '@atd/core'
@@ -43,7 +43,7 @@ type Saida =
 
 const itemSchema = z.object({
   servico: z.enum(SERVICOS),
-  tipo: z.enum([...TIPOS_S1, ...TIPOS_S2]).nullable(),
+  tipo: z.enum([...TIPOS_S1, ...TIPOS_S2, ...TIPOS_S3]).nullable(),
   unidade: z.string().nullable(),
   data: z.string().nullable(),
   tema: z.string().nullable(),
@@ -51,6 +51,10 @@ const itemSchema = z.object({
   // até 1000 como na triagem v3: acima de 60 o core responde o limite (o item precisa sobreviver no pendente de unidade)
   pessoas: z.number().int().min(1).max(1000).nullable().default(null),
   horario: z.string().max(40).nullable().default(null),
+  // eventos (Etapa 04): idem; o uso real (pendente pedido_evento) vem na Task 4
+  convidados: z.number().nullable().default(null), // o core valida 1–1000 (o item cru espera a lista de unidade)
+  tipoEvento: z.string().max(120).nullable().default(null),
+  espaco: z.string().max(120).nullable().default(null),
 })
 // pendente antigo (sem `tipo`) é lido como 'unidade'
 const pendenteUnidadeSchema = z.object({

@@ -152,12 +152,15 @@ exports[`evals S1 — camada 2 (resolução + composição, determinística) > a
   "localizacoes": [],
   "pendente": [
     {
+      "convidados": null,
       "data": null,
+      "espaco": null,
       "horario": null,
       "pessoas": null,
       "servico": "horario_unidades",
       "tema": null,
       "tipo": "aberto_agora",
+      "tipoEvento": null,
       "unidade": null,
     },
   ],
@@ -361,12 +364,15 @@ exports[`evals S1 — camada 2 (resolução + composição, determinística) > d
   "localizacoes": [],
   "pendente": [
     {
+      "convidados": null,
       "data": "amanhã",
+      "espaco": null,
       "horario": null,
       "pessoas": null,
       "servico": "horario_unidades",
       "tema": null,
       "tipo": "horario_dia",
+      "tipoEvento": null,
       "unidade": null,
     },
   ],
@@ -638,12 +644,15 @@ exports[`evals S1 — camada 2 (resolução + composição, determinística) > e
   "localizacoes": [],
   "pendente": [
     {
+      "convidados": null,
       "data": null,
+      "espaco": null,
       "horario": null,
       "pessoas": null,
       "servico": "horario_unidades",
       "tema": null,
       "tipo": "endereco",
+      "tipoEvento": null,
       "unidade": null,
     },
   ],
@@ -786,12 +795,15 @@ exports[`evals S1 — camada 2 (resolução + composição, determinística) > f
   "localizacoes": [],
   "pendente": [
     {
+      "convidados": null,
       "data": null,
+      "espaco": null,
       "horario": null,
       "pessoas": null,
       "servico": "horario_unidades",
       "tema": null,
       "tipo": "feriado",
+      "tipoEvento": null,
       "unidade": null,
     },
   ],
@@ -1187,12 +1199,15 @@ exports[`evals S1 — camada 2 (resolução + composição, determinística) > m
   "localizacoes": [],
   "pendente": [
     {
+      "convidados": null,
       "data": "amanhã",
+      "espaco": null,
       "horario": null,
       "pessoas": null,
       "servico": "horario_unidades",
       "tema": null,
       "tipo": "horario_dia",
+      "tipoEvento": null,
       "unidade": null,
     },
   ],
@@ -1462,7 +1477,7 @@ exports[`evals S1 — camada 2 (resolução + composição, determinística) > v
   "localizacoes": [],
   "pendente": [],
   "respondidos": 0,
-  "texto": "Sobre eventos, ainda estou aprendendo e em breve vou conseguir responder por aqui.",
+  "texto": null,
   "validos": 0,
 }
 `;

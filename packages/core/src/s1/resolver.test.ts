@@ -48,7 +48,7 @@ const pequeno: ContextoS1 = { ...ctx, unidades: [asaSul, asaNorte] }
 const SEG_14H = new Date('2026-10-05T14:00:00-03:00')
 const SEX_2230 = new Date('2026-10-09T22:30:00-03:00')
 const s1 = (tipo: ItemExtraido['tipo'], extra: Partial<ItemExtraido> = {}): ItemExtraido =>
-  ({ servico: 'horario_unidades', tipo, unidade: null, data: null, tema: null, pessoas: null, horario: null, ...extra })
+  ({ servico: 'horario_unidades', tipo, unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, ...extra })
 
 describe('resolverS1', () => {
   it('aberto agora com unidade citada', () => {
@@ -157,7 +157,7 @@ describe('resolverS1', () => {
   })
 
   it('serviços ainda não implementados: "em breve", fora do indicador', () => {
-    const r = resolverS1([{ servico: 'cardapio', tipo: null, unidade: null, data: null, tema: null, pessoas: null, horario: null }], ctx, SEG_14H)
+    const r = resolverS1([{ servico: 'cardapio', tipo: null, unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null }], ctx, SEG_14H)
     expect(r.texto).toBe('Sobre o cardápio, ainda estou aprendendo e em breve vou conseguir responder por aqui.')
     expect(r.validos).toBe(0)
   })
