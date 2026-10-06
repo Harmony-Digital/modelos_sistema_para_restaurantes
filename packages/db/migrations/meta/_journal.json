@@ -148,6 +148,13 @@
       "when": 1791244328897,
       "tag": "0020_avisos_grants_coluna",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791246877384,
+      "tag": "0021_avisos_mfa",
+      "breakpoints": true
     }
   ]
 }
