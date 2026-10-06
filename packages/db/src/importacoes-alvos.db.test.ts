@@ -8,11 +8,12 @@ import type { RascunhoCardapio } from '@atd/core/s4'
 import { getTestDb, resetDb, seedRestaurant, seedStaff } from './test-utils.ts'
 import { withRole, withUserContext, type JwtClaims } from './rls.ts'
 import {
-  anexarArquivo, aplicarImportacao, arquivosImportacao, criarImportacaoArquivos, iniciarLeitura, proximoLote, removerArquivo, revisaoImportacao, salvarLote,
+  anexarArquivo, aplicarImportacao, arquivosImportacao, caminhoArquivoImportacao, criarImportacaoArquivos, importacoesParadas, iniciarLeitura,
+  leituraParada, podeAnexar, proximoLote, removerArquivo, revisaoImportacao, salvarLote,
 } from './importacoes-alvos.ts'
 import { concluirIngestao, lerImportacao, listarImportacoes, marcarProcessando, rejeitarImportacao } from './importacoes.ts'
 import {
-  auditLog, eventSpaces, knowledgeDocumentFiles, knowledgeDocuments, knowledgeFacts, menuCategories, menuItems, staff, unitHourExceptions, unitHours, units,
+  auditLog, eventSpaces, knowledgeDocumentFiles, knowledgeDocuments, knowledgeFacts, menuCategories, menuFiles, menuItems, staff, unitHourExceptions, unitHours, units,
 } from './schema/index.ts'
 
 const { db, sql } = getTestDb()
@@ -72,11 +73,14 @@ describe('banco: alvos, modo, lotes e arquivos', () => {
       .rejects.toMatchObject({ cause: { constraint_name: 'knowledge_documents_storage_ck' } })
   })
 
-  it('criar: dono e gerente de todas as unidades; gerente restrito e atendente não; nasce enviado sem arquivos', async () => {
+  it('criar: dono e gerente de todas as unidades; gerente restrito só o cardápio; atendente não; nasce enviado sem arquivos', async () => {
     const c = await cenario()
     const id = idDe(await criarImportacaoArquivos(db, as(c.dono), { alvo: 'informacoes', modo: 'completo' }))
     expect(idDe(await criarImportacaoArquivos(db, as(c.gerente), { alvo: 'cardapio', modo: 'so_precos' }))).not.toBe(id)
     expect(await criarImportacaoArquivos(db, as(c.gerenteU1), { alvo: 'horarios', modo: 'completo' })).toEqual({ ok: false, erro: 'sem_permissao' })
+    // ruling: o gerente restrito envia e lê PDF/foto do cardápio (completo ou só preços), sem confirmar
+    expect((await criarImportacaoArquivos(db, as(c.gerenteU1), { alvo: 'cardapio', modo: 'completo' })).ok).toBe(true)
+    expect((await criarImportacaoArquivos(db, as(c.gerenteU1), { alvo: 'cardapio', modo: 'so_precos' })).ok).toBe(true)
     expect(await criarImportacaoArquivos(db, as(c.atendente, 'aal1'), { alvo: 'horarios', modo: 'completo' })).toEqual({ ok: false, erro: 'sem_permissao' })
     await expect(criarImportacaoArquivos(db, as(c.dono), { alvo: 'espacos', modo: 'so_precos' })).rejects.toThrow()
     const [d] = await db.select().from(knowledgeDocuments).where(eq(knowledgeDocuments.id, id))
@@ -117,8 +121,11 @@ describe('banco: alvos, modo, lotes e arquivos', () => {
     const outro = await seedRestaurant(db)
     expect(await anexarArquivo(db, as(c.dono), id, { ...arq(c, 12), storagePath: `importacoes/${outro.restaurantId}/x.jpg` })).toEqual({ ok: false, erro: 'sem_permissao' })
     expect(await anexarArquivo(db, as(c.atendente, 'aal1'), id, arq(c, 12))).toEqual({ ok: false, erro: 'sem_permissao' })
-    expect(await anexarArquivo(db, as(c.gerenteU1), id, arq(c, 12))).toEqual({ ok: false, erro: 'sem_permissao' })
-    expect(await removerArquivo(db, as(c.gerenteU1), id, 1)).toEqual({ ok: false, erro: 'sem_permissao' })
+    // gerente restrito: só em importação de cardápio (esta é); a de outro alvo é recusada
+    const info = idDe(await criarImportacaoArquivos(db, as(c.dono), { alvo: 'informacoes', modo: 'completo' }))
+    expect(await anexarArquivo(db, as(c.gerenteU1), info, arq(c, 12))).toEqual({ ok: false, erro: 'sem_permissao' })
+    await anexarArquivo(db, as(c.dono), info, arq(c, 12))
+    expect(await removerArquivo(db, as(c.gerenteU1), info, 1)).toEqual({ ok: false, erro: 'sem_permissao' })
     expect(await anexarArquivo(db, as(c.dono), crypto.randomUUID(), arq(c, 12))).toEqual({ ok: false, erro: 'nao_encontrada' })
     // tipo que não é PDF/imagem
     await expect(anexarArquivo(db, as(c.dono), id, { ...arq(c, 13), mime: 'text/csv' })).rejects.toThrow()
@@ -601,7 +608,7 @@ describe('fix round 1', () => {
     expect(await db.select().from(unitHours).where(eq(unitHours.unitId, centro!.id))).toHaveLength(1)
   })
 
-  it('gerente restrito não vê a revisão', async () => {
+  it('gerente restrito não vê a revisão de outros alvos (a do cardápio, sim)', async () => {
     const c = await cenario()
     const id = await comRascunho(c, 'informacoes', { fatos: [fato('Wi-Fi')] })
     expect(await revisaoImportacao(db, as(c.gerenteU1), id)).toBeNull()
@@ -683,5 +690,121 @@ describe('integração do Bloco C (tela)', () => {
     // a tela grava o id da unidade escolhida: aplica
     expect(await aplicarImportacao(db, as(c.dono), idE, { espacos: [{ ...e, unidade: c.u2, capacidadeIncompleta: false }] }))
       .toEqual({ ok: true, valor: { criados: 1, atualizados: 0, ignorados: 0 } })
+  })
+})
+
+describe('onda final da revisão', () => {
+  const item = (nome: string, preco: number | null) => ({ nome, descricao: null, precoCentavos: preco, tags: [], outrosNomes: [], unidade: null, incluir: true })
+
+  it('ruling: gerente restrito envia, lê e revisa o cardápio (completo e só preços), mas não confirma', async () => {
+    const c = await cenario()
+    const r: RascunhoCardapio = { categorias: [{ nome: 'Carnes', itens: [item('Picanha', 5990)] }] }
+    const id = idDe(await criarImportacaoArquivos(db, as(c.gerenteU1), { alvo: 'cardapio', modo: 'completo' }))
+    expect(await anexarArquivo(db, as(c.gerenteU1), id, arq(c, 1))).toEqual({ ok: true, valor: { ordem: 1, descartarCaminho: null } })
+    expect(await anexarArquivo(db, as(c.gerenteU1), id, arq(c, 2))).toMatchObject({ ok: true })
+    expect(await removerArquivo(db, as(c.gerenteU1), id, 2)).toEqual({ ok: true, valor: null })
+    expect(await iniciarLeitura(db, as(c.gerenteU1), id)).toEqual({ ok: true, valor: null })
+    await proximoLote(db, id)
+    await concluirIngestao(db, id, { ok: true, draft: r })
+    expect(await revisaoImportacao(db, as(c.gerenteU1), id)).toMatchObject({ alvo: 'cardapio', modo: 'completo', draft: r })
+    expect(await aplicarImportacao(db, as(c.gerenteU1), id, r)).toEqual({ ok: false, erro: 'sem_permissao' })
+    expect(await db.select().from(menuItems)).toEqual([])
+    // só preços também
+    const sp = idDe(await criarImportacaoArquivos(db, as(c.gerenteU1), { alvo: 'cardapio', modo: 'so_precos' }))
+    await anexarArquivo(db, as(c.gerenteU1), sp, arq(c, 3))
+    expect(await iniciarLeitura(db, as(c.gerenteU1), sp)).toEqual({ ok: true, valor: null })
+    await proximoLote(db, sp)
+    const rs: RascunhoSoPrecos = { itens: [{ nome: 'Picanha', categoria: null, precoCentavos: 6990, incluir: true }] }
+    await concluirIngestao(db, sp, { ok: true, draft: rs })
+    expect(await revisaoImportacao(db, as(c.gerenteU1), sp)).toMatchObject({ alvo: 'cardapio', modo: 'so_precos' })
+    expect(await aplicarImportacao(db, as(c.gerenteU1), sp, rs)).toEqual({ ok: false, erro: 'sem_permissao' })
+    // o dono confirma a do gerente
+    expect((await aplicarImportacao(db, as(c.dono), id, r)).ok).toBe(true)
+  })
+
+  it('I1: leituraParada — na fila com hash ou lendo sem concessão viva há mais de 2 min; nunca recebendo, lendo ou pronta', async () => {
+    const c = await cenario()
+    const recebendo = idDe(await criarImportacaoArquivos(db, as(c.dono), { alvo: 'informacoes', modo: 'completo' }))
+    await anexarArquivo(db, as(c.dono), recebendo, arq(c, 1))
+    expect(await leituraParada(db, as(c.dono), recebendo)).toBe(false)
+    await iniciarLeitura(db, as(c.dono), recebendo)
+    const id = recebendo
+    // enfileirar falhou: segue `enviado` com hash
+    expect(await leituraParada(db, as(c.dono), id)).toBe(true)
+    expect(await importacoesParadas(db)).toEqual([id])
+    // atendente e gerente restrito (outro alvo) não
+    expect(await leituraParada(db, as(c.atendente, 'aal1'), id)).toBe(false)
+    expect(await leituraParada(db, as(c.gerenteU1), id)).toBe(false)
+    // lendo com a concessão viva: não
+    await proximoLote(db, id)
+    expect(await leituraParada(db, as(c.dono), id)).toBe(false)
+    // concessão vencida (leitor morreu e a fila desistiu): sim
+    await db.update(knowledgeDocuments).set({ loteLendoDesde: dsql`now() - interval '8 minutes'` }).where(eq(knowledgeDocuments.id, id))
+    expect(await leituraParada(db, as(c.dono), id)).toBe(true)
+    // concessão livre (lote salvo) e o passo seguinte não andou há mais de 2 min: sim; recente: não
+    await db.update(knowledgeDocuments).set({ loteLendoDesde: null }).where(eq(knowledgeDocuments.id, id))
+    expect(await leituraParada(db, as(c.dono), id)).toBe(false)
+    await sql.begin(async (tx) => {
+      await tx`set local session_replication_role = replica`
+      await tx`update knowledge_documents set updated_at = now() - interval '3 minutes' where id = ${id}`
+    })
+    expect(await leituraParada(db, as(c.dono), id)).toBe(true)
+    expect(await importacoesParadas(db)).toEqual([id])
+    // pronta: não
+    await concluirIngestao(db, id, { ok: true, draft: { fatos: [fato('Wi-Fi')] } })
+    expect(await leituraParada(db, as(c.dono), id)).toBe(false)
+    expect(await importacoesParadas(db)).toEqual([])
+    // gerente restrito no cardápio: sim
+    const card = idDe(await criarImportacaoArquivos(db, as(c.gerenteU1), { alvo: 'cardapio', modo: 'completo' }))
+    await anexarArquivo(db, as(c.gerenteU1), card, arq(c, 2))
+    await iniciarLeitura(db, as(c.gerenteU1), card)
+    expect(await leituraParada(db, as(c.gerenteU1), card)).toBe(true)
+    // o worker (sem RLS do painel) também enxerga
+    expect(await withRole(db, 'worker_app', (tx) => importacoesParadas(tx))).toEqual([card])
+  })
+
+  it('Minor 5: podeAnexar confere permissão, estado e limite antes do upload', async () => {
+    const c = await cenario()
+    const id = idDe(await criarImportacaoArquivos(db, as(c.dono), { alvo: 'horarios', modo: 'completo' }))
+    expect(await podeAnexar(db, as(c.dono), id)).toEqual({ ok: true, valor: null })
+    expect(await podeAnexar(db, as(c.gerenteU1), id)).toEqual({ ok: false, erro: 'sem_permissao' })
+    expect(await podeAnexar(db, as(c.atendente, 'aal1'), id)).toEqual({ ok: false, erro: 'sem_permissao' })
+    expect(await podeAnexar(db, as(c.dono), crypto.randomUUID())).toEqual({ ok: false, erro: 'nao_encontrada' })
+    for (let n = 1; n <= 10; n++) await anexarArquivo(db, as(c.dono), id, arq(c, n))
+    expect(await podeAnexar(db, as(c.dono), id)).toEqual({ ok: false, erro: 'limite_arquivos' })
+    await removerArquivo(db, as(c.dono), id, 1)
+    await iniciarLeitura(db, as(c.dono), id)
+    expect(await podeAnexar(db, as(c.dono), id)).toEqual({ ok: false, erro: 'ja_iniciada' })
+    const card = idDe(await criarImportacaoArquivos(db, as(c.dono), { alvo: 'cardapio', modo: 'completo' }))
+    expect(await podeAnexar(db, as(c.gerenteU1), card)).toEqual({ ok: true, valor: null })
+  })
+
+  it('I3: confirmar o cardápio usando um dos arquivos como cardápio de envio (mesma transação, auditado)', async () => {
+    const c = await cenario()
+    const r: RascunhoCardapio = { categorias: [{ nome: 'Carnes', itens: [item('Picanha', 5990)] }] }
+    const id = idDe(await criarImportacaoArquivos(db, as(c.dono), { alvo: 'cardapio', modo: 'completo' }))
+    await anexarArquivo(db, as(c.dono), id, arq(c, 1, 'application/pdf'))
+    await anexarArquivo(db, as(c.dono), id, arq(c, 2))
+    await iniciarLeitura(db, as(c.dono), id)
+    await proximoLote(db, id)
+    await concluirIngestao(db, id, { ok: true, draft: r })
+    expect(await caminhoArquivoImportacao(db, as(c.dono), id, 2)).toBe(caminho(c, 'f2.jpg'))
+    expect(await caminhoArquivoImportacao(db, as(c.atendente, 'aal1'), id, 2)).toBeNull()
+    expect(await caminhoArquivoImportacao(db, as(c.dono), id, 9)).toBeNull()
+    // arquivo que não existe: nada muda
+    expect(await aplicarImportacao(db, as(c.dono), id, r, { arquivoDeEnvio: { ordem: 9, unitId: null } })).toEqual({ ok: false, erro: 'arquivo_invalido' })
+    expect(await db.select().from(menuItems)).toEqual([])
+    expect(await aplicarImportacao(db, as(c.dono), id, r, { arquivoDeEnvio: { ordem: 2, unitId: c.u2 } }))
+      .toEqual({ ok: true, valor: { criados: 1, atualizados: 0, ignorados: 0 } })
+    expect(await db.select().from(menuFiles)).toEqual([expect.objectContaining({
+      unitId: c.u2, storagePath: `cardapio/${c.restaurantId}/f2.jpg`, mime: 'image/jpeg', tamanho: 1002, sha256: sha(2), ativo: true,
+      titulo: expect.stringMatching(/^Cardápio importado em \d{2}\/\d{2}\/\d{4}$/),
+    })])
+    const [log] = await db.select().from(auditLog).where(eq(auditLog.acao, 'importacao.aplicada'))
+    expect(log!.diff).toEqual({ alvo: 'cardapio', modo: 'completo', criados: 1, atualizados: 0, ignorados: 0, arquivoDeEnvio: true })
+    // outros alvos/modos não têm arquivo de envio
+    const sp = await comRascunho(c, 'cardapio', { itens: [{ nome: 'Picanha', categoria: null, precoCentavos: 6990, incluir: true }] }, 'so_precos', 3)
+    expect(await aplicarImportacao(db, as(c.dono), sp, { itens: [{ nome: 'Picanha', categoria: null, precoCentavos: 6990, incluir: true }] }, { arquivoDeEnvio: { ordem: 1, unitId: null } }))
+      .toEqual({ ok: false, erro: 'arquivo_invalido' })
   })
 })

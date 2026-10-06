@@ -139,7 +139,8 @@ export type OpcoesAplicar = { usarComoArquivoDeEnvio: boolean; unitIdArquivo: st
 export type ItemIgnorado = { categoria: string; nome: string; motivo: 'unidade_desconhecida' }
 export type ResultadoAplicar =
   | ResultadoPainel<{ criados: number; atualizados: number; ignorados: ItemIgnorado[] }>
-  | { ok: false; erro: 'ja_aplicado' | 'arquivo_invalido' }
+  /** `nao_pronta`: ainda não lida, com erro ou descartada */
+  | { ok: false; erro: 'ja_aplicado' | 'nao_pronta' | 'arquivo_invalido' }
 
 /** Tipos aceitos como arquivo de cardápio para envio (iguais ao check de menu_files). */
 export const MIMES_ARQUIVO_CARDAPIO = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'] as const
@@ -150,6 +151,8 @@ export const MIMES_ARQUIVO_CARDAPIO = ['application/pdf', 'image/jpeg', 'image/p
 export const caminhoArquivoDeEnvio = (storagePath: string) => storagePath.replace(/^importacoes\//, 'cardapio/')
 const dataBr = (d: Date) =>
   new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric' }).format(d)
+/** O nome original não é guardado (o caminho no Storage é gerado): título com a data da importação. */
+export const tituloArquivoImportado = () => `Cardápio importado em ${dataBr(new Date())}`
 
 /**
  * Confirmação humana do rascunho (PRD I10), numa transação: trava a importação, exige `rascunho`, cria categorias e
@@ -179,10 +182,14 @@ export async function aplicarRascunho(
       .from(knowledgeDocuments)
       .where(eq(knowledgeDocuments.id, id))
       .for('update')
-    if (!doc) return (await existe(tx, id)) ? { ok: false, erro: 'ja_aplicado' } : falha('nao_encontrada')
+    // a trava passa pela policy de UPDATE (rascunho/erro): fora dela, o status diz o motivo
+    if (!doc) {
+      const atual = await statusDe(tx, id)
+      return atual === null ? falha('nao_encontrada') : { ok: false, erro: atual === 'aprovado' ? 'ja_aplicado' : 'nao_pronta' }
+    }
     // outros alvos/modos (Etapa 07) se aplicam por `aplicarImportacao`
     if (doc.alvo !== 'cardapio' || doc.modo !== 'completo') return falha('nao_encontrada')
-    if (doc.status !== 'rascunho') return { ok: false, erro: 'ja_aplicado' }
+    if (doc.status !== 'rascunho') return { ok: false, erro: doc.status === 'aprovado' ? 'ja_aplicado' : 'nao_pronta' }
     // arquivo de envio só de PDF/imagem enviado (CSV e vários arquivos não têm um): recusa antes de mexer no cardápio
     const arquivo = doc.storagePath !== null && doc.mime !== null && doc.tamanho !== null && doc.sha256 !== null
       && (MIMES_ARQUIVO_CARDAPIO as readonly string[]).includes(doc.mime)
@@ -193,9 +200,8 @@ export async function aplicarRascunho(
     const contagem = await aplicarNoCardapio(tx, doc.restaurantId, r)
 
     if (opcoes.usarComoArquivoDeEnvio && arquivo !== null) {
-      // o nome original não é guardado (o caminho no Storage é gerado): título com a data da importação
       await gravarArquivo(tx, {
-        unitId: opcoes.unitIdArquivo, titulo: `Cardápio importado em ${dataBr(new Date())}`, storagePath: caminhoArquivoDeEnvio(arquivo.storagePath),
+        unitId: opcoes.unitIdArquivo, titulo: tituloArquivoImportado(), storagePath: caminhoArquivoDeEnvio(arquivo.storagePath),
         mime: arquivo.mime, tamanho: arquivo.tamanho, sha256: arquivo.sha256,
       })
     }
@@ -216,9 +222,9 @@ export async function aplicarRascunho(
   }), { menu_files_storage_path_ck: 'sem_permissao' })
 }
 
-async function existe(tx: Tx, id: string): Promise<boolean> {
-  const [r] = await tx.select({ id: knowledgeDocuments.id }).from(knowledgeDocuments).where(eq(knowledgeDocuments.id, id))
-  return r !== undefined
+async function statusDe(tx: Tx, id: string): Promise<StatusImportacao | null> {
+  const [r] = await tx.select({ status: knowledgeDocuments.status }).from(knowledgeDocuments).where(eq(knowledgeDocuments.id, id))
+  return r?.status ?? null
 }
 
 /** Aplica o rascunho do cardápio completo (também usado por `aplicarImportacao`). Só dentro da transação travada. */

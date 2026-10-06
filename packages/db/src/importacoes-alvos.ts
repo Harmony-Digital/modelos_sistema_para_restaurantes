@@ -5,11 +5,13 @@ import type {
   RascunhoCardapioImportacao, RascunhoEspacos, RascunhoHorarios, RascunhoInformacoes, RascunhoSoPrecos,
 } from '@atd/core/importacao'
 import type { Db } from './client.ts'
-import { aplicarNoCardapio, PRAZO_PROCESSANDO, type StatusImportacao } from './importacoes.ts'
+import {
+  aplicarNoCardapio, caminhoArquivoDeEnvio, MIMES_ARQUIVO_CARDAPIO, PRAZO_PROCESSANDO, tituloArquivoImportado, type StatusImportacao,
+} from './importacoes.ts'
 import { PRAZO_CONCESSAO_LOTE } from './queue.ts'
 import { validarRascunho, type AlvoImportacao, type ModoImportacao, type RascunhoDoAlvo } from './importacoes-rascunho.ts'
-import { falha, ok, registrarAuditoria, semPermissaoVira, type ErroPainel, type ResultadoPainel } from './painel-comum.ts'
-import { podeEditarCardapioGeral } from './painel-cardapio.ts'
+import { exigirPapel, falha, ok, registrarAuditoria, semPermissaoVira, type ErroPainel, type ResultadoPainel } from './painel-comum.ts'
+import { gravarArquivo, podeEditarCardapioGeral } from './painel-cardapio.ts'
 import { withUserContext, type JwtClaims, type Tx } from './rls.ts'
 import { restaurants, units } from './schema/restaurant.ts'
 import { knowledgeFacts, unitHourExceptions, unitHours } from './schema/s1.ts'
@@ -25,8 +27,16 @@ export type ArquivoImportacao = { ordem: number; storagePath: string; mime: stri
  * Importação por alvo com vários arquivos (Etapa 07). Ciclo: `criarImportacaoArquivos` (enviado, sem arquivos) →
  * `anexarArquivo`/`removerArquivo` (até 10) → `iniciarLeitura` (grava o hash do conjunto; dedup) → worker
  * (`proximoLote`/`salvarLote`/`concluirIngestao`) → `revisaoImportacao` → `aplicarImportacao` (I10).
- * Permissão: dono, ou gerente que acessa todas as unidades (igual ao cardápio geral).
+ * Permissão: dono, ou gerente que acessa todas as unidades (igual ao cardápio geral). O cardápio (completo ou só
+ * preços) também pelo gerente restrito a unidades, que envia, lê e revisa como na Etapa 05, mas não confirma.
  */
+
+const GESTAO = ['dono', 'gerente'] as const
+
+/** Quem envia, lê e revisa importações do alvo (confirmar exige sempre `podeEditarCardapioGeral`). */
+async function podeImportarAlvo(tx: Tx, alvo: AlvoImportacao): Promise<boolean> {
+  return alvo === 'cardapio' ? exigirPapel(tx, GESTAO) : podeEditarCardapioGeral(tx)
+}
 
 export type ErroArquivos = 'limite_arquivos' | 'ja_iniciada'
 
@@ -37,7 +47,7 @@ export function criarImportacaoArquivos(
   v: { alvo: AlvoImportacao; modo: ModoImportacao },
 ): Promise<ResultadoPainel<{ id: string }>> {
   return semPermissaoVira(() => withUserContext(db, claims, async (tx) => {
-    if (!(await podeEditarCardapioGeral(tx))) return falha('sem_permissao')
+    if (!(await podeImportarAlvo(tx, v.alvo))) return falha('sem_permissao')
     // SQL explícito: authenticated só tem INSERT nas colunas permitidas (0027/0041)
     const [d] = await tx.execute<{ id: string; restaurant_id: string }>(sql`
       insert into public.knowledge_documents (restaurant_id, alvo, modo, origem, status, enviado_por)
@@ -57,12 +67,16 @@ type DocRecebendo = { id: string; restaurantId: string; alvo: AlvoImportacao; mo
  * Importação visível, travada e ainda recebendo arquivos (enviado, vários arquivos, sem hash). A trava passa pela
  * policy `gestao_iniciar`: quem chega depois do início não trava nada.
  */
-async function travarRecebendo(tx: Tx, id: string): Promise<DocRecebendo | 'nao_encontrada' | 'ja_iniciada'> {
+async function travarRecebendo(tx: Tx, id: string): Promise<DocRecebendo | 'nao_encontrada' | 'ja_iniciada' | 'sem_permissao'> {
   const [d] = await tx
-    .select({ status: knowledgeDocuments.status, sha256: knowledgeDocuments.sha256, storagePath: knowledgeDocuments.storagePath, origem: knowledgeDocuments.origem })
+    .select({
+      status: knowledgeDocuments.status, sha256: knowledgeDocuments.sha256, storagePath: knowledgeDocuments.storagePath, origem: knowledgeDocuments.origem,
+      alvo: knowledgeDocuments.alvo,
+    })
     .from(knowledgeDocuments)
     .where(eq(knowledgeDocuments.id, id))
   if (!d) return 'nao_encontrada'
+  if (!(await podeImportarAlvo(tx, d.alvo))) return 'sem_permissao'
   if (d.origem !== 'arquivo' || d.storagePath !== null || d.status !== 'enviado' || d.sha256 !== null) return 'ja_iniciada'
   const [t] = await tx
     .select({ id: knowledgeDocuments.id, restaurantId: knowledgeDocuments.restaurantId, alvo: knowledgeDocuments.alvo, modo: knowledgeDocuments.modo })
@@ -90,9 +104,9 @@ export function anexarArquivo(
   a: { storagePath: string; mime: string; tamanho: number; sha256: string },
 ): Promise<ResultadoAnexar> {
   return semPermissaoVira<ResultadoAnexar>(() => withUserContext(db, claims, async (tx) => {
-    if (!(await podeEditarCardapioGeral(tx))) return falha('sem_permissao')
+    if (!(await exigirPapel(tx, GESTAO))) return falha('sem_permissao')
     const doc = await travarRecebendo(tx, importacaoId)
-    if (doc === 'nao_encontrada') return falha('nao_encontrada')
+    if (doc === 'nao_encontrada' || doc === 'sem_permissao') return falha(doc)
     if (doc === 'ja_iniciada') return { ok: false, erro: 'ja_iniciada' }
     const atuais = await tx
       .select({ ordem: knowledgeDocumentFiles.ordem, sha256: knowledgeDocumentFiles.sha256, storagePath: knowledgeDocumentFiles.storagePath })
@@ -110,6 +124,29 @@ export function anexarArquivo(
   }))
 }
 
+/**
+ * Conferência barata antes de subir o arquivo ao Storage (sem trava): permissão no alvo, importação ainda recebendo
+ * arquivos e com menos de 10. `anexarArquivo` confere de novo com a trava (corrida entre abas).
+ */
+export function podeAnexar(db: Db, claims: JwtClaims, importacaoId: string): Promise<ResultadoPainel | { ok: false; erro: ErroArquivos }> {
+  return withUserContext(db, claims, async (tx): Promise<ResultadoPainel | { ok: false; erro: ErroArquivos }> => {
+    if (!(await exigirPapel(tx, GESTAO))) return falha('sem_permissao')
+    const [d] = await tx
+      .select({
+        status: knowledgeDocuments.status, sha256: knowledgeDocuments.sha256, storagePath: knowledgeDocuments.storagePath, origem: knowledgeDocuments.origem,
+        alvo: knowledgeDocuments.alvo,
+        arquivos: sql<number>`(select count(*) from public.knowledge_document_files f where f.importacao_id = "knowledge_documents"."id")::int`,
+      })
+      .from(knowledgeDocuments)
+      .where(eq(knowledgeDocuments.id, importacaoId))
+    if (!d) return falha('nao_encontrada')
+    if (!(await podeImportarAlvo(tx, d.alvo))) return falha('sem_permissao')
+    if (d.origem !== 'arquivo' || d.storagePath !== null || d.status !== 'enviado' || d.sha256 !== null) return { ok: false, erro: 'ja_iniciada' }
+    if (d.arquivos >= MAX_ARQUIVOS_IMPORTACAO) return { ok: false, erro: 'limite_arquivos' }
+    return ok(null)
+  })
+}
+
 /** Tira o arquivo da posição `ordem` (antes de ler); os seguintes sobem uma posição. */
 export function removerArquivo(
   db: Db,
@@ -118,9 +155,9 @@ export function removerArquivo(
   ordem: number,
 ): Promise<ResultadoPainel | { ok: false; erro: 'ja_iniciada' }> {
   return semPermissaoVira<ResultadoPainel | { ok: false; erro: 'ja_iniciada' }>(() => withUserContext(db, claims, async (tx) => {
-    if (!(await podeEditarCardapioGeral(tx))) return falha('sem_permissao')
+    if (!(await exigirPapel(tx, GESTAO))) return falha('sem_permissao')
     const doc = await travarRecebendo(tx, importacaoId)
-    if (doc === 'nao_encontrada') return falha('nao_encontrada')
+    if (doc === 'nao_encontrada' || doc === 'sem_permissao') return falha(doc)
     if (doc === 'ja_iniciada') return { ok: false, erro: 'ja_iniciada' }
     const apagados = await tx
       .delete(knowledgeDocumentFiles)
@@ -155,6 +192,17 @@ export function arquivosImportacao(
   )
 }
 
+/** Caminho no Storage do arquivo `ordem` da importação (para copiar o arquivo de envio); sem acesso ⇒ null. */
+export function caminhoArquivoImportacao(db: Db, claims: JwtClaims, importacaoId: string, ordem: number): Promise<string | null> {
+  return withUserContext(db, claims, async (tx) => {
+    const [f] = await tx
+      .select({ storagePath: knowledgeDocumentFiles.storagePath })
+      .from(knowledgeDocumentFiles)
+      .where(and(eq(knowledgeDocumentFiles.importacaoId, importacaoId), eq(knowledgeDocumentFiles.ordem, ordem)))
+    return f?.storagePath ?? null
+  })
+}
+
 /** Hash do conjunto: sha256 dos sha256 dos arquivos, ordenados e unidos por vírgula (a ordem de envio não importa). */
 export const hashDoConjunto = (shas: readonly string[]) => createHash('sha256').update([...shas].sort().join(',')).digest('hex')
 
@@ -171,9 +219,9 @@ export type ResultadoIniciar =
  */
 export function iniciarLeitura(db: Db, claims: JwtClaims, importacaoId: string): Promise<ResultadoIniciar> {
   return semPermissaoVira<ResultadoIniciar>(() => withUserContext(db, claims, async (tx): Promise<ResultadoIniciar> => {
-    if (!(await podeEditarCardapioGeral(tx))) return falha('sem_permissao')
+    if (!(await exigirPapel(tx, GESTAO))) return falha('sem_permissao')
     const doc = await travarRecebendo(tx, importacaoId)
-    if (doc === 'nao_encontrada') return falha('nao_encontrada')
+    if (doc === 'nao_encontrada' || doc === 'sem_permissao') return falha(doc)
     if (doc === 'ja_iniciada') return { ok: false, erro: 'ja_iniciada' }
     const arquivos = await tx
       .select({ sha256: knowledgeDocumentFiles.sha256 })
@@ -215,6 +263,36 @@ export function iniciarLeitura(db: Db, claims: JwtClaims, importacaoId: string):
     })
     return ok(null)
   }))
+}
+
+/** Passo seguinte que não andou depois de um lote salvo (fila perdida): mais que isso sem mudança ⇒ parada. */
+export const PRAZO_PASSO_PARADO = '2 minutes'
+
+/**
+ * Leitura de vários arquivos já iniciada sem ninguém lendo: `enviado` com o hash (o enfileiramento falhou) ou
+ * `processando` com a concessão do lote vencida (o leitor morreu e a fila desistiu) ou livre há mais de
+ * `PRAZO_PASSO_PARADO` (o passo seguinte se perdeu). Reenfileirar é seguro: a chave do job deduplica e
+ * `proximoLote` só entrega o lote com a concessão livre ou vencida.
+ */
+const parada = sql<boolean>`coalesce(${knowledgeDocuments.origem} = 'arquivo' and ${knowledgeDocuments.storagePath} is null
+  and ${knowledgeDocuments.sha256} is not null and (${knowledgeDocuments.status} = 'enviado'
+  or (${knowledgeDocuments.status} = 'processando' and (${knowledgeDocuments.loteLendoDesde} < now() - ${PRAZO_CONCESSAO_LOTE}::interval
+    or (${knowledgeDocuments.loteLendoDesde} is null and ${knowledgeDocuments.updatedAt} < now() - ${PRAZO_PASSO_PARADO}::interval)))), false)`
+
+/** O painel pode reenfileirar a leitura desta importação ("Tentar de novo", reenvio dos mesmos arquivos)? */
+export function leituraParada(db: Db, claims: JwtClaims, importacaoId: string): Promise<boolean> {
+  return withUserContext(db, claims, async (tx) => {
+    if (!(await exigirPapel(tx, GESTAO))) return false
+    const [d] = await tx.select({ alvo: knowledgeDocuments.alvo, parada }).from(knowledgeDocuments).where(eq(knowledgeDocuments.id, importacaoId))
+    return d !== undefined && d.parada && (await podeImportarAlvo(tx, d.alvo))
+  })
+}
+
+/** Importações paradas (worker, no boot): reenfileiradas para seguir de onde pararam. */
+export async function importacoesParadas(db: Db | Tx, limite = 100): Promise<string[]> {
+  const rs = await db.select({ id: knowledgeDocuments.id }).from(knowledgeDocuments).where(parada)
+    .orderBy(asc(knowledgeDocuments.createdAt)).limit(limite)
+  return rs.map((r) => r.id)
 }
 
 // ============ worker (job document.ingest, um lote por execução) ============
@@ -459,8 +537,6 @@ export type RevisaoImportacao = BaseRevisao & (
  */
 export function revisaoImportacao(db: Db, claims: JwtClaims, id: string): Promise<RevisaoImportacao | null> {
   return withUserContext(db, claims, async (tx) => {
-    // permissão igual à de aplicar: gerente restrito a unidades não revisa
-    if (!(await podeEditarCardapioGeral(tx))) return null
     const [d] = await tx
       .select({
         id: knowledgeDocuments.id, alvo: knowledgeDocuments.alvo, modo: knowledgeDocuments.modo, status: knowledgeDocuments.status,
@@ -469,7 +545,8 @@ export function revisaoImportacao(db: Db, claims: JwtClaims, id: string): Promis
       })
       .from(knowledgeDocuments)
       .where(eq(knowledgeDocuments.id, id))
-    if (!d) return null
+    // gerente restrito a unidades revisa só o cardápio (sem confirmar); atendente não vê (RLS)
+    if (!d || !(await podeImportarAlvo(tx, d.alvo))) return null
     const base: BaseRevisao = { id: d.id, status: d.status, erro: d.erro, loteAtual: d.loteAtual, lotesTotal: d.lotesTotal, criadoEm: d.criadoEm }
     const r = d.draft == null ? null : validarRascunho(d.alvo, d.modo, d.draft)
     switch (d.alvo) {
@@ -502,8 +579,16 @@ export function revisaoImportacao(db: Db, claims: JwtClaims, id: string): Promis
 
 // ---- aplicação ----
 type Contagem = { criados: number; atualizados: number; ignorados: number }
-/** `ja_aplicado`: já aprovada; `nao_pronta`: ainda sem rascunho (recebendo arquivos, lendo), com erro ou descartada. */
-export type ErroAplicarImportacao = 'ja_aplicado' | 'nao_pronta' | 'rascunho_invalido' | 'unidade_nao_escolhida'
+/**
+ * `ja_aplicado`: já aprovada; `nao_pronta`: ainda sem rascunho (recebendo arquivos, lendo), com erro ou descartada;
+ * `arquivo_invalido`: arquivo de envio fora do cardápio completo ou que não está na importação.
+ */
+export type ErroAplicarImportacao = 'ja_aplicado' | 'nao_pronta' | 'rascunho_invalido' | 'unidade_nao_escolhida' | 'arquivo_invalido'
+/**
+ * Cardápio completo: um dos arquivos da importação (`ordem`) vira o cardápio para enviar aos clientes (como na Etapa
+ * 05), em `unitId` ou em todas (null). Quem chama já copiou o objeto para o bucket `cardapio`.
+ */
+export type OpcoesAplicarImportacao = { arquivoDeEnvio?: { ordem: number; unitId: string | null } | null }
 export type ResultadoAplicarImportacao = ResultadoPainel<Contagem> | { ok: false; erro: ErroAplicarImportacao }
 
 /**
@@ -512,7 +597,13 @@ export type ResultadoAplicarImportacao = ResultadoPainel<Contagem> | { ok: false
  * só alvo e contagens. Clique duplo/dois gerentes ⇒ a segunda vê `ja_aplicado`. Horário ou espaço marcado sem
  * unidade reconhecida ⇒ `unidade_nao_escolhida` e nada muda.
  */
-export function aplicarImportacao(db: Db, claims: JwtClaims, id: string, rascunho: unknown): Promise<ResultadoAplicarImportacao> {
+export function aplicarImportacao(
+  db: Db,
+  claims: JwtClaims,
+  id: string,
+  rascunho: unknown,
+  opcoes: OpcoesAplicarImportacao = {},
+): Promise<ResultadoAplicarImportacao> {
   return semPermissaoVira<ResultadoAplicarImportacao, ErroPainel>(() => withUserContext(db, claims, async (tx): Promise<ResultadoAplicarImportacao> => {
     if (!(await podeEditarCardapioGeral(tx))) return falha('sem_permissao')
     // a policy de UPDATE só enxerga rascunho/erro: quem chega depois de outra aplicação não trava nada
@@ -531,9 +622,27 @@ export function aplicarImportacao(db: Db, claims: JwtClaims, id: string, rascunh
     if (doc.status !== 'rascunho') return naoRascunho(doc.status)
     const r = validarRascunho(doc.alvo, doc.modo, rascunho)
     if (r === null) return { ok: false, erro: 'rascunho_invalido' }
+    // arquivo de envio: só no cardápio completo e de um arquivo desta importação; recusa antes de mexer no cadastro
+    const envio = opcoes.arquivoDeEnvio ?? null
+    let arquivo: { storagePath: string; mime: string; tamanho: number; sha256: string } | null = null
+    if (envio !== null) {
+      if (r.alvo !== 'cardapio' || r.modo !== 'completo') return { ok: false, erro: 'arquivo_invalido' }
+      const [f] = await tx
+        .select({ storagePath: knowledgeDocumentFiles.storagePath, mime: knowledgeDocumentFiles.mime, tamanho: knowledgeDocumentFiles.tamanho, sha256: knowledgeDocumentFiles.sha256 })
+        .from(knowledgeDocumentFiles)
+        .where(and(eq(knowledgeDocumentFiles.importacaoId, id), eq(knowledgeDocumentFiles.ordem, envio.ordem)))
+      if (!f || !(MIMES_ARQUIVO_CARDAPIO as readonly string[]).includes(f.mime)) return { ok: false, erro: 'arquivo_invalido' }
+      arquivo = f
+    }
 
     const contagem = await aplicarNoAlvo(tx, doc.restaurantId, r)
     if (contagem === 'unidade_nao_escolhida') return { ok: false, erro: 'unidade_nao_escolhida' }
+    if (arquivo !== null) {
+      await gravarArquivo(tx, {
+        unitId: envio!.unitId, titulo: tituloArquivoImportado(), storagePath: caminhoArquivoDeEnvio(arquivo.storagePath),
+        mime: arquivo.mime, tamanho: arquivo.tamanho, sha256: arquivo.sha256,
+      })
+    }
 
     await tx
       .update(knowledgeDocuments)
@@ -541,10 +650,10 @@ export function aplicarImportacao(db: Db, claims: JwtClaims, id: string, rascunh
       .where(eq(knowledgeDocuments.id, id))
     await registrarAuditoria(tx, claims, {
       restaurantId: doc.restaurantId, acao: 'importacao.aplicada', entidade: 'knowledge_document', entidadeId: id,
-      diff: { alvo: doc.alvo, modo: doc.modo, ...contagem },
+      diff: { alvo: doc.alvo, modo: doc.modo, ...contagem, ...(arquivo !== null ? { arquivoDeEnvio: true } : {}) },
     })
     return ok(contagem)
-  }))
+  }), { menu_files_storage_path_ck: 'sem_permissao' })
 }
 
 async function aplicarNoAlvo(tx: Tx, restaurantId: string, r: RascunhoDoAlvo): Promise<Contagem | 'unidade_nao_escolhida'> {

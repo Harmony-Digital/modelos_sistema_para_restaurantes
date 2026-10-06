@@ -247,7 +247,7 @@ describe('aplicarRascunho', () => {
     expect(Object.fromEntries(its.map((i) => [i.nome, i.ordem]))).toEqual({ Picanha: 7, Alcatra: 8, Cupim: 9 })
   })
 
-  it('segunda aplicação ⇒ ja_aplicado; rejeitada ⇒ ja_aplicado', async () => {
+  it('segunda aplicação ⇒ ja_aplicado; rejeitada ou ainda não lida ⇒ nao_pronta', async () => {
     const c = await cenario()
     const id = idDe(await csv(c))
     expect((await aplicarRascunho(db, as(c.dono), id, RASCUNHO, SEM_ARQUIVO)).ok).toBe(true)
@@ -255,11 +255,11 @@ describe('aplicarRascunho', () => {
     const outra = idDe(await csv(c))
     expect(await rejeitarImportacao(db, as(c.dono), outra)).toEqual({ ok: true, valor: null })
     expect((await lerImportacao(db, as(c.dono), outra))!.status).toBe('rejeitado')
-    expect(await aplicarRascunho(db, as(c.dono), outra, RASCUNHO, SEM_ARQUIVO)).toEqual({ ok: false, erro: 'ja_aplicado' })
+    expect(await aplicarRascunho(db, as(c.dono), outra, RASCUNHO, SEM_ARQUIVO)).toEqual({ ok: false, erro: 'nao_pronta' })
     expect(await rejeitarImportacao(db, as(c.dono), id)).toEqual({ ok: false, erro: 'nao_encontrada' })
     // enviado (ainda não lido) não aplica
     const env = idDe(await arquivo(c))
-    expect(await aplicarRascunho(db, as(c.dono), env, RASCUNHO, SEM_ARQUIVO)).toEqual({ ok: false, erro: 'ja_aplicado' })
+    expect(await aplicarRascunho(db, as(c.dono), env, RASCUNHO, SEM_ARQUIVO)).toEqual({ ok: false, erro: 'nao_pronta' })
     expect(await aplicarRascunho(db, as(c.dono), crypto.randomUUID(), RASCUNHO, SEM_ARQUIVO)).toEqual({ ok: false, erro: 'nao_encontrada' })
   })
 
