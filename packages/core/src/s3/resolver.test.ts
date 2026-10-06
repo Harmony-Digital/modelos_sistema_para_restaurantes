@@ -502,6 +502,21 @@ describe('resolverS3 — mudança de pedido em andamento (correção da homologa
     expect(ambiguo.texto).toBe(MUDANCA)
   })
 
+  it('dita como mudança de unidade (I4): pedido em outra unidade ⇒ equipe + observação "unidade X", sem pedido novo', () => {
+    const r = resolverS3([ped({ unidade: 'asa norte', tema: 'na verdade quero fazer na asa norte' })], CONTEXTO, ESPACOS, SEG_14H, [p1])
+    expect(r.texto).toBe(MUDANCA)
+    expect(r.acoes).toEqual([observar('p1', 'Cliente pediu: unidade Asa Norte')])
+    expect(r.handoff).toBe(true)
+    expect(r.perguntar).toBeNull()
+    expect(r.pendenteUnidade).toEqual([])
+    // vários pedidos, nenhum na unidade citada: chama a equipe sem observação
+    const p2 = pedido('p2', 'u-lago-sul', '2026-10-20')
+    const varios = resolverS3([ped({ unidade: 'asa norte', tema: 'na verdade' })], CONTEXTO, ESPACOS, SEG_14H, [p1, p2])
+    expect(varios.acoes).toEqual([])
+    expect(varios.handoff).toBe(true)
+    expect(varios.texto).toBe(MUDANCA)
+  })
+
   it('dita como mudança sem pedido em andamento: segue como pedido novo', () => {
     const r = resolverS3([completo({ tema: 'na verdade', espaco: '*' })], CONTEXTO, ESPACOS, SEG_14H, [])
     expect(r.acoes).toEqual([registrar()])

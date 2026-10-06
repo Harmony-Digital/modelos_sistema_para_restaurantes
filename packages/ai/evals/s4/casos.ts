@@ -144,6 +144,10 @@ export const CASOS: Caso[] = [
   }, { pedidos: [SAB_PED] }),
   c('m07', 'quero trocar a data para 17/10 e ver o preço da picanha', [mudanca({ data: '17/10' }), preco('picanha')], { contem: ['*Picanha na brasa*'], handoff: true }, { pedidos: [SAB_PED], achados: { 1: [PICANHA] } }),
   c('m08', 'mudança sem pedido em andamento: segue como pedido novo', [mudanca({ convidados: 60 })], { handoff: false, lista: true }, { pedidos: [] }),
+  c('m12', 'na verdade quero fazer na asa norte (pedido ativo na asa sul): troca de unidade vai para a equipe', [mudanca({ unidade: 'asa norte' })], {
+    texto: 'Anotei o que você pediu e vou chamar a equipe para ajustar seu pedido de evento.', handoff: true,
+    acoesS3: [{ tipo: 'observar_pedido', pedidoId: 'p-sab', observacao: 'Cliente pediu: unidade Asa Norte' }],
+  }, { pedidos: [SAB_PED] }),
   c('m09', 'vou na asa sul amanhã com 4 e quero ver o cardápio', [{ ...ped(), servico: 'aviso_presenca', tipo: 'registrar', unidade: 'asa sul', data: 'amanhã', pessoas: 4 }, enviar('asa sul')], { contem: ['Anotado', ENVIANDO], acoes: [enviarArquivo(AS)] }, { arquivos: [null] }),
   c('m10', 'quero falar com alguém e ver o cardápio', [{ ...card(null), servico: 'humano' }, enviar()], { contem: [ENVIANDO], acoes: [enviarArquivo(null)] }, { arquivos: [null] }),
   c('m11', 'quanto é a picanha na asa sul e qual o endereço?', [preco('picanha', 'asa sul'), horario('endereco', 'asa sul')], { contem: ['R$ 89,90', 'SCLS 404 Bloco C'] }, { achados: { 0: [PICANHA] } }),

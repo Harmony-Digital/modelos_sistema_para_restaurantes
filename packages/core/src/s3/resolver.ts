@@ -130,8 +130,11 @@ export function resolverItensS3(
   function pedido(item: ItemExtraido): void {
     let u: UnidadeS1 | null = escolhida ?? encontrarUnidade(item.unidade, unidades)
     if (ditaComoMudanca(item.tema)) {
-      // "na verdade são 60": vale para o pedido em andamento (da unidade citada, se houver), sem perguntar o resto
-      const alvos = ativos.filter((p) => !u || p.unitId === u.id)
+      // "na verdade são 60": vale para o pedido em andamento (da unidade citada, se houver), sem perguntar o resto.
+      // Nenhum pedido na unidade citada ("quero fazer na Asa Norte"): é troca de unidade — vale para todos os ativos
+      // (um só recebe a observação "unidade X"; vários, a equipe assume sem observação); nunca vira pedido novo.
+      const daUnidade = ativos.filter((p) => !u || p.unitId === u.id)
+      const alvos = daUnidade.length ? daUnidade : ativos
       if (alvos.length) {
         mudanca(item, alvos)
         return
