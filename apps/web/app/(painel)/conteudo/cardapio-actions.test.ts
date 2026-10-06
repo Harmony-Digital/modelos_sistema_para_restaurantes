@@ -49,7 +49,7 @@ describe('categoria e item', () => {
   it('entrada inválida não chega ao banco', async () => {
     expect(await A.salvarCategoriaAction(null, { nome: '', ordem: '1', ativo: true })).toMatchObject({ ok: false, fieldErrors: { nome: 'Informe o nome' } })
     expect(await A.salvarCategoriaAction('nao-uuid', { nome: 'x', ordem: '1', ativo: true })).toMatchObject({ ok: false })
-    expect(await A.salvarItemAction(null, { ...itemOk, tags: ['picante' as never] })).toMatchObject({ ok: false })
+    expect(await A.salvarItemAction(null, { ...itemOk, tags: ['<b>picante</b>' as never] })).toMatchObject({ ok: false })
     expect(salvarCategoria).not.toHaveBeenCalled()
     expect(salvarItem).not.toHaveBeenCalled()
   })
