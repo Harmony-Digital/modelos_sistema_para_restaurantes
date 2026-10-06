@@ -87,14 +87,12 @@ export function criarAvisoPainel(
     const rows = await tx.execute<{ rid: string | null }>(sql`select app.my_restaurant_id() as rid`)
     const restaurantId = rows[0]?.rid
     if (!restaurantId) return falha('sem_permissao')
-    // a policy de insert recusa (42501) unidade fora do acesso do usuário
-    const [a] = await tx
-      .insert(attendanceNotices)
-      .values({
-        restaurantId, unitId: p.unitId, data: p.data, pessoas: p.pessoas, horarioAprox: p.horarioAprox, nome: p.nome,
-        origem: 'painel', criadoPor: claims.sub,
-      })
-      .returning({ id: attendanceNotices.id })
+    // a policy de insert recusa (42501) unidade fora do acesso do usuário. SQL explícito: authenticated só tem
+    // INSERT nas colunas abaixo (0022) e o insert do Drizzle lista todas as colunas da tabela, com DEFAULT
+    const [a] = await tx.execute<{ id: string }>(sql`
+      insert into public.attendance_notices (restaurant_id, unit_id, data, pessoas, horario_aprox, nome, origem, criado_por)
+      values (${restaurantId}, ${p.unitId}, ${p.data}, ${p.pessoas}, ${p.horarioAprox}, ${p.nome}, 'painel', ${claims.sub})
+      returning id`)
     await registrarAuditoria(tx, claims, {
       restaurantId, acao: 'aviso.criado_painel', entidade: 'attendance_notice', entidadeId: a!.id,
       diff: { unitId: p.unitId, data: p.data, pessoas: p.pessoas, horarioAprox: p.horarioAprox },

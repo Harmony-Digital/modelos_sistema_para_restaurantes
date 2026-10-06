@@ -1,8 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
-import { eq } from 'drizzle-orm'
+import { eq, sql as dsql } from 'drizzle-orm'
 import { getTestDb, resetDb, seedRestaurant, seedStaff } from './test-utils.ts'
 import { withRole, withUserContext, type JwtClaims } from './rls.ts'
-import { attendanceNotices, staff, units } from './schema/index.ts'
+import { attendanceNotices, customers, staff, units } from './schema/index.ts'
 
 const { db, sql } = getTestDb()
 beforeEach(() => resetDb(sql))
@@ -50,6 +50,36 @@ describe('RLS de attendance_notices', () => {
     expect((await withUserContext(db, as(gerente), (tx) => tx.select().from(attendanceNotices))).map((x) => x.unitId)).toEqual([a.unitId])
     await expect(withUserContext(db, as(gerente), (tx) =>
       tx.insert(attendanceNotices).values({ restaurantId: a.restaurantId, unitId: u2!.id, data: '2026-10-10', pessoas: 1, origem: 'painel' }),
+    )).rejects.toMatchObject({ cause: { code: '42501' } })
+  })
+
+  it('insert do painel: só colunas do formulário, origem painel, sem cliente, não simulado e criado_por = o próprio usuário', async () => {
+    const { restaurantId, unitId } = await seedRestaurant(db)
+    const dono = await seedStaff(db, sql, { restaurantId, papel: 'dono' })
+    const outro = await seedStaff(db, sql, { restaurantId, papel: 'gerente' })
+    const base: Record<string, unknown> = { restaurant_id: restaurantId, unit_id: unitId, data: '2026-10-10', pessoas: 2, origem: 'painel', criado_por: dono }
+    // insert com só as colunas pedidas (o do Drizzle lista todas): testa o grant de coluna e a policy separadamente
+    const tenta = (extra: Record<string, unknown>) => {
+      const v = { ...base, ...extra }
+      const cols = Object.keys(v)
+      return withUserContext(db, as(dono), (tx) => tx.execute(dsql`
+        insert into public.attendance_notices (${dsql.join(cols.map((c) => dsql.identifier(c)), dsql`, `)})
+        values (${dsql.join(cols.map((c) => dsql`${v[c]}`), dsql`, `)}) returning id`))
+    }
+    // colunas fora do grant (privilégio de coluna)
+    for (const extra of [{ simulado: true }, { simulado: false }, { status: 'cancelado' }, { anonimizado: true }]) {
+      await expect(tenta(extra), JSON.stringify(extra)).rejects.toMatchObject({ cause: { code: '42501' } })
+    }
+    const [c] = await db.insert(customers).values({ restaurantId, waIdHash: 'h', telefoneCifrado: 'e' }).returning()
+    await expect(tenta({ customer_id: c!.id })).rejects.toMatchObject({ cause: { code: '42501' } })
+    // valores que a policy recusa
+    for (const extra of [{ origem: 'ia' }, { criado_por: outro }, { criado_por: null }]) {
+      await expect(tenta(extra), JSON.stringify(extra)).rejects.toMatchObject({ cause: { code: '42501' } })
+    }
+    expect(await tenta({})).toHaveLength(1)
+    // o insert do Drizzle (todas as colunas, com DEFAULT) não passa mais pelo authenticated
+    await expect(withUserContext(db, as(dono), (tx) =>
+      tx.insert(attendanceNotices).values({ restaurantId, unitId, data: '2026-10-11', pessoas: 1, origem: 'painel', criadoPor: dono, simulado: true }),
     )).rejects.toMatchObject({ cause: { code: '42501' } })
   })
 
