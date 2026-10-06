@@ -84,6 +84,13 @@ const CARDAPIO = [
   },
 ]
 
+// Atendimento humano de demonstração (Etapa 06): equipe de segunda a sexta, das 9h às 18h
+const HORARIO_HUMANO = { dias: Object.fromEntries(['seg', 'ter', 'qua', 'qui', 'sex'].map((d) => [d, [{ inicio: '09:00', fim: '18:00' }]])) }
+const RESPOSTAS_RAPIDAS = [
+  { titulo: 'Boas-vindas', texto: 'Olá! Aqui é da equipe do restaurante. Já vou te ajudar.', ordem: 1 },
+  { titulo: 'Verificando', texto: 'Um instante, por favor: estou verificando e já te respondo.', ordem: 2 },
+]
+
 const { db, sql } = createDb(url)
 try {
   const restaurantId = await getSingleRestaurantId(db)
@@ -131,9 +138,20 @@ try {
         }
       }
     }
+
+    await tx.update(schema.restaurants).set({ horarioAtendimentoHumano: HORARIO_HUMANO }).where(eq(schema.restaurants.id, restaurantId))
+    // respostas rápidas: atualiza pelo título (sem índice único para upsert)
+    const { quickReplies } = schema
+    for (const r of RESPOSTAS_RAPIDAS) {
+      const [atual] = await tx.select({ id: quickReplies.id }).from(quickReplies)
+        .where(and(eq(quickReplies.restaurantId, restaurantId), eq(quickReplies.titulo, r.titulo)))
+      if (atual) await tx.update(quickReplies).set({ ...r, ativo: true }).where(eq(quickReplies.id, atual.id))
+      else await tx.insert(quickReplies).values({ restaurantId, ...r })
+    }
   })
   const itens = CARDAPIO.reduce((n, c) => n + c.itens.length, 0)
-  process.stdout.write(`Demonstração de S1 pronta: ${UNIDADES.length} unidades, ${FATOS.length} informações e cardápio com ${itens} itens.\n`)
+  process.stdout.write(`Demonstração de S1 pronta: ${UNIDADES.length} unidades, ${FATOS.length} informações e cardápio com ${itens} itens, `
+    + `atendimento humano de segunda a sexta (9h às 18h) e ${RESPOSTAS_RAPIDAS.length} respostas rápidas.\n`)
 } finally {
   await sql.end()
 }
