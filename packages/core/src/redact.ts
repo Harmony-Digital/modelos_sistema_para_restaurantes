@@ -32,6 +32,11 @@ export function isValidCpf(digits: string): boolean {
   return calc(9) === Number(digits[9]) && calc(10) === Number(digits[10])
 }
 
+/** Trechos que a redação mascara como `[TELEFONE]` (mesma regra; a captura do contato da reserva valida em cima). */
+export function trechosDeTelefone(text: string): string[] {
+  return text.match(PHONE) ?? []
+}
+
 /** Mascara PII antes de qualquer envio ao LLM (invariante I8). */
 export function redactPii(text: string): string {
   return text

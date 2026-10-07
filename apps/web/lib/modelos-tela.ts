@@ -23,7 +23,6 @@ export const ROTULOS_MODELO: Record<ChaveModelo, { titulo: string; quando: strin
   em_breve: { titulo: 'Serviço em breve', quando: 'Pergunta sobre o cardápio (próxima etapa).' },
   aviso_registrado: { titulo: 'Aviso anotado', quando: 'O cliente avisa que vai a uma unidade e o aviso é registrado.' },
   aviso_atualizado: { titulo: 'Aviso atualizado', quando: 'O cliente já tinha aviso na mesma unidade e dia, e ele foi atualizado.' },
-  aviso_pessoas: { titulo: 'Perguntar quantas pessoas', quando: 'O cliente avisou que vai, mas não disse para quantas pessoas.' },
   aviso_pessoas_invalido: { titulo: 'Quantidade de pessoas fora do limite', quando: 'O aviso é para menos de 1 ou mais de 60 pessoas.' },
   aviso_data_fora: { titulo: 'Dia fora do prazo', quando: 'O aviso é para antes de hoje ou depois de 30 dias.' },
   aviso_unidade_fechada: { titulo: 'Unidade fechada no dia do aviso', quando: 'A unidade não abre no dia em que o cliente avisou que vai.' },
@@ -32,6 +31,27 @@ export const ROTULOS_MODELO: Record<ChaveModelo, { titulo: string; quando: strin
   aviso_cancelado: { titulo: 'Aviso cancelado', quando: 'O cliente pede para cancelar o aviso.' },
   aviso_nao_encontrado: { titulo: 'Nenhum aviso para cancelar', quando: 'O cliente pede para cancelar, mas não tem aviso ativo.' },
   aviso_qual_cancelar: { titulo: 'Qual aviso cancelar', quando: 'O cliente tem vários avisos e não disse qual cancelar. {exemplo} é uma frase de cancelamento com o primeiro aviso da lista.' },
+  // reserva com lotação
+  escolher_unidade_reserva: { titulo: 'Pedir a unidade da reserva', quando: 'Texto da lista enviada quando o cliente quer reservar e não diz a unidade.' },
+  reserva_pergunta_data: { titulo: 'Perguntar o dia da reserva', quando: 'Falta o dia da reserva, ou o dia está fora do prazo de 30 dias.' },
+  reserva_pergunta_pessoas: { titulo: 'Perguntar quantas pessoas', quando: 'Falta o número de pessoas da reserva.' },
+  reserva_pergunta_horario: { titulo: 'Perguntar o horário da reserva', quando: 'Falta o horário da reserva.' },
+  reserva_pergunta_nome: { titulo: 'Perguntar o nome da reserva', quando: 'Falta o nome em que fica a reserva.' },
+  reserva_pergunta_contato: { titulo: 'Perguntar se pode usar o WhatsApp', quando: 'Antes de confirmar, a IA pergunta se pode usar o número do WhatsApp para falar sobre a reserva.' },
+  reserva_pergunta_contato_numero: { titulo: 'Pedir outro número de contato', quando: 'O cliente prefere ser contatado em outro número.' },
+  reserva_contato_invalido: { titulo: 'Número de contato não entendido', quando: 'O número enviado não é um telefone válido: a IA pede de novo uma vez.' },
+  reserva_contato_invalido_whatsapp: { titulo: 'Número não entendido de novo', quando: 'Na segunda tentativa sem número válido, a reserva usa o número do WhatsApp e a IA avisa.' },
+  reserva_horario_fora: { titulo: 'Horário da reserva fora do funcionamento', quando: 'O horário pedido está fora do funcionamento do dia (ou o cliente disse algo como "à noite").' },
+  reserva_horario_passado: { titulo: 'Horário da reserva já passou', quando: 'A reserva é para hoje num horário que já passou.' },
+  reserva_confirmada: { titulo: 'Reserva feita', quando: 'A reserva coube na lotação e foi gravada (ou mudada): resumo seguido das regras da reserva.' },
+  reserva_lotada: { titulo: 'Unidade lotada', quando: 'Não há vaga para o grupo na unidade e no dia pedidos; nada é gravado.' },
+  reserva_lotada_outras_unidades: { titulo: 'Lotada: outras unidades com vaga', quando: 'Junto da unidade lotada: até 3 outras unidades com vaga para o grupo no mesmo dia.' },
+  reserva_lotada_outro_dia: { titulo: 'Lotada: sugerir outro dia', quando: 'Junto da unidade lotada: o cliente pode escolher outro dia.' },
+  reserva_lotada_grupo_menor: { titulo: 'Lotada: vaga para grupo menor', quando: 'Junto da unidade lotada, quando ainda cabe alguém: quantas pessoas cabem.' },
+  reserva_grupo_grande: { titulo: 'Reserva para mais de 60 pessoas', quando: 'O grupo passa de 60 pessoas: segue como pedido de evento.' },
+  reserva_cancelada: { titulo: 'Reserva cancelada', quando: 'O cliente pede para cancelar a reserva.' },
+  reserva_nao_encontrada: { titulo: 'Nenhuma reserva para cancelar', quando: 'O cliente pede para cancelar, mas não tem reserva.' },
+  reserva_qual_cancelar: { titulo: 'Qual reserva cancelar', quando: 'O cliente tem várias reservas e não disse qual cancelar. {exemplo} é uma frase de cancelamento com a primeira reserva da lista.' },
   // eventos (Etapa 04)
   evento_registrado: { titulo: 'Pedido de evento recebido', quando: 'O cliente pede um evento e o pedido é registrado para a equipe.' },
   evento_ja_registrado: { titulo: 'Pedido de evento já recebido', quando: 'O cliente pede de novo um evento que já tem pedido em andamento na mesma unidade e data: não duplica.' },
@@ -71,13 +91,19 @@ const LINHAS: Partial<Record<ChaveModelo, (nome: string, endereco: string) => st
   endereco_varias: (n, e) => `• ${n}: ${e}\n• Outra unidade: …`,
   lista_unidades: (n) => `• ${n}\n• Outra unidade`,
   aviso_qual_cancelar: (n) => `• ${n} — hoje, 2 pessoas\n• Outra unidade — domingo (11/10), 4 pessoas`,
+  reserva_qual_cancelar: (n) => `• ${n} — hoje, 2 pessoas\n• Outra unidade — domingo (11/10), 4 pessoas`,
   evento_espacos: (n) => `• Salão (${n}) — 20 a 80 pessoas.\n• Varanda (${n}) — 10 a 30 pessoas.`,
   evento_qual_cancelar: (n) => `• ${n} — sábado (10/10), 40 convidados, aniversário\n• Outra unidade — sexta-feira (20/11), 25 convidados, evento corporativo`,
 }
 
 // {quando} no início da frase ("Domingo (11/10), a unidade…") ou no meio ("Anotado: …, domingo (11/10)")
-const QUANDO_INICIO: readonly ChaveModelo[] = ['horario_dia', 'horario_dia_fechado', 'horario_varias', 'aviso_unidade_fechada', 'aviso_horario_fora']
-const QUANDO_MEIO: readonly ChaveModelo[] = ['aviso_registrado', 'aviso_atualizado', 'aviso_cancelado', 'evento_registrado', 'evento_ja_registrado', 'evento_cancelado']
+const QUANDO_INICIO: readonly ChaveModelo[] = [
+  'horario_dia', 'horario_dia_fechado', 'horario_varias', 'aviso_unidade_fechada', 'aviso_horario_fora', 'reserva_horario_fora',
+]
+const QUANDO_MEIO: readonly ChaveModelo[] = [
+  'aviso_registrado', 'aviso_atualizado', 'aviso_cancelado', 'evento_registrado', 'evento_ja_registrado', 'evento_cancelado',
+  'reserva_confirmada', 'reserva_cancelada',
+]
 
 export function exemploDeVariaveis(chave: ChaveModelo, u: UnidadeExemplo | null): Record<string, string> {
   const nome = u?.nome ?? 'Asa Sul'
@@ -86,16 +112,19 @@ export function exemploDeVariaveis(chave: ChaveModelo, u: UnidadeExemplo | null)
     unidade: nome,
     fecha: 'às 23h',
     abre: 'às 11h30',
-    quando: QUANDO_INICIO.includes(chave) ? 'Domingo (11/10)' : QUANDO_MEIO.includes(chave) ? 'domingo (11/10)' : 'amanhã',
+    quando: QUANDO_INICIO.includes(chave) ? 'Domingo (11/10)'
+      : QUANDO_MEIO.includes(chave) ? 'domingo (11/10)'
+        : chave === 'reserva_lotada' ? 'no domingo (11/10)' : 'amanhã',
     turnos: 'das 11h30 às 15h e das 18h às 23h',
     linhas: LINHAS[chave]?.(nome, endereco) ?? '',
     endereco,
     mapa: u?.mapsUrl ?? 'https://maps.app.goo.gl/…',
     servico: 'o cardápio',
     pessoas: '4 pessoas',
-    horario: ', por volta das 20h',
+    horario: chave === 'reserva_confirmada' ? 'às 20h' : ', por volta das 20h',
     limite: chave === 'evento_data_fora' ? '05/10/2027' : '04/11',
-    exemplo: chave === 'evento_qual_cancelar' ? `cancela o pedido de evento de sábado na unidade ${nome}` : `cancela o aviso de hoje na unidade ${nome}`,
+    exemplo: chave === 'evento_qual_cancelar' ? `cancela o pedido de evento de sábado na unidade ${nome}`
+      : chave === 'reserva_qual_cancelar' ? `cancela a reserva de hoje na unidade ${nome}` : `cancela o aviso de hoje na unidade ${nome}`,
     tipo: 'aniversário',
     convidados: '40 convidados',
     espaco: chave === 'evento_espaco_capacidade' ? 'Varanda' : ', no espaço Salão',
@@ -108,6 +137,10 @@ export function exemploDeVariaveis(chave: ChaveModelo, u: UnidadeExemplo | null)
     item: '**Picanha**',
     tag: 'veganas',
     proximo_horario: 'amanhã a partir das 9h',
+    nome: 'Ana Souza',
+    regras: 'Sua reserva está confirmada! Guardamos o lugar por até 15 minutos após o horário marcado…',
+    unidades: 'Outra unidade e Mais uma unidade',
+    vagas: '3 pessoas',
     categorias: '• **Carnes**: Picanha (R$ 59,90), Fraldinha (R$ 49,00)\n• **Sobremesas**: Pudim (R$ 14,00)',
   }
 }

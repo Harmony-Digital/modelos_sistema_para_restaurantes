@@ -43,7 +43,7 @@ const AN = 'u-asa-norte'
 const LS = 'u-lago-sul'
 const AC = 'u-aguas-claras'
 const registrar = (unitId: string, data: string, pessoas: number, horarioAprox: string | null = null, atualiza = false): AcaoS2 =>
-  ({ tipo: 'registrar', unitId, data, pessoas, horarioAprox, atualiza })
+  ({ tipo: 'registrar_aviso', unitId, data, pessoas, horarioAprox, atualiza })
 const aviso = (id: string, unitId: string, data: string, pessoas: number, horarioAprox: string | null = null): AvisoAtivoS2 =>
   ({ id, unitId, data, pessoas, horarioAprox })
 

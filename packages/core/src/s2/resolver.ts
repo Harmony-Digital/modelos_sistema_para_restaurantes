@@ -4,13 +4,16 @@ import { feriadosNacionais, mapaFeriados } from '../s1/feriados.ts'
 import {
   cruzaMeiaNoite, horarioDoDia, minutosDe, temHorarioCadastrado, type AgendaUnidade, type PoliticaFeriado, type Turno,
 } from '../s1/horarios.ts'
-import { dasHora, ddmm, DIAS_SEMANA, formatarTurnos, renderModelo, rotuloDoDia, type ChaveModelo } from '../s1/modelos.ts'
+import { asHora, ddmm, DIAS_SEMANA, formatarTurnos, quandoAbre, renderModelo, rotuloDoDia, type ChaveModelo } from '../s1/modelos.ts'
 import { unidadesOrdenadas } from '../s1/resolver.ts'
 import { agoraLocal, diaDaSemana, diasEntre, somarDias, type DataIso } from '../s1/tempo.ts'
 import type { ContextoS1, ItemExtraido, UnidadeS1 } from '../s1/tipos.ts'
+import { resolverItensAvisoLegado } from './aviso-legado.ts'
 import { normalizarHorario } from './horario.ts'
 import { MAX_PESSOAS, MIN_PESSOAS } from './pessoas.ts'
-import type { AcaoS2, AvisoAtivoS2, PerguntaPessoas, ResultadoS2 } from './tipos.ts'
+import type {
+  AcaoS2, AvisoAtivoS2, CampoReserva, ContatoReserva, ContextoReserva, PerguntaReserva, ResultadoS2,
+} from './tipos.ts'
 
 /** Avisos só de hoje até hoje + 30 dias (fuso do restaurante). */
 export const DIAS_AVISO = 30
@@ -54,11 +57,69 @@ export function validarAvisoNaAgenda(
   return passou(dia.turnos) ? PASSOU : { ok: true }
 }
 
-/** Resultado antes da composição: a pergunta de pessoas fica de fora até saber se há lista pendente. */
-export type ParcialS2 = Omit<ResultadoS2, 'texto'> & { trechos: string[] }
+/** Pergunta com o texto que a acompanha (null quando a pergunta é o corpo da lista de unidades). */
+export type PerguntaReservaComTexto = PerguntaReserva & { texto: string | null }
 
-const textoPessoas = (n: number) => (n === 1 ? '1 pessoa' : `${n} pessoas`)
-const minuscula = (s: string) => s.charAt(0).toLowerCase() + s.slice(1)
+/** Resultado antes da composição: a pergunta fica de fora até saber se há lista pendente. */
+export type ParcialS2 = Omit<ResultadoS2, 'texto' | 'perguntarReserva'> & { trechos: string[]; pergunta: PerguntaReservaComTexto | null }
+
+export const textoPessoas = (n: number) => (n === 1 ? '1 pessoa' : `${n} pessoas`)
+export const minuscula = (s: string) => s.charAt(0).toLowerCase() + s.slice(1)
+
+/** Limite do nome da reserva (o mesmo da triage-v7). */
+export const MAX_NOME_RESERVA = 80
+/** Ofertas de outras unidades quando a pedida está lotada. */
+const MAX_OUTRAS_UNIDADES = 3
+
+/**
+ * Nome da reserva como vai para o banco e para o resumo: só letras, espaços, apóstrofo, hífen e ponto (o texto vem do
+ * LLM e volta para o cliente), até 80 caracteres. Sem letra ou com marcador de PII (`[TELEFONE]`) ⇒ null.
+ */
+export function limparNome(nome: string | null | undefined): string | null {
+  if (!nome || /\[[A-Z]+\]/.test(nome)) return null
+  const limpo = nome.normalize('NFC').replace(/[^\p{L}\p{M}' .-]/gu, ' ').replace(/\s+/g, ' ').trim()
+  const cortado = limpo.slice(0, MAX_NOME_RESERVA).trim()
+  return /\p{L}/u.test(cortado) ? cortado : null
+}
+
+const juntarNomes = (nomes: readonly string[]) =>
+  (nomes.length <= 1 ? (nomes[0] ?? '') : `${nomes.slice(0, -1).join(', ')} e ${nomes.at(-1)}`)
+
+/** Reserva com mais de 60 pessoas: segue como pedido de evento (S3), com o que o cliente já disse. */
+export const ehGrupoDeEvento = (i: ItemExtraido): boolean =>
+  i.servico === 'aviso_presenca' && i.tipo !== 'cancelar' && i.pessoas !== null && Number.isInteger(i.pessoas) && i.pessoas > MAX_PESSOAS
+
+export const reservaComoEvento = (i: ItemExtraido): ItemExtraido => ({
+  ...i, servico: 'evento', tipo: 'pedido', convidados: i.pessoas, pessoas: null, horario: null, nome: null, contato_ok: null,
+})
+
+/**
+ * Dias cuja ocupação o worker precisa ler antes de resolver (o `ContextoReserva.vagas`): o dia de cada reserva da
+ * mensagem, ou o da única reserva ativa quando o cliente muda sem dizer unidade nem dia ("na verdade seremos 6").
+ */
+export function diasDaReserva(
+  itens: readonly ItemExtraido[],
+  ctx: ContextoS1,
+  agora: Date,
+  avisos: readonly AvisoAtivoS2[],
+): DataIso[] {
+  const local = agoraLocal(agora, ctx.timezone)
+  const ano = Number(local.data.slice(0, 4))
+  const feriados = [...feriadosNacionais(ano), ...feriadosNacionais(ano + 1)]
+  const limite = somarDias(local.data, DIAS_AVISO)
+  const ativos = avisos.filter((a) => a.data >= local.data)
+  const dias = new Set<DataIso>()
+  for (const i of itens) {
+    if (i.servico !== 'aviso_presenca' || i.tipo === 'cancelar') continue
+    if (!i.data) {
+      if (!i.unidade && ativos.length === 1) dias.add(ativos[0]!.data)
+      continue
+    }
+    const d = resolverData(i.data, local.data, feriados)
+    if (d.ok && d.data >= local.data && d.data <= limite) dias.add(d.data)
+  }
+  return [...dias].sort()
+}
 
 export function resolverItensS2(
   itens: readonly ItemExtraido[],
@@ -66,7 +127,10 @@ export function resolverItensS2(
   agora: Date,
   avisos: readonly AvisoAtivoS2[],
   escolhidaId?: string,
+  reserva?: ContextoReserva,
 ): ParcialS2 {
+  if (!reserva) return resolverItensAvisoLegado(itens, ctx, agora, avisos, escolhidaId)
+  const rc = reserva
   const local = agoraLocal(agora, ctx.timezone)
   const ano = Number(local.data.slice(0, 4))
   const listaFeriados = [...feriadosNacionais(ano), ...feriadosNacionais(ano + 1)]
@@ -86,20 +150,46 @@ export function resolverItensS2(
   const acoes: AcaoS2[] = []
   const pendenteUnidade: ItemExtraido[] = []
   const cancelados = new Set<string>()
-  let perguntarPessoas: PerguntaPessoas | null = null
-  const trechoDaAcao = new Map<AcaoS2, number>() // registrar repetido na mesma mensagem troca o trecho junto com a ação
+  const trechoDaAcao = new Map<AcaoS2, number>() // reserva repetida na mesma mensagem troca o trecho junto com a ação
+  let pergunta: PerguntaReservaComTexto | null = null
   let validos = 0
   let respondidos = 0
 
-  function registrar(entrada: ItemExtraido): void {
-    // "na verdade seremos 6": sem unidade nem dia e com um único aviso ativo, é atualização desse aviso
+  /** Um campo por vez: só a primeira pergunta da mensagem vale; conta quando o cliente responder. */
+  function perguntar(campo: CampoReserva, item: ItemExtraido, unitId: string | null, texto: string | null, tentativasNumero = 0): void {
+    pergunta ??= { campo, item, unitId, tentativasNumero, texto }
+  }
+
+  /** Vagas livres para esta reserva (a própria, numa mudança, não conta); null = sem limite. */
+  function livresPara(unitId: string, data: DataIso, propria: number): number | null {
+    const v = rc.vagas.get(data)?.get(unitId)
+    if (!v || v.capacidade === null) return null
+    return Math.max(0, v.capacidade - (v.ocupadas - propria))
+  }
+
+  /** Lotado: (a) até 3 outras unidades abertas e com vaga no dia, (b) outro dia, (c) grupo menor se ainda cabe alguém. */
+  function textoLotado(u: UnidadeS1, data: DataIso, n: number, livres: number | null): string {
+    const partes = [m('reserva_lotada', { unidade: u.nome, quando: quandoAbre(data, local.data), pessoas: textoPessoas(n) })]
+    const outras = unidades
+      .filter((x) => x.id !== u.id && validarAvisoNaAgenda(x, data, null, ctx.politicaFeriado, feriados).ok)
+      .filter((x) => {
+        const l = livresPara(x.id, data, 0)
+        return l === null || l >= n
+      })
+      .slice(0, MAX_OUTRAS_UNIDADES)
+    if (outras.length) {
+      partes.push(m('reserva_lotada_outras_unidades', { pessoas: textoPessoas(n), unidades: juntarNomes(outras.map((x) => x.nome)) }))
+    }
+    partes.push(m('reserva_lotada_outro_dia'))
+    if (livres !== null && livres > 0) partes.push(m('reserva_lotada_grupo_menor', { unidade: u.nome, vagas: textoPessoas(livres) }))
+    return partes.join(' ')
+  }
+
+  function reservar(entrada: ItemExtraido): void {
+    // "na verdade seremos 6": sem unidade nem dia e com uma única reserva, é mudança dessa reserva
     const unico = !escolhida && !entrada.unidade && !entrada.data && ativos.length === 1 ? ativos[0]! : null
     const doUnico = unico ? (unidades.find((x) => x.id === unico.unitId) ?? null) : null
-    // horário herdado do aviso já foi aceito antes: não é recusado agora por "já passou"
-    const herdado = !!doUnico && !entrada.horario && !!unico?.horarioAprox
-    const item = doUnico && unico
-      ? { ...entrada, unidade: doUnico.nome, data: unico.data, horario: entrada.horario ?? unico.horarioAprox }
-      : entrada
+    const item = doUnico && unico ? { ...entrada, unidade: doUnico.nome, data: unico.data } : entrada
     let u: UnidadeS1 | null = doUnico ?? escolhida ?? encontrarUnidade(item.unidade, unidades)
     if (!u) {
       if (unidades.length === 0) {
@@ -108,126 +198,192 @@ export function resolverItensS2(
         return
       }
       if (unidades.length > 1) {
-        pendenteUnidade.push(item) // conta quando o cliente escolher
+        pendenteUnidade.push(item) // a pergunta é o corpo da lista "Ver unidades"; conta quando o cliente escolher
+        perguntar('unidade', item, null, null)
         return
       }
       u = unidades[0]!
     }
-    let data = local.data
-    if (item.data) {
-      const d = resolverData(item.data, local.data, listaFeriados)
-      if (!d.ok) {
-        validos++
-        trechos.push(m('data_nao_entendida'))
-        return
-      }
-      data = d.data
-    }
-    if (data < local.data || data > limite) {
-      validos++
-      trechos.push(m('aviso_data_fora', { limite: ddmm(limite) }))
+    // ordem fixa: unidade → data → pessoas → horário → nome → contato
+    const base: ItemExtraido = { ...item, tipo: 'registrar', unidade: u.nome }
+    const perguntaData = m('reserva_pergunta_data', { limite: ddmm(limite) })
+    const d = item.data ? resolverData(item.data, local.data, listaFeriados) : null
+    if (!d?.ok || d.data < local.data || d.data > limite) {
+      perguntar('data', { ...base, data: null }, u.id, perguntaData)
       return
     }
-    const n = item.pessoas
-    if (n !== null && (!Number.isInteger(n) || n < MIN_PESSOAS || n > MAX_PESSOAS)) {
-      validos++
-      trechos.push(m('aviso_pessoas_invalido'))
+    const data = d.data
+    // fechada no dia: diz e pergunta outro dia (antes de pedir o resto)
+    if (!validarAvisoNaAgenda(u, data, null, ctx.politicaFeriado, feriados).ok) {
+      const fechada = m('horario_dia_fechado', { quando: rotulo(data), unidade: u.nome })
+      perguntar('data', { ...base, data: null }, u.id, `${fechada} ${perguntaData}`)
       return
     }
-    const h = normalizarHorario(item.horario)
-    // agenda antes de perguntar pessoas: não pergunta para depois dizer que está fechada
+    // mudança: a reserva do cliente nessa unidade e dia completa o que ele não repetiu
+    const existente = avisos.find((a) => a.unitId === u.id && a.data === data) ?? null
+    const comData: ItemExtraido = { ...base, data }
+
+    const n = item.pessoas ?? existente?.pessoas ?? null
+    if (n === null || !Number.isInteger(n) || n < MIN_PESSOAS) {
+      perguntar('pessoas', { ...comData, pessoas: null }, u.id, m('reserva_pergunta_pessoas'))
+      return
+    }
+    if (n > MAX_PESSOAS) {
+      // o atendimento já leva o grupo grande para o evento; sozinho, o S2 só explica o limite
+      validos++
+      trechos.push(m('reserva_grupo_grande'))
+      return
+    }
+    // lotação antes do resto: não pergunta horário, nome e contato para depois dizer que está cheio.
+    // Diminuir nunca bloqueia; aumentar desconta a própria reserva.
+    const livres = livresPara(u.id, data, existente?.pessoas ?? 0)
+    if ((!existente || n > existente.pessoas) && livres !== null && n > livres) {
+      validos++
+      respondidos++
+      trechos.push(textoLotado(u, data, n, livres)) // nada é gravado
+      return
+    }
+    const comPessoas: ItemExtraido = { ...comData, pessoas: n }
+
+    // horário herdado da reserva já foi aceito antes: não é recusado agora por "já passou"
+    const herdado = !item.horario && !!existente?.horario
+    const h = normalizarHorario(item.horario ?? existente?.horario ?? null)
+    const turnos = horarioDoDia(u, data, ctx.politicaFeriado, feriados).turnos
+    const horarioFora = () => m('reserva_horario_fora', { quando: rotulo(data), unidade: u.nome, turnos: formatarTurnos(turnos) })
+    if (!h.hhmm) {
+      // "à noite" (ou nada): o horário do dia, se cadastrado, e a pergunta de novo
+      const texto = h.livre && temHorarioCadastrado(u) && turnos.length ? horarioFora() : m('reserva_pergunta_horario')
+      perguntar('horario', { ...comPessoas, horario: null }, u.id, texto)
+      return
+    }
     const v = validarAvisoNaAgenda(u, data, h.hhmm, ctx.politicaFeriado, feriados, herdado ? undefined : local, TOLERANCIA_PASSADO_IA_MIN)
     if (!v.ok) {
-      validos++
-      trechos.push(
-        v.motivo === 'fechada'
-          ? m('aviso_unidade_fechada', { quando: rotulo(data), unidade: u.nome })
-          : v.motivo === 'horario_passado'
-            ? m('aviso_horario_passado')
-            : m('aviso_horario_fora', { quando: rotulo(data), unidade: u.nome, turnos: formatarTurnos(v.turnos ?? []) }),
-      )
+      perguntar('horario', { ...comPessoas, horario: null }, u.id, v.motivo === 'horario_passado' ? m('reserva_horario_passado') : horarioFora())
       return
     }
-    if (n === null) {
-      // guarda com unidade e data resolvidas: a resposta curta ("4") reaproveita o item; conta quando responder
-      // o id da unidade vai junto: a resposta curta não depende de achar a unidade pelo nome de novo
-      perguntarPessoas ??= { item: { ...item, unidade: u.nome, data }, unitId: u.id }
+    const hhmm = h.hhmm
+    const comHorario: ItemExtraido = { ...comPessoas, horario: hhmm }
+
+    const nome = limparNome(item.nome) ?? limparNome(existente?.nome)
+    if (!nome) {
+      perguntar('nome', { ...comHorario, nome: null }, u.id, m('reserva_pergunta_nome'))
       return
     }
-    const anterior = acoes.findIndex((a) => a.tipo === 'registrar' && a.unitId === u.id && a.data === data)
-    const atualiza = avisos.some((a) => a.unitId === u.id && a.data === data)
-    const acao: AcaoS2 = { tipo: 'registrar', unitId: u.id, data, pessoas: n, horarioAprox: h.hhmm ?? h.livre, atualiza }
+    const comNome: ItemExtraido = { ...comHorario, nome }
+
+    // contato: a reserva existente mantém o seu; nova pergunta se pode usar o WhatsApp e, se não, pede o número
+    let contato: ContatoReserva
+    let avisoContato: string | null = null
+    if (existente) contato = 'manter'
+    else if (item.contato_ok === true) contato = 'whatsapp'
+    else if (item.contato_ok === false) {
+      const resposta = rc.numero
+      if (resposta?.valor) contato = { numero: resposta.valor }
+      else if (resposta && resposta.tentativas >= 1) {
+        // segunda falha: segue com o WhatsApp e avisa
+        contato = 'whatsapp'
+        avisoContato = m('reserva_contato_invalido_whatsapp')
+      } else {
+        const texto = resposta ? m('reserva_contato_invalido') : m('reserva_pergunta_contato_numero')
+        perguntar('contato_numero', { ...comNome, contato_ok: false }, u.id, texto, resposta ? resposta.tentativas + 1 : 0)
+        return
+      }
+    } else {
+      perguntar('contato', { ...comNome, contato_ok: null }, u.id, m('reserva_pergunta_contato'))
+      return
+    }
+
     validos++
     respondidos++
-    const horario = h.hhmm ? `, por volta ${dasHora(h.hhmm)}` : h.livre ? `, ${h.livre}` : ''
-    const trecho = m(atualiza ? 'aviso_atualizado' : 'aviso_registrado', {
-      unidade: u.nome, quando: minuscula(rotulo(data)), pessoas: textoPessoas(n), horario,
-    })
+    if (avisoContato) trechos.push(avisoContato)
+    const texto = m('reserva_confirmada', {
+      unidade: u.nome, quando: minuscula(rotulo(data)), horario: asHora(hhmm), pessoas: textoPessoas(n), nome, regras: rc.regras,
+    }).trim()
+    const acao: AcaoS2 = {
+      tipo: 'registrar', unitId: u.id, data, pessoas: n, horario: hhmm, nome, contato, atualiza: existente !== null,
+      ...(existente ? { reservaId: existente.id } : {}),
+      // corrida nas últimas vagas: o banco recusa e a resposta vira a de lotado (sem a oferta de grupo menor: as vagas mudaram)
+      texto, textoSeLotado: textoLotado(u, data, n, null),
+    }
+    const anterior = acoes.findIndex((a) => a.tipo === 'registrar' && a.unitId === u.id && a.data === data)
     if (anterior >= 0) {
       // "em 4; digo, em 6": só o que será gravado aparece na resposta
       const i = trechoDaAcao.get(acoes[anterior]!)!
       trechoDaAcao.delete(acoes[anterior]!)
       acoes[anterior] = acao
-      trechos[i] = trecho
+      trechos[i] = texto
       trechoDaAcao.set(acao, i)
+      respondidos--
+      validos--
     } else {
       acoes.push(acao)
-      trechoDaAcao.set(acao, trechos.push(trecho) - 1)
+      trechoDaAcao.set(acao, trechos.push(texto) - 1)
     }
   }
 
-  /** Frase completa que a triagem (sem histórico) entende: "cancela o aviso de sábado na unidade Asa Sul". */
+  /** Frase completa que a triagem (sem histórico) entende: "cancela a reserva de sábado na unidade Asa Sul". */
   function exemploCancelar(a: AvisoAtivoS2): string {
     const delta = diasEntre(local.data, a.data)
     const dia = delta === 0 ? 'de hoje'
       : delta === 1 ? 'de amanhã'
         : delta < 7 ? `de ${DIAS_SEMANA[diaDaSemana(a.data)]!.toLowerCase()}`
           : `do dia ${ddmm(a.data)}`
-    return `cancela o aviso ${dia} na unidade ${nomeDe(a.unitId)}`
+    return `cancela a reserva ${dia} na unidade ${nomeDe(a.unitId)}`
   }
 
   function cancelar(item: ItemExtraido): void {
+    validos++
     if (ativos.length === 0) {
-      validos++
-      trechos.push(m('aviso_nao_encontrado'))
+      trechos.push(m('reserva_nao_encontrada'))
       return
     }
     const u = escolhida ?? encontrarUnidade(item.unidade, unidades)
     const d = item.data ? resolverData(item.data, local.data, listaFeriados) : null
     const data = d?.ok ? d.data : null
-    // o cliente disse a unidade ou o dia e não reconhecemos: filtrar sem esse dado cancelaria o aviso errado
+    // o cliente disse a unidade ou o dia e não reconhecemos: filtrar sem esse dado cancelaria a reserva errada
     const naoReconhecido = (!escolhida && !!item.unidade && !u) || (!!item.data && !d?.ok)
     const candidatos = naoReconhecido ? [] : ativos.filter((a) => (!u || a.unitId === u.id) && (!data || a.data === data))
     if (candidatos.length === 1) {
       const a = candidatos[0]!
-      if (cancelados.has(a.id)) return // repetido na mesma mensagem
+      if (cancelados.has(a.id)) {
+        validos-- // repetido na mesma mensagem
+        return
+      }
       cancelados.add(a.id)
-      const texto = m('aviso_cancelado', { unidade: nomeDe(a.unitId), quando: minuscula(rotulo(a.data)) })
-      acoes.push({ tipo: 'cancelar', avisoId: a.id, texto, textoSeFalhar: m('aviso_nao_encontrado') })
-      validos++
+      const texto = m('reserva_cancelada', { unidade: nomeDe(a.unitId), quando: minuscula(rotulo(a.data)) })
+      acoes.push({ tipo: 'cancelar', avisoId: a.id, texto, textoSeFalhar: m('reserva_nao_encontrada') })
       respondidos++
       trechos.push(texto)
       return
     }
-    validos++
     const lista = candidatos.length ? candidatos : ativos
     const linhas = lista.map((a) => `• ${nomeDe(a.unitId)} — ${minuscula(rotulo(a.data))}, ${textoPessoas(a.pessoas)}`)
-    trechos.push(m('aviso_qual_cancelar', { linhas: linhas.join('\n'), exemplo: exemploCancelar(lista[0]!) }))
+    trechos.push(m('reserva_qual_cancelar', { linhas: linhas.join('\n'), exemplo: exemploCancelar(lista[0]!) }))
   }
 
   for (const item of itens) {
     if (item.servico !== 'aviso_presenca') continue
     if (item.tipo === 'cancelar') cancelar(item)
-    else registrar(item)
+    else reservar(item)
   }
-  return { trechos, acoes, perguntarPessoas, pendenteUnidade, validos, respondidos }
+  return { trechos, acoes, pergunta, pendenteUnidade, validos, respondidos }
 }
 
-/** Junta os trechos sem repetir; a pergunta de pessoas vai por último e só quando não há lista pendente. */
+/** Junta os trechos sem repetir; a pergunta vai por último. */
 export function comporTexto(partes: readonly (string | null)[]): string | null {
   const unicos = [...new Set(partes.filter((p): p is string => !!p))]
   return unicos.length ? unicos.join('\n\n') : null
 }
+
+/** A pergunta da reserva sai com a resposta, a menos que uma lista de unidade esteja pendente (um dado por vez). */
+export function perguntaReservaVisivel(pergunta: PerguntaReservaComTexto | null, haListaPendente: boolean): PerguntaReservaComTexto | null {
+  if (!pergunta) return null
+  if (pergunta.campo === 'unidade') return pergunta // a própria lista pergunta
+  return haListaPendente ? null : pergunta
+}
+
+export const perguntaReservaSemTexto = (p: PerguntaReservaComTexto | null): PerguntaReserva | null =>
+  (p ? { campo: p.campo, item: p.item, unitId: p.unitId, tentativasNumero: p.tentativasNumero } : null)
 
 export function resolverS2(
   itens: readonly ItemExtraido[],
@@ -235,10 +391,9 @@ export function resolverS2(
   agora: Date,
   avisos: readonly AvisoAtivoS2[],
   escolhidaId?: string,
+  reserva?: ContextoReserva,
 ): ResultadoS2 {
-  const { trechos, ...r } = resolverItensS2(itens, ctx, agora, avisos, escolhidaId)
-  // um dado por vez: com lista de unidade pendente, a pergunta de pessoas espera
-  const perguntarPessoas = r.pendenteUnidade.length ? null : r.perguntarPessoas
-  const pergunta = perguntarPessoas ? renderModelo('aviso_pessoas', {}, ctx.modelos) : null
-  return { ...r, texto: comporTexto([...trechos, pergunta]), perguntarPessoas }
+  const { trechos, pergunta, ...r } = resolverItensS2(itens, ctx, agora, avisos, escolhidaId, reserva)
+  const visivel = perguntaReservaVisivel(pergunta, r.pendenteUnidade.length > 0)
+  return { ...r, texto: comporTexto([...trechos, visivel?.texto ?? null]), perguntarReserva: perguntaReservaSemTexto(visivel) }
 }

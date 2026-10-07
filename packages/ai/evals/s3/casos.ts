@@ -205,7 +205,7 @@ export const CASOS: Caso[] = [
   c('m01', 'endereço da asa norte e quais espaços tem lá', [h('endereco', 'asa norte'), esp({ unidade: 'asa norte' })],
     { contem: ['A unidade Asa Norte fica em SCLN 302 Bloco B', 'Espaços para eventos:'] }),
   c('m02', 'vou hoje na asa norte em 2 e quero festa', [aviso({ unidade: 'asa norte', data: 'hoje', pessoas: 2 }), completo({ espaco: '*' })],
-    { contem: ['Anotado: Asa Norte, hoje, 2 pessoas.', 'pedido de aniversário para 40 convidados'], acoes: [registrar()], acoesS2: [{ tipo: 'registrar', unitId: AN, data: '2026-10-05', pessoas: 2, horarioAprox: null, atualiza: false }] }),
+    { contem: ['Anotado: Asa Norte, hoje, 2 pessoas.', 'pedido de aniversário para 40 convidados'], acoes: [registrar()], acoesS2: [{ tipo: 'registrar_aviso', unitId: AN, data: '2026-10-05', pessoas: 2, horarioAprox: null, atualiza: false }] }),
   c('m03', 'horário da asa sul sábado e festa sem data', [h('horario_dia', 'asa sul', 'sábado'), ped({ unidade: 'asa sul' })],
     { contem: ['Sábado (10/10), a unidade Asa Sul abre das 11h30 às 15h e das 18h às 2h.', 'Para qual data é o evento?'], pergunta: 'data' }),
   c('m04', 'que horas abre sábado? e quero uma festa na asa sul', [h('horario_dia', null, 'sábado'), ped({ unidade: 'asa sul' })],

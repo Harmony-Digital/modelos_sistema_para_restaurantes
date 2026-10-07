@@ -30,7 +30,6 @@ export const MODELOS_S1 = {
     variaveis: ['unidade', 'quando', 'pessoas', 'horario'],
   },
   aviso_atualizado: { texto: 'Atualizei seu aviso: {unidade}, {quando}, {pessoas}{horario}.', variaveis: ['unidade', 'quando', 'pessoas', 'horario'] },
-  aviso_pessoas: { texto: 'Para quantas pessoas?', variaveis: [] },
   aviso_pessoas_invalido: {
     texto: 'Consigo anotar avisos de 1 a 60 pessoas. Para grupos maiores, fale com a nossa equipe.',
     variaveis: [],
@@ -50,6 +49,45 @@ export const MODELOS_S1 = {
   aviso_nao_encontrado: { texto: 'Não encontrei nenhum aviso ativo seu.', variaveis: [] },
   aviso_qual_cancelar: {
     texto: 'Você tem estes avisos:\n{linhas}\nPara cancelar, mande por exemplo: "{exemplo}".',
+    variaveis: ['linhas', 'exemplo'],
+  },
+  // S2 — reserva com lotação (reservas-logo). Um dado por vez; o código decide unidade, data, lotação e horário.
+  escolher_unidade_reserva: { texto: 'Para qual unidade é a reserva? Toque em "Ver unidades" e escolha.', variaveis: [] },
+  reserva_pergunta_data: { texto: 'Para qual dia é a reserva? Consigo reservar de hoje até {limite}.', variaveis: ['limite'] },
+  reserva_pergunta_pessoas: { texto: 'Para quantas pessoas?', variaveis: [] },
+  reserva_pergunta_horario: { texto: 'Para que horas é a reserva?', variaveis: [] },
+  reserva_pergunta_nome: { texto: 'Em nome de quem fica a reserva?', variaveis: [] },
+  reserva_pergunta_contato: { texto: 'Posso usar este número do WhatsApp para falar com você sobre a reserva?', variaveis: [] },
+  reserva_pergunta_contato_numero: {
+    texto: 'Qual número devo usar para falar com você sobre a reserva? Mande com DDD, por exemplo: (61) 99999-8888.',
+    variaveis: [],
+  },
+  reserva_contato_invalido: { texto: 'Não consegui ler esse número. Mande com DDD, por exemplo: (61) 99999-8888.', variaveis: [] },
+  reserva_contato_invalido_whatsapp: {
+    texto: 'Não consegui ler o número, então vou usar este número do WhatsApp para falar com você sobre a reserva.',
+    variaveis: [],
+  },
+  reserva_horario_fora: {
+    texto: '{quando}, a unidade {unidade} funciona {turnos}. Para que horas é a reserva?',
+    variaveis: ['quando', 'unidade', 'turnos'],
+  },
+  reserva_horario_passado: { texto: 'Esse horário de hoje já passou. Para que horas é a reserva?', variaveis: [] },
+  reserva_confirmada: {
+    texto: 'Reserva feita: unidade {unidade}, {quando}, {horario}, {pessoas}, em nome de {nome}.\n\n{regras}',
+    variaveis: ['unidade', 'quando', 'horario', 'pessoas', 'nome', 'regras'],
+  },
+  reserva_lotada: { texto: 'A unidade {unidade} está lotada {quando} para {pessoas}.', variaveis: ['unidade', 'quando', 'pessoas'] },
+  reserva_lotada_outras_unidades: { texto: 'Nesse dia, temos vaga para {pessoas} em: {unidades}.', variaveis: ['pessoas', 'unidades'] },
+  reserva_lotada_outro_dia: { texto: 'Se preferir, me diga outro dia.', variaveis: [] },
+  reserva_lotada_grupo_menor: { texto: 'Na unidade {unidade}, ainda temos vaga para até {vagas}.', variaveis: ['unidade', 'vagas'] },
+  reserva_grupo_grande: {
+    texto: 'Reservas vão até 60 pessoas. Para um grupo maior, registro um pedido de evento e a nossa equipe entra em contato.',
+    variaveis: [],
+  },
+  reserva_cancelada: { texto: 'Pronto, cancelei sua reserva: {unidade}, {quando}.', variaveis: ['unidade', 'quando'] },
+  reserva_nao_encontrada: { texto: 'Não encontrei nenhuma reserva sua.', variaveis: [] },
+  reserva_qual_cancelar: {
+    texto: 'Você tem estas reservas:\n{linhas}\nPara cancelar, mande por exemplo: "{exemplo}".',
     variaveis: ['linhas', 'exemplo'],
   },
   // S3 — eventos (Etapa 04). Nunca "reservado"/"confirmado": a confirmação é sempre humana.

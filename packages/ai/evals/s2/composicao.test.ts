@@ -21,7 +21,7 @@ describe('evals S2 — camada 2 (resolução + composição, determinística)', 
       for (const t of e.contem ?? []) expect(r.texto).toContain(t)
       for (const t of e.naoContem ?? []) expect(r.texto ?? '').not.toContain(t)
       expect(r.acoesS2).toEqual(e.acoes ?? [])
-      expect(r.perguntarPessoas !== null).toBe(e.pergunta ?? false)
+      expect(r.perguntarReserva !== null).toBe(e.pergunta ?? false)
       expect(r.lista !== null).toBe(e.lista ?? false)
       expect(horasInventadasS2(r.texto ?? '', ctx, caso.itens)).toEqual([]) // meta: 0 horário inexistente
       expect(r).toMatchSnapshot()

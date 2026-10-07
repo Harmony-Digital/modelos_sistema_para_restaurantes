@@ -28,8 +28,8 @@ describe('resolverAtendimento', () => {
       CONTEXTO, SEG_14H, [],
     )
     expect(r.texto).toBe(`${AS_SABADO}\n\nAnotado: Asa Sul, sábado (10/10), 4 pessoas. Se mudar de ideia, é só me avisar.`)
-    expect(r.acoesS2).toEqual([{ tipo: 'registrar', unitId: 'u-asa-sul', data: '2026-10-10', pessoas: 4, horarioAprox: null, atualiza: false }])
-    expect(r.perguntarPessoas).toBeNull()
+    expect(r.acoesS2).toEqual([{ tipo: 'registrar_aviso', unitId: 'u-asa-sul', data: '2026-10-10', pessoas: 4, horarioAprox: null, atualiza: false }])
+    expect(r.perguntarReserva).toBeNull()
     expect(r.lista).toBeNull()
     expect([r.validos, r.respondidos]).toEqual([2, 2])
   })
@@ -65,14 +65,14 @@ describe('resolverAtendimento', () => {
       CONTEXTO, SEG_14H, [],
     )
     expect(r.texto).toBe(`${AS_SABADO}\n\nPara quantas pessoas?`)
-    expect(r.perguntarPessoas).toMatchObject({ item: { unidade: 'Asa Sul', data: '2026-10-10' }, unitId: 'u-asa-sul' })
+    expect(r.perguntarReserva).toMatchObject({ item: { unidade: 'Asa Sul', data: '2026-10-10' }, unitId: 'u-asa-sul' })
     expect(r.acoesS2).toEqual([])
   })
 
   it('com lista de unidade pendente, não pergunta pessoas ao mesmo tempo (um dado por vez)', () => {
     const r = resolverAtendimento([reg({ unidade: 'asa sul', data: 'sábado' }), h('horario_dia')], CONTEXTO, SEG_14H, [])
     expect(r.lista).not.toBeNull()
-    expect(r.perguntarPessoas).toBeNull()
+    expect(r.perguntarReserva).toBeNull()
     expect(r.texto).toBeNull()
   })
 })

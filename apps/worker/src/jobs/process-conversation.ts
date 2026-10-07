@@ -436,10 +436,10 @@ function unidadeDaResposta(
   const ativas = new Set(unidades.map((u) => u.id))
   const candidatas = [
     escolhidaId,
-    r.perguntarPessoas?.unitId,
+    r.perguntarReserva?.unitId,
     r.perguntarEvento?.unitId,
     r.perguntaEventoAdiada?.unitId,
-    ...r.acoesS2.map((a) => (a.tipo === 'registrar' ? a.unitId : null)),
+    ...r.acoesS2.map((a) => (a.tipo === 'cancelar' ? null : a.unitId)),
     ...r.acoesS3.map((a) => (a.tipo === 'registrar_evento' ? a.unitId : null)),
     ...r.acoesS4.map((a) => a.unitId),
     ...itens.map((i) => encontrarUnidade(i.unidade, unidades)?.id),
@@ -617,10 +617,11 @@ function decisaoAtendimento(r: ResultadoAtendimento, now: Date, pergunta: string
         expiraEm: expira(r.pendente.some((i) => i.servico === 'evento') ? PENDENTE_EVENTO_MIN : PENDENTE_MIN),
         ...eventoAdiado,
       }
-      : r.perguntarPessoas
+      // aviso antigo (sem o contexto da reserva): a única pergunta do S2 é a de pessoas, com a unidade resolvida
+      : r.perguntarReserva?.campo === 'pessoas' && r.perguntarReserva.unitId
         ? {
-          tipo: 'pessoas', pergunta, perguntaEnviada: ultimoTrecho(r.texto), item: r.perguntarPessoas.item,
-          unitId: r.perguntarPessoas.unitId, expiraEm: expira(PENDENTE_MIN), ...eventoAdiado,
+          tipo: 'pessoas', pergunta, perguntaEnviada: ultimoTrecho(r.texto), item: r.perguntarReserva.item,
+          unitId: r.perguntarReserva.unitId, expiraEm: expira(PENDENTE_MIN), ...eventoAdiado,
         }
         : ev && ev.campo !== 'unidade'
           ? {
@@ -805,7 +806,9 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision, now: Date): P
     // avisos de presença: na mesma transação da resposta; com humano no controle, nada é gravado (acima)
     let saidas = d.saidas ?? []
     for (const a of d.avisos ?? []) {
-      if (a.tipo === 'registrar') {
+      // a reserva ('registrar') só sai com o contexto da reserva, que este worker ainda não passa (Task 4)
+      if (a.tipo === 'registrar') continue
+      if (a.tipo === 'registrar_aviso') {
         const r = await registrarAviso(tx, {
           restaurantId, customerId: ctx.customer.id, unitId: a.unitId, data: a.data, pessoas: a.pessoas,
           horarioAprox: a.horarioAprox, nome: ctx.customer.nomePerfil, simulado: ctx.conv.simulada,

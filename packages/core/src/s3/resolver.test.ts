@@ -571,7 +571,7 @@ describe('pendências da Etapa 04 — "pessoas" e evento na mesma mensagem', () 
       CONTEXTO, SEG_14H, [], undefined, s3,
     )
     expect(r.texto).toBe('Para quantas pessoas?')
-    expect(r.perguntarPessoas).toMatchObject({ unitId: 'u-asa-sul' })
+    expect(r.perguntarReserva).toMatchObject({ unitId: 'u-asa-sul' })
     expect(r.perguntarEvento).toBeNull()
     expect(r.perguntaEventoAdiada).toEqual({
       campo: 'convidados', unitId: 'u-asa-sul', texto: 'Para quantos convidados?',
@@ -584,7 +584,7 @@ describe('pendências da Etapa 04 — "pessoas" e evento na mesma mensagem', () 
       [aviso({ unidade: 'asa sul', data: 'sábado' }), ped({ unidade: 'asa sul', data: 'dia 20', tipoEvento: 'aniversário' })],
       CONTEXTO, SEG_14H, [], undefined, s3,
     )
-    const pessoas = resolverAtendimento([{ ...r.perguntarPessoas!.item, pessoas: 4 }], CONTEXTO, SEG_14H, [], 'u-asa-sul', s3)
+    const pessoas = resolverAtendimento([{ ...r.perguntarReserva!.item, pessoas: 4 }], CONTEXTO, SEG_14H, [], 'u-asa-sul', s3)
     const seguida = retomarPerguntaEvento(pessoas, r.perguntaEventoAdiada)
     expect(seguida.texto).toBe('Anotado: Asa Sul, sábado (10/10), 4 pessoas. Se mudar de ideia, é só me avisar.\n\nPara quantos convidados?')
     expect(seguida.acoesS2).toHaveLength(1)
