@@ -3,6 +3,7 @@ import { decryptPhone } from '@atd/core'
 import { TRANSICOES_PEDIDO_EVENTO } from '@atd/core/s3'
 import type { Db } from './client.ts'
 import { exigirPapel, falha, ok, registrarAuditoria, semPermissaoVira, type ErroPainel, type ResultadoPainel } from './painel-comum.ts'
+import { filtroSimulacao, lerModoDemonstracao } from './modo-demonstracao.ts'
 import { withUserContext, type JwtClaims } from './rls.ts'
 import { customers } from './schema/conversation.ts'
 import { staff, units } from './schema/restaurant.ts'
@@ -119,11 +120,12 @@ export type PedidoPainel = {
   responsavel: string | null
   notasInternas: string | null
   temTelefone: boolean
+  simulado: boolean
   criadoEm: Date
 }
 
 /**
- * Fila de pedidos visíveis (RLS por unidade); simulados nunca entram. Ordem: data, depois criação.
+ * Fila de pedidos visíveis (RLS por unidade); simulados só no modo demonstração. Ordem: data, depois criação.
  * Nomes das unidades vêm de uma consulta à parte: o join com `units` (estimativa ruim sob RLS) levava o
  * planejador a um nested loop por unidade em vez do índice `event_requests_fila_idx`.
  */
@@ -134,6 +136,7 @@ export function listarPedidos(
 ): Promise<PedidoPainel[]> {
   if (f.status.length === 0) return Promise.resolve([])
   return withUserContext(db, claims, async (tx) => {
+    const modo = await lerModoDemonstracao(tx)
     const rows = await tx
       .select({
         id: eventRequests.id, unitId: eventRequests.unitId, spaceId: eventRequests.spaceId,
@@ -141,7 +144,7 @@ export function listarPedidos(
         tipo: eventRequests.tipo, tipoTexto: eventRequests.tipoTexto, observacoes: eventRequests.observacoes,
         status: eventRequests.status, responsavelId: eventRequests.responsavelId, responsavel: staff.nome,
         notasInternas: eventRequests.notasInternas, temTelefone: sql<boolean>`(${eventRequests.customerId} is not null)`,
-        criadoEm: eventRequests.createdAt,
+        simulado: eventRequests.simulado, criadoEm: eventRequests.createdAt,
       })
       .from(eventRequests)
       .leftJoin(eventSpaces, eq(eventSpaces.id, eventRequests.spaceId))
@@ -149,7 +152,7 @@ export function listarPedidos(
       .where(and(
         sql`${eventRequests.restaurantId} = (select app.my_restaurant_id())`,
         inArray(eventRequests.status, f.status),
-        eq(eventRequests.simulado, false),
+        filtroSimulacao(eventRequests.simulado, modo),
         f.unitId === null ? undefined : eq(eventRequests.unitId, f.unitId),
       ))
       .orderBy(asc(eventRequests.data), asc(eventRequests.createdAt), asc(eventRequests.id))
@@ -168,7 +171,7 @@ export function contarPedidosNovos(db: Db, claims: JwtClaims): Promise<number> {
       .where(and(
         sql`${eventRequests.restaurantId} = (select app.my_restaurant_id())`,
         eq(eventRequests.status, 'novo'),
-        eq(eventRequests.simulado, false),
+        filtroSimulacao(eventRequests.simulado, await lerModoDemonstracao(tx)),
       ))
     return r?.n ?? 0
   })

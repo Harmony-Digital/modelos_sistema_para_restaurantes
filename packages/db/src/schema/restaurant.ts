@@ -21,6 +21,8 @@ export const restaurants = pgTable('restaurants', {
   politicaFeriado: holidayPolicy('politica_feriado').notNull().default('como_domingo'),
   /** Cotação US$ → R$ só para exibição (o dinheiro fica em USD). Editável pelo dono. */
   cotacaoUsdBrl: numeric('cotacao_usd_brl', { precision: 10, scale: 4, mode: 'string' }).notNull().default('5.5'),
+  /** Modo demonstração: o painel mostra os dados do simulador como se fossem reais, com o selo "Simulação". Só o dono muda. */
+  modoDemonstracao: boolean('modo_demonstracao').notNull().default(false),
   ...timestamps,
 }, (t) => [check('restaurants_cotacao_ck', sql`${t.cotacaoUsdBrl} between 0.5 and 50`)])
 

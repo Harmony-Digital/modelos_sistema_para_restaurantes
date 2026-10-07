@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gte, lt, ne, sql, type SQL } from 'drizzle-orm'
 import type { Db } from './client.ts'
 import { exigirPapel, falha, ok, registrarAuditoria, semPermissaoVira, type ErroPainel, type ResultadoPainel } from './painel-comum.ts'
+import { filtroSimulacao, lerModoDemonstracao } from './modo-demonstracao.ts'
 import { withUserContext, type JwtClaims, type Tx } from './rls.ts'
 import { conversations, customers, messages } from './schema/conversation.ts'
 import type { conversationState, handoffMotivo, messageAuthor, messageType } from './schema/enums.ts'
@@ -110,7 +111,9 @@ export function listarInbox(
     else if (p.aba === 'ia') filtros.push(eq(conversations.estado, 'ia'))
     else if (p.aba === 'em_atendimento') filtros.push(eq(conversations.estado, 'humano'))
     else filtros.push(eq(conversations.estado, 'encerrada'), gte(conversations.lastMessageAt, sql`now() - make_interval(days => ${DIAS_ENCERRADAS})`))
-    if (!p.simulacoes) filtros.push(eq(conversations.simulada, false))
+    // modo demonstração ligado ⇒ simuladas sempre entram (o filtro "Mostrar simulações" some da tela)
+    const soReais = p.simulacoes ? undefined : filtroSimulacao(conversations.simulada, await lerModoDemonstracao(tx))
+    if (soReais) filtros.push(soReais)
     if (p.unitId) filtros.push(eq(conversations.unidadeContextoId, p.unitId))
     // em atendimento: 1 = conversa do próprio usuário (vem primeiro); nas outras abas é constante
     const meu = p.aba === 'em_atendimento'
@@ -140,13 +143,13 @@ export function listarInbox(
   })
 }
 
-/** Conversas reais aguardando atendente, visíveis ao usuário (contador da barra e do título). */
+/** Conversas aguardando atendente, visíveis ao usuário (contador da barra e do título); simuladas só no modo demonstração. */
 export function contarAguardando(db: Db, claims: JwtClaims): Promise<number> {
   return withUserContext(db, claims, async (tx) => {
     const [r] = await tx
       .select({ n: sql<number>`count(*)::int` })
       .from(conversations)
-      .where(and(eq(conversations.estado, 'aguardando_humano'), eq(conversations.simulada, false)))
+      .where(and(eq(conversations.estado, 'aguardando_humano'), filtroSimulacao(conversations.simulada, await lerModoDemonstracao(tx))))
     return r?.n ?? 0
   })
 }
@@ -188,7 +191,7 @@ export function lerConversa(
   })
 }
 
-/** Mediana (s) entre entrar em aguardando e ser assumida, hoje no fuso do restaurante, só conversas reais. */
+/** Mediana (s) entre entrar em aguardando e ser assumida, hoje no fuso do restaurante; simuladas só no modo demonstração. */
 export function tempoAteAssumirHoje(db: Db, claims: JwtClaims): Promise<number | null> {
   return withUserContext(db, claims, async (tx) => {
     const [r] = await tx.execute<{ t: number | string | null }>(sql`select app.tempo_ate_assumir_hoje() as t`)
