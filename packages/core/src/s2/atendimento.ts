@@ -1,4 +1,5 @@
 import { renderModelo } from '../s1/modelos.ts'
+import { agoraLocal } from '../s1/tempo.ts'
 import { listaDeUnidades, resolverS1 } from '../s1/resolver.ts'
 import type { ContextoS1, ItemExtraido, Lacuna } from '../s1/tipos.ts'
 import { perguntaSemTexto, perguntaVisivel, resolverItensS3 } from '../s3/resolver.ts'
@@ -31,6 +32,14 @@ export type ContextoAtendimentoS4 = {
  * grupo de mais de 60 pessoas segue como pedido de evento.
  * Um dado por vez: lista de unidade > pergunta da reserva > pergunta do evento.
  */
+/** A única reserva ativa (de hoje em diante), com a unidade pelo nome do banco; nenhuma ou várias ⇒ null. */
+function unicaReserva(ctx: ContextoS1, agora: Date, avisos: readonly AvisoAtivoS2[]): { unidade: string; data: string } | null {
+  const hoje = agoraLocal(agora, ctx.timezone).data
+  const ativas = avisos.filter((a) => a.data >= hoje)
+  const u = ativas.length === 1 ? ctx.unidades.find((x) => x.id === ativas[0]!.unitId) : undefined
+  return u ? { unidade: u.nome, data: ativas[0]!.data } : null
+}
+
 export function resolverAtendimento(
   itensRecebidos: readonly ItemExtraido[],
   ctx: ContextoS1,
@@ -42,7 +51,8 @@ export function resolverAtendimento(
   reserva?: ContextoReserva,
 ): ResultadoAtendimento {
   const grupoGrande = !!reserva && itensRecebidos.some(ehGrupoDeEvento)
-  const itens = grupoGrande ? itensRecebidos.map((i) => (ehGrupoDeEvento(i) ? reservaComoEvento(i) : i)) : itensRecebidos
+  const unica = grupoGrande ? unicaReserva(ctx, agora, avisos) : null
+  const itens = grupoGrande ? itensRecebidos.map((i) => (ehGrupoDeEvento(i) ? reservaComoEvento(i, unica) : i)) : itensRecebidos
   // com o S4, o S1 não vê os itens de cardápio (sem "em breve"); a identidade dos itens se mantém para o pendente
   const s1 = resolverS1(s4 ? itens.filter((i) => i.servico !== 'cardapio') : itens, ctx, agora, escolhidaId)
   const s2 = resolverItensS2(itens, ctx, agora, avisos, escolhidaId, reserva)

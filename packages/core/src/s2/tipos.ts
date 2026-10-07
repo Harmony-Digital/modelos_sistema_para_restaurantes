@@ -31,12 +31,20 @@ export type ContextoReserva = {
   vagas: ReadonlyMap<DataIso, ReadonlyMap<string, VagasUnidade>>
   /** `restaurants.regras_reserva`, enviado depois do resumo */
   regras: string
-  /** só quando o pendente era `contato_numero` */
+  /**
+   * Pergunta da reserva que esta mensagem responde (o pendente). `contato_ok` do item só vale quando ela é `contato` ou
+   * `contato_numero` (fora disso vale o já guardado nela); `numero` só vale quando ela é `contato_numero`.
+   */
+  pergunta?: PerguntaReserva | null
+  /** número capturado do texto bruto; só com o pendente `contato_numero` */
   numero?: RespostaNumero
 }
 
-/** Campo que a coleta da reserva está perguntando (um por vez, nesta ordem). */
-export type CampoReserva = 'unidade' | 'data' | 'pessoas' | 'horario' | 'nome' | 'contato' | 'contato_numero'
+/**
+ * Campo que a coleta da reserva está perguntando (um por vez, nesta ordem). `lotado`: a unidade estava cheia; a reserva
+ * fica guardada (sem unidade fixa) para "e no domingo?", "e na Asa Norte?" ou "e para 3?" continuarem sem recomeçar.
+ */
+export type CampoReserva = 'unidade' | 'data' | 'pessoas' | 'horario' | 'nome' | 'contato' | 'contato_numero' | 'lotado'
 
 /**
  * Reserva que espera uma resposta. `item` traz o que já foi validado (unidade pelo nome do banco, data AAAA-MM-DD,

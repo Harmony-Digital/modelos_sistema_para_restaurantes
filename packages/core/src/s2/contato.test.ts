@@ -12,6 +12,11 @@ describe('capturarTelefone', () => {
     }
   })
 
+  it('aceita o 0 de longa distância antes do DDD', () => {
+    expect(capturarTelefone('061 99999-8888')).toBe('+5561999998888')
+    expect(capturarTelefone('(061) 99999-8888')).toBe('+5561999998888')
+  })
+
   it('aceita fixo com DDD', () => {
     expect(capturarTelefone('liga no (11) 3333-4444')).toBe('+551133334444')
   })

@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { AGUAS_CLARAS, ASA_NORTE, ASA_SUL, CONTEXTO, LAGO_SUL } from '../../../ai/evals/s1/fixture.ts'
 import type { ContextoS1, ItemExtraido, UnidadeS1 } from '../s1/tipos.ts'
 import { resolverAtendimento, retomarPerguntaEvento } from './atendimento.ts'
-import { diasDaReserva, limparNome, resolverS2 } from './resolver.ts'
-import type { AcaoS2, AvisoAtivoS2, ContextoReserva, VagasUnidade } from './tipos.ts'
+import { continuarReserva, diasDaReserva, limparNome, resolverS2 } from './resolver.ts'
+import type { AcaoS2, AvisoAtivoS2, CampoReserva, ContextoReserva, PerguntaReserva, VagasUnidade } from './tipos.ts'
 
 const SEG_14H = new Date('2026-10-05T14:00:00-03:00')
 const SAB = '2026-10-10'
@@ -14,11 +14,17 @@ const can = (extra: Partial<ItemExtraido> = {}): ItemExtraido => reg({ tipo: 'ca
 const ped = (extra: Partial<ItemExtraido> = {}): ItemExtraido => ({ servico: 'evento', tipo: 'pedido', ...nulos, ...extra })
 
 type Ocupacao = Record<string, Record<string, VagasUnidade>>
+const pendente = (campo: CampoReserva, extra: Partial<PerguntaReserva> = {}): PerguntaReserva =>
+  ({ campo, item: reg(), unitId: null, tentativasNumero: 0, ...extra })
+/** Por padrão a mensagem responde à pergunta de contato: só assim o core aceita `contato_ok` do item. */
 const rc = (ocupacao: Ocupacao = {}, extra: Partial<ContextoReserva> = {}): ContextoReserva => ({
   vagas: new Map(Object.entries(ocupacao).map(([dia, us]) => [dia, new Map(Object.entries(us))])),
   regras: REGRAS,
+  pergunta: pendente('contato'),
   ...extra,
 })
+const respostaNumero = (valor: string | null, tentativas: number): Partial<ContextoReserva> =>
+  ({ pergunta: pendente('contato_numero', { tentativasNumero: tentativas }), numero: { valor, tentativas } })
 const completo = (extra: Partial<ItemExtraido> = {}) =>
   reg({ unidade: 'asa sul', data: 'sábado', pessoas: 4, horario: '20h', nome: 'Ana Souza', contato_ok: true, ...extra })
 const CONFIRMADA_AS = `Reserva feita: unidade Asa Sul, sábado (10/10), às 20h, 4 pessoas, em nome de Ana Souza.\n\n${REGRAS}`
@@ -169,6 +175,24 @@ describe('reserva — nome e contato', () => {
     }
   })
 
+  it('contato_ok só vale respondendo à pergunta de contato', () => {
+    for (const extra of [{ pergunta: null }, { pergunta: pendente('nome') }]) {
+      const r = resolverS2([completo()], CONTEXTO, SEG_14H, [], undefined, rc({}, extra))
+      expect(r.acoes).toEqual([])
+      expect(r.perguntarReserva).toMatchObject({ campo: 'contato', item: { contato_ok: null } })
+    }
+    // o "não" já respondido e guardado no pendente segue valendo (a v7 devolve null quando o cliente manda só o número)
+    const r = resolverS2([completo({ contato_ok: null })], CONTEXTO, SEG_14H, [], undefined, rc({}, respostaNumero('+5561999998888', 0)))
+    expect(r.acoes).toEqual([registrar({ contato: { numero: '+5561999998888' } })])
+  })
+
+  it('número capturado só vale com a pergunta do número pendente', () => {
+    const r = resolverS2([completo({ contato_ok: false })], CONTEXTO, SEG_14H, [], undefined,
+      rc({}, { numero: { valor: '+5561999998888', tentativas: 0 } })) // pendente era a pergunta de contato
+    expect(r.acoes).toEqual([])
+    expect(r.perguntarReserva).toMatchObject({ campo: 'contato_numero', tentativasNumero: 0 })
+  })
+
   it('limparNome tira o que não é nome e corta em 80', () => {
     expect(limparNome('  Ana   <b>Souza</b> ')).toBe('Ana b Souza b')
     expect(limparNome("D'Ávila-Lima Jr.")).toBe("D'Ávila-Lima Jr.")
@@ -184,17 +208,17 @@ describe('reserva — nome e contato', () => {
 
   it('número capturado pelo worker vai na ação', () => {
     const r = resolverS2([completo({ contato_ok: false })], CONTEXTO, SEG_14H, [], undefined,
-      rc({}, { numero: { valor: '+5561999998888', tentativas: 0 } }))
+      rc({}, respostaNumero('+5561999998888', 0)))
     expect(r.acoes).toEqual([registrar({ contato: { numero: '+5561999998888' } })])
   })
 
   it('primeira falha do número: pede de novo; segunda: segue com o WhatsApp e avisa', () => {
-    const r1 = resolverS2([completo({ contato_ok: false })], CONTEXTO, SEG_14H, [], undefined, rc({}, { numero: { valor: null, tentativas: 0 } }))
+    const r1 = resolverS2([completo({ contato_ok: false })], CONTEXTO, SEG_14H, [], undefined, rc({}, respostaNumero(null, 0)))
     expect(r1.texto).toBe('Não consegui ler esse número. Mande com DDD, por exemplo: (61) 99999-8888.')
     expect(r1.perguntarReserva).toMatchObject({ campo: 'contato_numero', tentativasNumero: 1 })
     expect(r1.acoes).toEqual([])
     const r2 = resolverS2([r1.perguntarReserva!.item], CONTEXTO, SEG_14H, [], 'u-asa-sul',
-      rc({}, { numero: { valor: null, tentativas: r1.perguntarReserva!.tentativasNumero } }))
+      rc({}, respostaNumero(null, r1.perguntarReserva!.tentativasNumero)))
     expect(r2.texto).toBe(`Não consegui ler o número, então vou usar este número do WhatsApp para falar com você sobre a reserva.\n\n${CONFIRMADA_AS}`)
     expect(r2.acoes).toEqual([registrar({ contato: 'whatsapp' })])
     expect(r2.perguntarReserva).toBeNull()
@@ -209,14 +233,59 @@ describe('reserva — lotado', () => {
     const r = resolverS2([completo()], CONTEXTO, SEG_14H, [], undefined, rc(cheio()))
     expect(r.texto).toBe(`${LOTADA_AS} Nesse dia, temos vaga para 4 pessoas em: Asa Norte, Lago Sul e Águas Claras. ${OUTRO_DIA} Na unidade Asa Sul, ainda temos vaga para até 3 pessoas.`)
     expect(r.acoes).toEqual([])
-    expect(r.perguntarReserva).toBeNull()
+    // a reserva fica pendente com o que já foi dito (sem unidade fixa): "e no domingo?", "e na Asa Norte?", "e para 3?"
+    expect(r.perguntarReserva).toEqual({
+      campo: 'lotado', unitId: null, tentativasNumero: 0,
+      item: { ...completo(), unidade: 'Asa Sul', data: SAB, horario: '20:00', contato_ok: null },
+    })
     expect([r.validos, r.respondidos]).toEqual([1, 1])
   })
 
   it('decide logo depois das pessoas: não pergunta horário, nome nem contato', () => {
     const r = resolverS2([reg({ unidade: 'asa sul', data: 'sábado', pessoas: 4 })], CONTEXTO, SEG_14H, [], undefined, rc(cheio()))
     expect(r.texto).toContain(LOTADA_AS)
-    expect(r.perguntarReserva).toBeNull()
+    expect(r.texto).not.toContain('?')
+    expect(r.perguntarReserva).toMatchObject({ campo: 'lotado', item: { pessoas: 4, data: SAB, unidade: 'Asa Sul' } })
+  })
+
+  describe('continua depois do lotado sem recomeçar', () => {
+    const lotado = () => resolverS2([completo()], CONTEXTO, SEG_14H, [], undefined, rc(cheio())).perguntarReserva!
+    const continuar = (novo: Partial<ItemExtraido>) => {
+      const p = lotado()
+      // o worker junta a resposta ao item guardado; contato_ok só vale respondendo à pergunta de contato
+      return resolverS2([continuarReserva(p, reg(novo))], CONTEXTO, SEG_14H, [], p.unitId ?? undefined, rc(cheio(), { pergunta: p }))
+    }
+    const contatoDe = (r: ReturnType<typeof continuar>) => {
+      expect(r.texto).toBe('Posso usar este número do WhatsApp para falar com você sobre a reserva?')
+      expect(r.acoes).toEqual([])
+      return r.perguntarReserva!
+    }
+
+    it('"e na sexta?": outro dia, mesmas pessoas, horário e nome', () => {
+      expect(contatoDe(continuar({ data: 'sexta' }))).toMatchObject({
+        campo: 'contato', unitId: 'u-asa-sul', item: { unidade: 'Asa Sul', data: '2026-10-09', pessoas: 4, horario: '20:00', nome: 'Ana Souza' },
+      })
+    })
+
+    it('"e na Asa Norte?": outra unidade, mesmo dia', () => {
+      expect(contatoDe(continuar({ unidade: 'asa norte' }))).toMatchObject({
+        campo: 'contato', unitId: 'u-asa-norte', item: { unidade: 'Asa Norte', data: SAB, pessoas: 4, horario: '20:00' },
+      })
+    })
+
+    it('"e para 3?": grupo menor que cabe', () => {
+      expect(contatoDe(continuar({ pessoas: 3 }))).toMatchObject({ campo: 'contato', item: { unidade: 'Asa Sul', data: SAB, pessoas: 3 } })
+    })
+
+    it('"e no domingo?" com horário fora do domingo: pergunta só o horário', () => {
+      const r = continuar({ data: 'domingo' })
+      expect(r.perguntarReserva).toMatchObject({ campo: 'horario', item: { data: '2026-10-11', pessoas: 4, nome: 'Ana Souza' } })
+    })
+
+    it('cancelar não é continuação', () => {
+      const novo = can()
+      expect(continuarReserva(lotado(), novo)).toBe(novo)
+    })
   })
 
   it('só as ofertas que existem: outras cheias ou fechadas e sem vaga nenhuma', () => {
@@ -272,6 +341,24 @@ describe('reserva — mudança', () => {
     })])
   })
 
+  it('pedido sem nada a mudar, com uma reserva ativa, é reserva nova: pergunta o que falta', () => {
+    for (const item of [reg(), reg({ contato_ok: true })]) {
+      const r = resolverS2([item], CONTEXTO, SEG_14H, [ativa], undefined, rc())
+      expect(r.acoes).toEqual([])
+      expect(r.perguntarReserva).toMatchObject({ campo: 'unidade' })
+      const so = resolverS2([item], { ...CONTEXTO, unidades: [ASA_SUL] }, SEG_14H, [ativa], undefined, rc())
+      expect(so.acoes).toEqual([])
+      expect(so.texto).toBe(PERGUNTA_DATA)
+    }
+  })
+
+  it('nome novo sem unidade nem dia também é mudança da única reserva', () => {
+    const r = resolverS2([reg({ nome: 'Bia Lima' })], CONTEXTO, SEG_14H, [ativa], undefined, rc())
+    expect(r.acoes).toEqual([registrar({
+      nome: 'Bia Lima', contato: 'manter', atualiza: true, reservaId: 'r1', texto: CONFIRMADA_AS.replace('Ana Souza', 'Bia Lima'),
+    })])
+  })
+
   it('aviso antigo sem horário nem nome: pergunta o que falta', () => {
     const antigo = reservaAtiva({ horario: null, nome: null, horarioAprox: 'à noite' })
     const r = resolverS2([reg({ pessoas: 5 })], CONTEXTO, SEG_14H, [antigo], undefined, rc())
@@ -307,6 +394,13 @@ describe('reserva — mais de 60 pessoas vira pedido de evento', () => {
     expect(r.texto).toBe('Reservas vão até 60 pessoas. Para um grupo maior, registro um pedido de evento e a nossa equipe entra em contato.\n\n'
       + 'Qual o tipo do evento? (aniversário, casamento, corporativo, confraternização…)')
     expect(r.perguntarEvento).toMatchObject({ campo: 'tipo', item: { servico: 'evento', convidados: 80, unidade: 'Asa Sul', data: '2026-10-20' } })
+  })
+
+  it('"seremos 80" sobre a única reserva: o evento herda a unidade e o dia dela', () => {
+    const r = resolverAtendimento([reg({ pessoas: 80 })], CONTEXTO, SEG_14H, [reservaAtiva({ data: '2026-10-20' })],
+      undefined, { espacos: [], pedidos: [] }, undefined, rc())
+    expect(r.lista).toBeNull()
+    expect(r.perguntarEvento).toMatchObject({ campo: 'tipo', item: { convidados: 80, unidade: 'Asa Sul', data: '2026-10-20' } })
   })
 
   it('sem o contexto da reserva (worker antigo), segue o limite do aviso', () => {

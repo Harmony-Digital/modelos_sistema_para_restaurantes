@@ -89,9 +89,34 @@ const juntarNomes = (nomes: readonly string[]) =>
 export const ehGrupoDeEvento = (i: ItemExtraido): boolean =>
   i.servico === 'aviso_presenca' && i.tipo !== 'cancelar' && i.pessoas !== null && Number.isInteger(i.pessoas) && i.pessoas > MAX_PESSOAS
 
-export const reservaComoEvento = (i: ItemExtraido): ItemExtraido => ({
+/** `unica`: a única reserva ativa, quando o cliente não disse unidade nem dia ("seremos 80"): o evento herda as duas. */
+export const reservaComoEvento = (i: ItemExtraido, unica?: { unidade: string; data: DataIso } | null): ItemExtraido => ({
   ...i, servico: 'evento', tipo: 'pedido', convidados: i.pessoas, pessoas: null, horario: null, nome: null, contato_ok: null,
+  ...(unica && !i.unidade && !i.data ? unica : {}),
 })
+
+/**
+ * Resposta à pergunta pendente da reserva: o que o cliente disse agora vale, o resto vem do item guardado. `contato_ok`
+ * só muda respondendo à pergunta de contato (na do número, um null da triagem mantém o "não" guardado). Cancelar ou
+ * outro serviço não é continuação: volta o item recebido.
+ */
+export function continuarReserva(pergunta: PerguntaReserva, novo: ItemExtraido): ItemExtraido {
+  if (novo.servico !== 'aviso_presenca' || novo.tipo === 'cancelar') return novo
+  const g = pergunta.item
+  const contato = pergunta.campo === 'contato' ? (novo.contato_ok ?? null)
+    : pergunta.campo === 'contato_numero' ? (novo.contato_ok ?? g.contato_ok ?? null)
+      : (g.contato_ok ?? null)
+  return {
+    ...g,
+    tipo: 'registrar',
+    unidade: novo.unidade ?? g.unidade,
+    data: novo.data ?? g.data,
+    pessoas: novo.pessoas ?? g.pessoas,
+    horario: novo.horario ?? g.horario,
+    nome: novo.nome ?? g.nome ?? null,
+    contato_ok: contato,
+  }
+}
 
 /**
  * Dias cuja ocupação o worker precisa ler antes de resolver (o `ContextoReserva.vagas`): o dia de cada reserva da
@@ -185,9 +210,17 @@ export function resolverItensS2(
     return partes.join(' ')
   }
 
+  // contato_ok só da resposta à pergunta de contato; fora dela, o já guardado no pendente (defesa: o LLM pode inventar)
+  const campoPendente = rc.pergunta?.campo ?? null
+  const respondeContato = campoPendente === 'contato' || campoPendente === 'contato_numero'
+  const contatoGuardado = rc.pergunta?.item.contato_ok ?? null
+  const numero = campoPendente === 'contato_numero' ? rc.numero : undefined
+
   function reservar(entrada: ItemExtraido): void {
-    // "na verdade seremos 6": sem unidade nem dia e com uma única reserva, é mudança dessa reserva
-    const unico = !escolhida && !entrada.unidade && !entrada.data && ativos.length === 1 ? ativos[0]! : null
+    // "na verdade seremos 6": sem unidade nem dia, com uma única reserva e algo a mudar (pessoas, horário ou nome), é
+    // mudança dessa reserva; sem nada a mudar ("quero fazer uma reserva"), é reserva nova e a coleta pergunta o que falta
+    const mudaAlgo = entrada.pessoas !== null || !!normalizarHorario(entrada.horario).hhmm || !!limparNome(entrada.nome)
+    const unico = !escolhida && !entrada.unidade && !entrada.data && mudaAlgo && ativos.length === 1 ? ativos[0]! : null
     const doUnico = unico ? (unidades.find((x) => x.id === unico.unitId) ?? null) : null
     const item = doUnico && unico ? { ...entrada, unidade: doUnico.nome, data: unico.data } : entrada
     let u: UnidadeS1 | null = doUnico ?? escolhida ?? encontrarUnidade(item.unidade, unidades)
@@ -241,6 +274,10 @@ export function resolverItensS2(
       validos++
       respondidos++
       trechos.push(textoLotado(u, data, n, livres)) // nada é gravado
+      // fica guardada com o que já foi dito e sem unidade fixa: a resposta às ofertas continua daqui (sem texto extra)
+      const hhmm = normalizarHorario(item.horario ?? existente?.horario ?? null).hhmm
+      const nome = limparNome(item.nome) ?? limparNome(existente?.nome)
+      perguntar('lotado', { ...comData, pessoas: n, horario: hhmm, nome, contato_ok: null }, null, null)
       return
     }
     const comPessoas: ItemExtraido = { ...comData, pessoas: n }
@@ -274,10 +311,12 @@ export function resolverItensS2(
     // contato: a reserva existente mantém o seu; nova pergunta se pode usar o WhatsApp e, se não, pede o número
     let contato: ContatoReserva
     let avisoContato: string | null = null
+    // na pergunta do número o "não" já foi dito: um null da triagem (só o número, mascarado) não volta à pergunta de contato
+    const contatoOk = !respondeContato ? contatoGuardado : (item.contato_ok ?? (campoPendente === 'contato_numero' ? false : null))
     if (existente) contato = 'manter'
-    else if (item.contato_ok === true) contato = 'whatsapp'
-    else if (item.contato_ok === false) {
-      const resposta = rc.numero
+    else if (contatoOk === true) contato = 'whatsapp'
+    else if (contatoOk === false) {
+      const resposta = numero
       if (resposta?.valor) contato = { numero: resposta.valor }
       else if (resposta && resposta.tentativas >= 1) {
         // segunda falha: segue com o WhatsApp e avisa
