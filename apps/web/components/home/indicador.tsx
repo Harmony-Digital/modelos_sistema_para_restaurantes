@@ -1,6 +1,6 @@
+import { TriangleAlert } from 'lucide-react'
 import Link from 'next/link'
 import { Numero } from '@/components/ui/numero'
-import { cn } from '@/lib/utils'
 import { Minigrafico } from './minigrafico'
 
 export type SerieIndicador = { valores: readonly number[]; rotulos: readonly string[]; descricao: string }
@@ -18,7 +18,15 @@ export function Indicador(props: { rotulo: string; valor: string; dica?: string;
           {rotulo}
         </Link>
       ) : rotulo}
-      <Numero tamanho="lg" className={cn('min-w-0 break-words', props.tom === 'alerta' ? 'text-destructive' : 'text-foreground')}>{props.valor}</Numero>
+      {props.tom === 'alerta' ? (
+        // alerta não depende só de cor: ícone ao lado do valor (o nome do grupo já diz o número)
+        <span className="flex min-w-0 items-center gap-1.5 text-destructive">
+          <TriangleAlert aria-hidden="true" data-slot="alerta" className="size-5 shrink-0" />
+          <Numero tamanho="lg" className="min-w-0 break-words text-destructive">{props.valor}</Numero>
+        </span>
+      ) : (
+        <Numero tamanho="lg" className="min-w-0 break-words text-foreground">{props.valor}</Numero>
+      )}
       {props.dica && <span className="text-xs text-muted-foreground">{props.dica}</span>}
       {props.serie && <Minigrafico {...props.serie} className="mt-1" />}
     </div>

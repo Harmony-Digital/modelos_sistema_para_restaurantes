@@ -3,6 +3,7 @@ import { SeloSimulacao } from '@/components/painel/selo-simulacao'
 import { SeloStatus } from '@/components/painel/selo-status'
 import { Numero } from '@/components/ui/numero'
 import { Tabela, TabelaCabecalho, TabelaCelula, TabelaCelulaCabecalho, TabelaCorpo, TabelaLinha } from '@/components/ui/tabela'
+import { ehHorarioHHMM, horarioDoAviso } from '@/lib/agenda'
 import type { LinhaAgendaHoje } from '@/lib/inicio'
 
 const LINK = 'inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 [@media(hover:hover)]:hover:underline'
@@ -28,8 +29,12 @@ export function AgendaHoje(props: { linhas: readonly LinhaAgendaHoje[]; hoje: st
           <TabelaCorpo>
             {props.linhas.map((l) => (
               <TabelaLinha key={`${l.tipo}:${l.id}`}>
-                <TabelaCelula className="align-top whitespace-nowrap">
-                  {l.hora ? <Numero className="text-foreground">{l.hora}</Numero> : <span className="text-muted-foreground"><span aria-hidden="true">—</span><span className="sr-only">sem horário</span></span>}
+                <TabelaCelula className="align-top">
+                  {l.hora
+                    ? ehHorarioHHMM(l.hora)
+                      ? <Numero className="whitespace-nowrap text-foreground">{horarioDoAviso(l.hora)}</Numero>
+                      : <span className="block break-words text-sm text-foreground">{l.hora}</span>
+                    : <span className="text-muted-foreground"><span aria-hidden="true">—</span><span className="sr-only">sem horário</span></span>}
                 </TabelaCelula>
                 <TabelaCelula className="min-w-0">
                   <Link href={l.href} className="block min-h-11 rounded-sm py-0.5 underline-offset-4 [@media(hover:hover)]:hover:underline">

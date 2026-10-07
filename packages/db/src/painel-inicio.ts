@@ -15,7 +15,8 @@ export type DiaSerie = { dia: string; conversas: number; gastoUsd: string }
  * Mini-gráficos do Início: os últimos 7 dias (fuso do restaurante, do mais antigo para hoje), numa consulta só.
  * - conversas: conversas distintas com mensagem do cliente no dia (`messages_restaurant_created_idx`); RLS por
  *   unidade vale (gerente restrito só conta as suas). Simuladas só no modo demonstração.
- * - gasto: contador diário da IA (`budget_counters_period_uq`); no modo demonstração soma também o do simulador.
+ * - gasto: contador diário da IA (`budget_counters_period_uq`), só o escopo `ia`: o gasto do simulador nunca entra,
+ *   nem no modo demonstração (ele fica numa linha à parte em Gastos, como no SpendCard).
  *   RLS: só dono/gerente leem contadores — para os demais o gasto volta zero.
  */
 export function serieUltimos7Dias(db: Db, claims: JwtClaims, agora: Date = new Date()): Promise<DiaSerie[]> {
@@ -26,7 +27,6 @@ export function serieUltimos7Dias(db: Db, claims: JwtClaims, agora: Date = new D
     const hoje = agoraLocal(agora, tz).data
     const inicio = somarDias(hoje, -6)
     const reais = filtroSimulacao(conversations.simulada, modo) ?? sql`true`
-    const escopos = modo ? sql`('ia', 'simulacao')` : sql`('ia')`
     const rows = await tx.execute<{ dia: string; conversas: number; gasto_usd: string }>(sql`
       with dias as (
         select d::date as dia from generate_series(${inicio}::date, ${hoje}::date, interval '1 day') d
@@ -45,7 +45,7 @@ export function serieUltimos7Dias(db: Db, claims: JwtClaims, agora: Date = new D
           from public.budget_counters b
          where b.restaurant_id = (select app.my_restaurant_id())
            and b.periodo = 'dia'
-           and b.escopo in ${escopos}
+           and b.escopo = 'ia'
            and b.inicio_periodo between ${inicio}::date and ${hoje}::date
          group by 1
       )

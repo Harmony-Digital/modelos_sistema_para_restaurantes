@@ -19,7 +19,7 @@ test('webhook não passa pelo login', async ({ request }) => {
 test('atendente entra sem MFA e não vê custos', async ({ page }) => {
   const { email, senha } = await criarMembro('atendente')
   await entrar(page, email, senha)
-  await expect(page.getByText('Conversas abertas')).toBeVisible()
+  await expect(page.getByRole('group', { name: /^Aguardando: / })).toBeVisible()
   await expect(page.getByRole('table', { name: 'Gastos' })).toHaveCount(0)
 })
 

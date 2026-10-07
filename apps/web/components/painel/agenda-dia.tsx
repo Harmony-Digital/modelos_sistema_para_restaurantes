@@ -15,7 +15,7 @@ import { EtiquetaStatus } from '@/components/ui/etiqueta-status'
 import { Numero } from '@/components/ui/numero'
 import { chamarAcao } from '@/lib/action-result'
 import {
-  hrefAgenda, horarioDoAviso, inicioDaAgenda, limiteDaAgenda, linhaDoTempo, pendentesForaDoDia, resumoDoDia, type ItemAgenda,
+  ehHorarioHHMM, hrefAgenda, horarioDoAviso, inicioDaAgenda, limiteDaAgenda, linhaDoTempo, pendentesForaDoDia, resumoDoDia, type ItemAgenda,
 } from '@/lib/agenda'
 import { dataDoEvento, haQuanto, type MembroTela } from '@/lib/eventos'
 import { dataBr, limiteDaPrevisao, rotuloDoDia } from '@/lib/previsao'
@@ -304,8 +304,11 @@ function Linha(props: {
           aria-current={props.aberto ? 'true' : undefined}
           className={cn(
             linhaClass,
-            'transition-colors duration-150 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring [@media(hover:hover)]:hover:bg-accent',
-            props.aberto && 'bg-accent/60 shadow-[inset_3px_0_0_var(--primary)]',
+            'transition-colors duration-150 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+            // etiqueta de sucesso ("Confirmado") só é AA sobre cartão ou tint leve: aberta = cartão + barra laranja
+            props.aberto
+              ? 'bg-card shadow-[inset_3px_0_0_var(--primary)]'
+              : '[@media(hover:hover)]:hover:bg-accent/40',
           )}
         >
           <span className="font-mono text-xs font-semibold uppercase tracking-wide text-muted-foreground">Dia todo</span>
@@ -330,7 +333,9 @@ function Linha(props: {
   return (
     <li className={cn(linhaClass, 'border-b border-border last:border-b-0')}>
       {a.horarioAprox
-        ? <Numero className="text-sm text-foreground">{horarioDoAviso(a.horarioAprox)}</Numero>
+        ? ehHorarioHHMM(a.horarioAprox)
+          ? <Numero className="text-sm text-foreground">{horarioDoAviso(a.horarioAprox)}</Numero>
+          : <span className="min-w-0 break-words text-sm text-foreground">{a.horarioAprox}</span>
         : <span className="font-mono text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sem hora</span>}
       <span className="flex min-w-0 flex-col gap-0.5">
         <span className={cn('flex flex-wrap items-center gap-2 font-semibold text-foreground', cancelado && 'line-through decoration-1')}>

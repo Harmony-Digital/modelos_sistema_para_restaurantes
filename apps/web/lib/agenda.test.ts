@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  diaDaAgenda, hrefAgenda, hrefDaAgendaAntiga, inicioDaAgenda, limiteDaAgenda, linhaDoTempo, pendentesForaDoDia,
+  diaDaAgenda, horarioDoAviso, hrefAgenda, hrefDaAgendaAntiga, inicioDaAgenda, limiteDaAgenda, linhaDoTempo, pendentesForaDoDia,
   resumoDoDia, statusDaAgenda,
 } from './agenda'
 
@@ -82,6 +82,24 @@ describe('agenda: linha do tempo', () => {
   it('horário com segundos ordena igual', () => {
     const us = [{ unitId: U1, unidade: 'Asa Sul', totalPessoas: 0, avisos: [aviso({ nome: 'b', horarioAprox: '21:00:00' }), aviso({ nome: 'a', horarioAprox: '09:15' })] }]
     expect(linhaDoTempo(us, [], { dia: '2026-10-05', unidade: null }).map((i) => i.tipo === 'aviso' && i.aviso.nome)).toEqual(['a', 'b'])
+  })
+
+  it('horário livre ("à noite") aparece inteiro e vai depois dos "HH:MM", na ordem estável', () => {
+    const us = [{ unitId: U1, unidade: 'Asa Sul', totalPessoas: 0, avisos: [
+      aviso({ nome: 'noite', horarioAprox: 'à noite' }),
+      aviso({ nome: 'tarde', horarioAprox: '20:30' }),
+      aviso({ nome: 'jantar', horarioAprox: 'no jantar' }),
+      aviso({ nome: 'sem', horarioAprox: null }),
+      aviso({ nome: 'almoço', horarioAprox: '12:00' }),
+      aviso({ nome: 'aaa', horarioAprox: 'antes das 9' }),
+    ] }]
+    expect(linhaDoTempo(us, [], { dia: '2026-10-05', unidade: null }).map((i) => i.tipo === 'aviso' && i.aviso.nome))
+      .toEqual(['almoço', 'tarde', 'noite', 'jantar', 'aaa', 'sem'])
+    expect(horarioDoAviso('à noite')).toBe('à noite')
+    expect(horarioDoAviso('no fim da tarde')).toBe('no fim da tarde')
+    expect(horarioDoAviso('20:30:00')).toBe('20:30')
+    expect(horarioDoAviso('20:30')).toBe('20:30')
+    expect(horarioDoAviso(null)).toBeNull()
   })
 
   it('resumo: pessoas só de avisos ativos, contagem de avisos ativos e de eventos do dia', () => {

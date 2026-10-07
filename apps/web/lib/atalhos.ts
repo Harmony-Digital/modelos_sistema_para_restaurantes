@@ -8,12 +8,18 @@ export function ehCampoDeTexto(alvo: EventTarget | null): boolean {
   return alvo instanceof HTMLElement && (alvo.isContentEditable || alvo.getAttribute('contenteditable') === 'true' || alvo.getAttribute('contenteditable') === '')
 }
 
+/** Diálogos, menus, listas de opção e combobox abertos: o Esc e o typeahead são deles. */
+const DONOS_DA_TECLA = [
+  '[role="dialog"]', '[role="alertdialog"]', '[role="menu"]', '[role="listbox"]', '[role="combobox"]',
+  '[data-radix-popper-content-wrapper]',
+].join(', ')
+
 /**
- * Atalhos de uma tecla só valem fora de campos de texto, fora de diálogos abertos (confirmação, folha, simulador:
- * o Esc é deles) e sem Ctrl/Cmd/Alt (atalhos do navegador e a busca rápida).
+ * Atalhos de uma tecla só valem fora de campos de texto, fora de diálogos, menus e listas de opção abertos
+ * (confirmação, folha, simulador, Select/Dropdown: o Esc e o typeahead são deles) e sem Ctrl/Cmd/Alt (atalhos do navegador e a busca rápida).
  */
 export function ignorarAtalho(e: KeyboardEvent): boolean {
   if (e.defaultPrevented || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return true
   if (ehCampoDeTexto(e.target)) return true
-  return e.target instanceof Element && e.target.closest('[role="dialog"], [role="alertdialog"]') !== null
+  return e.target instanceof Element && e.target.closest(DONOS_DA_TECLA) !== null
 }

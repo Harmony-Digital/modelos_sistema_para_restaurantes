@@ -76,6 +76,15 @@ describe('AgendaDia: linha do tempo', () => {
     expect(screen.getByTestId('resumo-do-dia')).toHaveTextContent('6 pessoas · 2 avisos · 1 evento')
   })
 
+  it('horário livre do aviso aparece inteiro, depois dos horários "HH:MM"', () => {
+    const us = [{ unitId: U1, unidade: 'Asa Sul', totalPessoas: 6, avisos: [aviso({ nome: 'Noite', horarioAprox: 'no fim da tarde' }), aviso({ horarioAprox: '20:00' })] }]
+    render(<AgendaDia {...base} unidades={us} pedidos={[]} />)
+    const l = linhas()
+    expect(l[0]).toHaveTextContent('20:00')
+    expect(l[1]).toHaveTextContent('no fim da tarde')
+    expect(l[1]).toHaveTextContent('Noite')
+  })
+
   it('com várias unidades e sem filtro, cada linha diz a unidade; abas de unidade levam à URL', () => {
     render(<AgendaDia {...base} />)
     expect(linhas()[2]).toHaveTextContent('Asa Sul')
@@ -218,7 +227,12 @@ describe('AgendaDia: detalhe do pedido', () => {
     render(<AgendaDia {...base} pedidoId={P1} />)
     const lado = await screen.findByRole('complementary', { name: 'Pedido de evento' })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Caio/ })).toHaveAttribute('aria-current', 'true')
+    const linha = screen.getByRole('link', { name: /Caio/ })
+    expect(linha).toHaveAttribute('aria-current', 'true')
+    // etiqueta de sucesso ("Confirmado") fica AA: linha aberta em fundo de cartão + barra laranja, nunca accent/muted
+    expect(linha.className).toContain('bg-card')
+    expect(linha.className).toContain('shadow-[inset_3px_0_0_var(--primary)]')
+    expect(linha.className).not.toMatch(/(^|\s)bg-accent/)
     expect(within(lado).getByRole('link', { name: 'Fechar o pedido' })).toHaveAttribute('href', '/agenda')
     await user.click(within(lado).getByRole('button', { name: 'Salvar' }))
     await waitFor(() => expect(refresh).toHaveBeenCalled())

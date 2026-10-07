@@ -25,7 +25,8 @@ export function TabelaLinha({ selecionada, className, ...props }: React.Componen
       aria-current={selecionada ? 'true' : undefined}
       className={cn(
         'border-b border-border last:border-b-0',
-        selecionada && 'bg-accent/60 [&>td:first-child]:shadow-[inset_3px_0_0_var(--primary)]',
+        // fundo de cartão (não accent/muted): etiqueta de sucesso na linha continua AA
+        selecionada && 'bg-card [&>td:first-child]:shadow-[inset_3px_0_0_var(--primary)]',
         className,
       )}
       {...props}

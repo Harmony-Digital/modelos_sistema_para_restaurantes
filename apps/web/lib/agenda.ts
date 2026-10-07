@@ -73,11 +73,24 @@ export type ItemAgenda =
   | { tipo: 'evento'; chave: string; pedido: PedidoPainel }
   | { tipo: 'aviso'; chave: string; aviso: AvisoPainel; unidade: string }
 
-const hhmm = (h: string | null) => (h ? h.slice(0, 5) : null)
+const HHMM = /^\d{2}:\d{2}/
+
+/** Horário em "HH:MM" (com ou sem segundos), e não texto livre. */
+export const ehHorarioHHMM = (h: string | null): h is string => h !== null && HHMM.test(h)
+
+/**
+ * Horário do aviso como aparece na Agenda: "HH:MM" (sem segundos) quando o texto começa assim; o texto livre que a
+ * IA grava ("à noite", "no fim da tarde") vai inteiro.
+ */
+export function horarioDoAviso(h: string | null): string | null {
+  if (!h) return null
+  return ehHorarioHHMM(h) ? h.slice(0, 5) : h
+}
 
 /**
  * Linha do tempo do dia: pedidos de evento (não têm hora: valem o dia todo) primeiro, na ordem da DAL; depois os
- * avisos por horário aproximado (ordem estável: empate segue a ordem das unidades e da criação); sem horário no fim.
+ * avisos com "HH:MM" por horário; depois os de horário em texto livre ("à noite"); sem horário no fim. Ordem estável:
+ * empate (e todo o texto livre) segue a ordem das unidades e da criação.
  */
 export function linhaDoTempo(
   unidades: PrevisaoUnidade[],
@@ -91,12 +104,13 @@ export function linhaDoTempo(
   const avisos = unidades
     .filter((u) => daUnidade(u.unitId))
     .flatMap((u) => u.avisos.map((a) => ({ tipo: 'aviso' as const, chave: `a-${a.id}`, aviso: a, unidade: u.unidade })))
-  const comHora = avisos.filter((a) => a.aviso.horarioAprox).sort((a, b) => hhmm(a.aviso.horarioAprox)!.localeCompare(hhmm(b.aviso.horarioAprox)!))
+  const comHora = avisos
+    .filter((a) => ehHorarioHHMM(a.aviso.horarioAprox))
+    .sort((a, b) => a.aviso.horarioAprox!.slice(0, 5).localeCompare(b.aviso.horarioAprox!.slice(0, 5)))
+  const livre = avisos.filter((a) => a.aviso.horarioAprox && !ehHorarioHHMM(a.aviso.horarioAprox))
   const semHora = avisos.filter((a) => !a.aviso.horarioAprox)
-  return [...eventos, ...comHora, ...semHora]
+  return [...eventos, ...comHora, ...livre, ...semHora]
 }
-
-export const horarioDoAviso = hhmm
 
 /** Totais do que está de pé no dia (avisos cancelados e pedidos recusados/cancelados não contam). */
 export function resumoDoDia(itens: ItemAgenda[]): { pessoas: number; avisos: number; eventos: number } {

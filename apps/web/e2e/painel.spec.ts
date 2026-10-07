@@ -72,10 +72,10 @@ const semScrollHorizontal = (page: Page) =>
 test('Início sem rolagem horizontal no Pixel 7 e em 320px', async ({ page }) => {
   const { email, senha } = await criarMembro('atendente')
   await entrar(page, email, senha)
-  await expect(page.getByText('Conversas abertas')).toBeVisible()
+  await expect(page.getByRole('group', { name: /^Aguardando: / })).toBeVisible()
   expect(await semScrollHorizontal(page)).toBe(true)
   await page.setViewportSize({ width: 320, height: 640 })
-  await expect(page.getByText('Conversas abertas')).toBeVisible()
+  await expect(page.getByRole('group', { name: /^Aguardando: / })).toBeVisible()
   expect(await semScrollHorizontal(page)).toBe(true)
 })
 

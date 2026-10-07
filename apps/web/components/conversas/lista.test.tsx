@@ -64,6 +64,10 @@ describe('ListaConversas', () => {
     )
     const aberta = screen.getByRole('link', { name: /Maria/ })
     expect(aberta).toHaveAttribute('aria-current', 'page')
+    // etiqueta de sucesso ("IA") fica AA: aberta em fundo de cartão + barra laranja, nunca accent/muted
+    expect(aberta.className).toContain('bg-card')
+    expect(aberta.className).toContain('shadow-[inset_3px_0_0_var(--primary)]')
+    expect(aberta.className).not.toMatch(/(^|\s)bg-accent/)
     expect(aberta).toHaveAttribute('href', '/conversas/11111111-1111-4111-8111-111111111111?aba=ia&sim=1')
     expect(screen.getByRole('link', { name: /Bia/ })).not.toHaveAttribute('aria-current')
     // lista navegável pelo teclado (↑/↓)

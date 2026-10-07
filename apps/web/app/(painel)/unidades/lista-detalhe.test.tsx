@@ -71,7 +71,11 @@ describe('Unidades: lista + detalhe', () => {
     )
     const lista = screen.getByRole('region', { name: 'Lista de unidades' })
     expect(classes(lista)).toEqual(expect.arrayContaining(['hidden', 'lg:flex']))
-    expect(within(lista).getByRole('link', { name: /Lago Sul/ })).toHaveAttribute('aria-current', 'page')
+    const aberta = within(lista).getByRole('link', { name: /Lago Sul/ })
+    expect(aberta).toHaveAttribute('aria-current', 'page')
+    // selo "Aberta agora" (tom sucesso) fica AA: cartão + barra laranja, sem tint accent/muted
+    expect(aberta.className).toContain('shadow-[inset_3px_0_0_var(--primary)]')
+    expect(aberta.className).not.toMatch(/(^|\s)bg-accent/)
     expect(within(lista).getByRole('link', { name: /Asa Sul/ })).not.toHaveAttribute('aria-current')
 
     const detalhe = screen.getByRole('region', { name: 'Unidade Lago Sul' })

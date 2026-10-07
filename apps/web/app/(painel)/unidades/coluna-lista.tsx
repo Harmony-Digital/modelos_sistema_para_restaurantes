@@ -41,7 +41,8 @@ export async function ColunaUnidades(props: { abertaId?: string }) {
                       aria-current={aberta ? 'page' : undefined}
                       className={cn(
                         'flex min-h-16 items-center gap-3 rounded-lg border border-border bg-card p-4 transition-colors duration-150 [@media(hover:hover)]:hover:border-ring',
-                        aberta && 'bg-accent/60 shadow-[inset_3px_0_0_var(--primary)]',
+                        // fica no fundo de cartão (selo de tom sucesso AA) com a barra laranja
+                        aberta && 'shadow-[inset_3px_0_0_var(--primary)]',
                       )}
                     >
                       <div className="min-w-0 flex-1">

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const push = vi.hoisted(() => vi.fn())
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push, refresh: vi.fn() }) }))
@@ -14,6 +14,7 @@ function Tela(props: { aberta?: boolean; atual?: number }) {
           <li key={n}><a href={`/conversas/${i}`} aria-current={props.atual === i ? 'page' : undefined}>{n}</a></li>
         ))}
       </ul>
+      <button type="button">Assumir</button>
       <textarea aria-label="Resposta" />
       <div role="dialog" aria-label="Encerrar"><button type="button">Cancelar</button></div>
       <AtalhosLista voltar="/conversas?aba=ia" aberta={props.aberta ?? false} />
@@ -23,9 +24,20 @@ function Tela(props: { aberta?: boolean; atual?: number }) {
 
 const tecla = (key: string, alvo: Element = document.body) => fireEvent.keyDown(alvo, { key })
 
+const matchMediaOriginal = window.matchMedia
+function comoDesktop() {
+  window.matchMedia = ((query: string) => ({
+    matches: query.includes('1024'), media: query, onchange: null,
+    addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia
+}
+
 beforeEach(() => {
   push.mockReset()
   ;(document.activeElement as HTMLElement | null)?.blur()
+})
+afterEach(() => {
+  window.matchMedia = matchMediaOriginal
 })
 
 describe('AtalhosLista (Conversas)', () => {
@@ -42,7 +54,8 @@ describe('AtalhosLista (Conversas)', () => {
     expect(screen.getByRole('link', { name: 'Bia' })).toHaveFocus()
   })
 
-  it('com uma conversa aberta, ↓ parte dela', () => {
+  it('com uma conversa aberta (≥ lg, lista ao lado), ↓ com o foco solto parte dela', () => {
+    comoDesktop()
     render(<Tela aberta atual={1} />)
     tecla('ArrowDown')
     expect(screen.getByRole('link', { name: 'Caio' })).toHaveFocus()
@@ -73,5 +86,29 @@ describe('AtalhosLista (Conversas)', () => {
     tecla('ArrowDown', botao)
     expect(botao).toHaveFocus()
     expect(push).not.toHaveBeenCalled()
+  })
+
+  it('< lg com a conversa aberta (lista oculta): ↑/↓ com o foco solto não fazem nada e a página rola', () => {
+    render(<Tela aberta atual={1} />)
+    expect(tecla('ArrowDown')).toBe(true) // sem preventDefault
+    expect(tecla('ArrowUp')).toBe(true)
+    expect(document.body).toHaveFocus()
+  })
+
+  it('foco fora da lista (botão do detalhe): ↑/↓ ficam com a página, sem preventDefault', () => {
+    comoDesktop()
+    render(<Tela aberta atual={1} />)
+    const botao = screen.getByRole('button', { name: 'Assumir' })
+    botao.focus()
+    expect(tecla('ArrowDown', botao)).toBe(true)
+    expect(botao).toHaveFocus()
+  })
+
+  it('foco dentro da lista: as setas agem em qualquer largura e consomem a tecla', () => {
+    render(<Tela aberta atual={1} />)
+    const bia = screen.getByRole('link', { name: 'Bia' })
+    bia.focus()
+    expect(tecla('ArrowDown', bia)).toBe(false)
+    expect(screen.getByRole('link', { name: 'Caio' })).toHaveFocus()
   })
 })

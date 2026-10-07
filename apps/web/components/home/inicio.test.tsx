@@ -35,6 +35,13 @@ describe('Indicador', () => {
     expect(screen.getByRole('img', { name: 'Gasto nos últimos 7 dias: R$ 1, R$ 2' })).toBeInTheDocument()
     expect(screen.queryByRole('link')).toBeNull()
   })
+  it('estado de alerta não depende só de cor: ícone ao lado do valor', () => {
+    const { container, unmount } = render(<Indicador rotulo="Aguardando" valor="2" tom="alerta" />)
+    expect(container.querySelector('[data-slot="alerta"]')).not.toBeNull()
+    unmount()
+    const neutro = render(<Indicador rotulo="Aguardando" valor="0" />)
+    expect(neutro.container.querySelector('[data-slot="alerta"]')).toBeNull()
+  })
   it('valor longo quebra em vez de vazar (celular)', () => {
     render(<Indicador rotulo="X" valor="R$ 1.234.567,89" />)
     expect(screen.getByText('R$ 1.234.567,89').className).toMatch(/break-all|break-words|wrap-anywhere/)
@@ -72,6 +79,13 @@ describe('AgendaHoje', () => {
     expect(within(linhaEvento).getByText('Novo')).toHaveAttribute('data-variante', 'novo')
     expect(within(linhaEvento).getByText('Simulação')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Abrir agenda' })).toHaveAttribute('href', '/agenda?dia=2026-10-07')
+  })
+  it('horário livre ("no fim da tarde") quebra linha em vez de alargar a coluna', () => {
+    const livre = { ...linhas[0]!, id: 'livre', hora: 'no fim da tarde' } as LinhaAgendaHoje
+    render(<AgendaHoje linhas={[livre]} hoje="2026-10-07" />)
+    const celula = screen.getByText('no fim da tarde').closest('td')!
+    expect(celula.className).not.toMatch(/whitespace-nowrap/)
+    expect(screen.getByText('no fim da tarde').className).toMatch(/break-words/)
   })
   it('dia vazio', () => {
     render(<AgendaHoje linhas={[]} hoje="2026-10-07" />)

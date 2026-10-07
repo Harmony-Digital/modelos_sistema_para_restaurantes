@@ -5,6 +5,7 @@ import { ControlesAvisos } from '@/components/conversas/avisos'
 import { ListaConversas } from '@/components/conversas/lista'
 import { Abas } from '@/components/painel/abas'
 import { TopBar } from '@/components/shell/top-bar'
+import { AoVivo } from '@/components/ui/ao-vivo'
 import { Button } from '@/components/ui/button'
 import { ABAS_INBOX, abaDe } from '@/lib/conversas'
 import { requireStaff } from '@/lib/dal'
@@ -44,6 +45,8 @@ export async function ColunaConversas(props: { sp: BuscaConversas; abertaId?: st
     <section aria-label="Lista de conversas" className={colunaLista(abertaId !== undefined)}>
       <TopBar title="Conversas" subtitle="Atendimento da equipe pelo WhatsApp" className="lg:hidden" semFaixa />
       <div className="mx-auto flex w-full max-w-xl flex-col gap-4 px-4 py-6 lg:mx-0 lg:max-w-none lg:py-4">
+        {/* a lista atualiza sozinha (Realtime pelo `Avisos` do layout): spec §4 */}
+        <AoVivo className="self-start" />
         <Abas
           rotulo="Situação das conversas"
           itens={ABAS_INBOX.map((a) => ({ href: href({ aba: a.aba }), rotulo: a.rotulo, ativo: a.aba === aba }))}

@@ -73,7 +73,7 @@ describe('serieUltimos7Dias', () => {
     expect(s.map((d) => d.gastoUsd)).toEqual(['0.000000', '0.000000', '1.500000', '0.000000', '0.000000', '0.000000', '0.120000'])
   })
 
-  it('simuladas (conversas e gasto do simulador) só entram com o modo demonstração ligado', async () => {
+  it('modo demonstração: conversas simuladas entram; o gasto do simulador nunca soma no "Gasto IA" (fica em Gastos, à parte)', async () => {
     const c = await cenario()
     const real = await conversa(c, { unitId: c.u1 })
     const sim = await conversa(c, { unitId: c.u1, simulada: true })
@@ -85,7 +85,7 @@ describe('serieUltimos7Dias', () => {
     expect(desl.at(-1)).toEqual({ dia: '2026-10-10', conversas: 1, gastoUsd: '0.100000' })
     await db.update(restaurants).set({ modoDemonstracao: true }).where(eq(restaurants.id, c.restaurantId))
     const lig = await serieUltimos7Dias(db, as(c.dono), AGORA)
-    expect(lig.at(-1)).toEqual({ dia: '2026-10-10', conversas: 2, gastoUsd: '0.150000' })
+    expect(lig.at(-1)).toEqual({ dia: '2026-10-10', conversas: 2, gastoUsd: '0.100000' })
   })
 
   it('RLS: gerente restrito só conta a própria unidade; atendente não vê gasto; outro restaurante não aparece', async () => {

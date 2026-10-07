@@ -39,6 +39,21 @@ describe('ignorarAtalho', () => {
     expect(ignorarAtalho(evento(screen.getByRole('button')))).toBe(true)
   })
 
+  it('dentro de menu, listbox ou combobox aberto (typeahead e Esc são deles): atalho ignorado', () => {
+    render(
+      <div>
+        <div role="menu"><div role="menuitem" tabIndex={-1}>Encerrar</div></div>
+        <div role="listbox"><div role="option" aria-selected="false">Asa Sul</div></div>
+        <button type="button" role="combobox" aria-expanded="true">Unidade</button>
+        <div data-radix-popper-content-wrapper=""><button type="button">Item</button></div>
+      </div>,
+    )
+    expect(ignorarAtalho(evento(screen.getByRole('menuitem')))).toBe(true)
+    expect(ignorarAtalho(evento(screen.getByRole('option')))).toBe(true)
+    expect(ignorarAtalho(evento(screen.getByRole('combobox')))).toBe(true)
+    expect(ignorarAtalho(evento(screen.getByRole('button', { name: 'Item' })))).toBe(true)
+  })
+
   it('com Ctrl, Cmd ou Alt, repetido ou já tratado: atalho ignorado', () => {
     expect(ignorarAtalho(evento(document.body, { ctrlKey: true }))).toBe(true)
     expect(ignorarAtalho(evento(document.body, { metaKey: true }))).toBe(true)

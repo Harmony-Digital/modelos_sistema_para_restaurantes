@@ -63,6 +63,8 @@ describe('Conversas: lista + detalhe', () => {
     const lista = screen.getByRole('region', { name: 'Lista de conversas' })
     expect(classes(lista)).toContain('flex')
     expect(classes(lista)).not.toContain('hidden')
+    // tempo real (spec §4): a lista mostra o indicador "● AO VIVO"
+    expect(within(lista).getByText('Ao vivo')).toHaveAttribute('role', 'status')
     const vazio = screen.getByRole('region', { name: 'Conversa aberta' })
     expect(classes(vazio)).toEqual(expect.arrayContaining(['hidden', 'lg:flex']))
     expect(within(vazio).getByRole('heading', { name: 'Escolha uma conversa' })).toBeInTheDocument()

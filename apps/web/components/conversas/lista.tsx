@@ -52,8 +52,9 @@ export function ListaConversas(props: {
               href={props.busca ? `/conversas/${c.id}?${props.busca}` : `/conversas/${c.id}`}
               aria-current={aberta ? 'page' : undefined}
               className={cn(
-                'flex min-h-16 items-start gap-3 px-4 py-3 focus-visible:outline-offset-[-2px] [@media(hover:hover)]:hover:bg-accent',
-                aberta && 'bg-accent/60 shadow-[inset_3px_0_0_var(--primary)]',
+                'flex min-h-16 items-start gap-3 px-4 py-3 focus-visible:outline-offset-[-2px]',
+                // etiqueta de sucesso ("IA") só é AA sobre cartão ou tint leve: aberta = cartão + barra laranja
+                aberta ? 'bg-card shadow-[inset_3px_0_0_var(--primary)]' : '[@media(hover:hover)]:hover:bg-accent/40',
               )}
             >
               <span className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary">

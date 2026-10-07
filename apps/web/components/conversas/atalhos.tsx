@@ -6,8 +6,11 @@ import { ignorarAtalho } from '@/lib/atalhos'
 /**
  * Teclado na lista + detalhe: ↑/↓ movem o foco pelos itens de `[data-lista-navegavel]` (Enter abre o link focado,
  * comportamento nativo) e Esc fecha o item aberto voltando para `voltar`. Nada dispara com o foco num campo de texto
- * ou dentro de um diálogo. As setas só agem com o foco na lista ou solto na página (não roubam a rolagem do detalhe).
+ * ou dentro de um diálogo. As setas só agem com o foco dentro da lista, ou solto na página quando a lista está à
+ * vista (≥ lg, ou < lg sem conversa aberta); abaixo de lg com a conversa aberta a lista está oculta e as setas rolam
+ * a página. A tecla só é consumida (preventDefault) quando o foco de fato foi para um item.
  */
+const LARGO = '(min-width: 1024px)'
 export function AtalhosLista(props: { voltar: string; aberta: boolean }) {
   const router = useRouter()
   const routerRef = useRef(router)
@@ -27,7 +30,8 @@ export function AtalhosLista(props: { voltar: string; aberta: boolean }) {
       if (!lista) return
       const ativo = document.activeElement
       const solto = ativo === null || ativo === document.body
-      if (!solto && !lista.contains(ativo)) return
+      const listaVisivel = !aberta || window.matchMedia(LARGO).matches
+      if (solto ? !listaVisivel : !lista.contains(ativo)) return
       const itens = Array.from(lista.querySelectorAll<HTMLAnchorElement>('a[href]'))
       if (itens.length === 0) return
       let i = itens.findIndex((a) => a === ativo || a.contains(ativo))
@@ -35,9 +39,11 @@ export function AtalhosLista(props: { voltar: string; aberta: boolean }) {
       const proximo = e.key === 'ArrowDown'
         ? (i < 0 ? 0 : Math.min(i + 1, itens.length - 1))
         : (i < 0 ? 0 : Math.max(i - 1, 0))
+      const alvo = itens[proximo]!
+      alvo.focus()
+      if (document.activeElement !== alvo) return
       e.preventDefault()
-      itens[proximo]!.focus()
-      itens[proximo]!.scrollIntoView?.({ block: 'nearest' })
+      alvo.scrollIntoView?.({ block: 'nearest' })
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

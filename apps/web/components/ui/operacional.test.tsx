@@ -64,6 +64,8 @@ describe('Tabela', () => {
     const tr = screen.getByRole('row', { name: 'Maria' })
     expect(tr).toHaveAttribute('aria-current', 'true')
     expect(tr.className).toMatch(/var\(--primary\)/)
+    // etiqueta de sucesso na linha fica AA: sem tint accent/muted
+    expect(tr.className).not.toMatch(/(^|\s)bg-accent/)
   })
   it('linha comum não tem aria-current', () => {
     render(<Exemplo />)
