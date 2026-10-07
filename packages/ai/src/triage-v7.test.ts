@@ -84,6 +84,10 @@ describe('prompt da v7', () => {
     expect(system).toContain('[TELEFONE]')
     // perguntas sobre lotação continuam info
     expect(system).toContain('precisa reservar?')
+    // "tem mesa pra N?" é reserva na v7 (não fica na lista de info) e contato_ok depende da pergunta pendente
+    expect(system).not.toContain('"tem mesa para 6?"')
+    expect(system).toContain('"tem mesa pra 4 hoje?" →')
+    expect(system).toMatch(/contato_ok:[^\n]*só quando houver <pergunta_pendente>/)
     // acima de 60 o número é extraído (o código manda para evento)
     expect(system).toContain('"somos 80" = 80')
   })
@@ -118,7 +122,7 @@ describe('parseTriageV7', () => {
     expect(parseTriageV7(ok([{ ...reserva, nome: '   ' }])).itens[0]!.nome).toBeNull()
   })
   it('nome que é um marcador de PII ([TELEFONE], [CPF]...) vira null', () => {
-    for (const nome of ['[TELEFONE]', '[CPF]', '[EMAIL]', 'Ana [TELEFONE]']) {
+    for (const nome of ['[TELEFONE]', '[CPF]', '[EMAIL]', '[CARTAO]', '[RG]', 'Ana [TELEFONE]', '[telefone]', '[Cartão]']) {
       expect(parseTriageV7(ok([{ ...reserva, nome }])).itens[0]!.nome, nome).toBeNull()
     }
   })

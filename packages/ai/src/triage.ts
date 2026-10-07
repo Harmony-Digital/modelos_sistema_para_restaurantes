@@ -235,8 +235,8 @@ export function triageV6(
 
 // ------------------------------------------------------------- v7: + reserva (nome e resposta do contato)
 
-/** Marcador da redação de PII ([TELEFONE], [CPF]...): nunca é nome de reserva. */
-const MARCADOR_PII = /\[[A-Z]+\]/
+/** Marcador da redação de PII ([TELEFONE], [CPF]...), em qualquer caixa e com acento: nunca é nome de reserva. */
+const MARCADOR_PII = /\[\p{L}+\]/u
 const nomeReserva = z
   .string()
   .nullable()

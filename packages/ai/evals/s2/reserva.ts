@@ -2,11 +2,12 @@ import type { ItemTriagemV7, PendenteTriagem } from '../../src/triage.ts'
 
 /**
  * Gabarito da reserva na triage-v7: o que a IA deve EXTRAIR de cada mensagem (a decisão — cabe, lotado, horário
- * válido, mais de 60 vai para evento — é do código). `pendente` é a pergunta que fizemos antes, quando houver.
+ * válido, mais de 60 vai para evento — é do código). "cabe" e "lotado" têm a mesma forma de extração: a camada 2
+ * de `resolverAtendimento` com lotação fica com o resolvedor da T2 e o worker da T4. `pendente` é a pergunta que fizemos antes, quando houver.
  */
 export type ItemV7 = ItemTriagemV7
 export type RotuloReserva =
-  | 'cabe' | 'lotado' | 'intencao' | 'mudar' | 'nome' | 'contato_sim' | 'contato_nao' | 'numero_novo' | 'cancelar' | 'mais_de_60' | 'nao_e_reserva'
+  | 'cabe' | 'lotado' | 'mesa' | 'contato_sem_pergunta' | 'intencao' | 'mudar' | 'nome' | 'contato_sim' | 'contato_nao' | 'numero_novo' | 'cancelar' | 'mais_de_60' | 'nao_e_reserva'
 export type CasoReserva = { id: string; rotulo: RotuloReserva; mensagem: string; agora: string; pendente?: PendenteTriagem; itens: ItemV7[] }
 
 const nulos = {
@@ -38,6 +39,11 @@ export const CASOS_RESERVA: CasoReserva[] = [
     [reg({ unidade: 'asa sul', data: 'sábado', pessoas: 10, horario: '21h' })]),
   c('rv04', 'lotado', 'tem como reservar hoje na asa norte pra 6? chegamos 20h',
     [reg({ unidade: 'asa norte', data: 'hoje', pessoas: 6, horario: '20h' })]),
+  // ---- "tem mesa/lugar para N?" é reserva na v7 (o fluxo responde se cabe)
+  c('rv27', 'mesa', 'tem mesa pra 4 hoje?', [reg({ data: 'hoje', pessoas: 4 })]),
+  c('rv28', 'mesa', 'tem lugar para 6 sábado na asa sul?', [reg({ unidade: 'asa sul', data: 'sábado', pessoas: 6 })]),
+  // ---- sem a pergunta do contato pendente, contato_ok é null mesmo que o cliente fale do número
+  c('rv29', 'contato_sem_pergunta', 'quero reservar pra 2 hoje, pode usar esse número', [reg({ data: 'hoje', pessoas: 2 })]),
   // ---- intenção sem todos os dados (o código pergunta um de cada vez)
   c('rv05', 'intencao', 'quero reservar', [reg()]),
   c('rv06', 'intencao', 'reserva para sábado', [reg({ data: 'sábado' })]),

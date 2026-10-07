@@ -18,11 +18,23 @@ import { CASOS_RESERVA, type ItemV7, type RotuloReserva } from './s2/reserva.ts'
 const comNovos = <T extends object>(i: T) => ({ ...i, nome: null, contato_ok: null })
 const grupos = { S1: CASOS_S1, S2: [...CASOS_S2, ...FRASES_S2], S3: [...CASOS_S3, ...FRASES_S3], S4: [...CASOS_S4, ...FRASES_S4] }
 
+/**
+ * Únicas frases cujo gabarito muda na v7: "tem mesa pra N?" deixa de ser info e vira reserva (com lotação, o fluxo
+ * responde se cabe). Os gabaritos da v6 ficam como estavam.
+ */
+const reservaV7 = (extra: Partial<ItemV7>): ItemV7 =>
+  ({ servico: 'aviso_presenca', tipo: 'registrar', ...comNovos({ unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null }), ...extra })
+const MUDA_NA_V7: Record<string, { mensagem: string; v6: ItemV7['tema']; v7: ItemV7[] }> = {
+  e43: { mensagem: 'tem mesa pra 4 hoje à noite?', v6: 'mesa', v7: [reservaV7({ data: 'hoje', pessoas: 4, horario: 'à noite' })] },
+  v50: { mensagem: 'tem mesa pra 6 hoje à noite?', v6: 'mesa', v7: [reservaV7({ data: 'hoje', pessoas: 6, horario: 'à noite' })] },
+}
+
 describe('gabaritos S1–S4 na triage-v7', () => {
   for (const [servico, casos] of Object.entries(grupos)) {
     it(`${servico}: ${casos.length} casos com os mesmos itens na v6 e na v7`, () => {
       expect(casos.length).toBeGreaterThan(0)
       for (const c of casos) {
+        if (c.id in MUDA_NA_V7) continue
         const v7 = parseTriageV7({ itens: c.itens.map(comNovos), fora_escopo: false, frustracao: false })
         const v6 = parseTriageV6({ itens: c.itens, fora_escopo: false, frustracao: false })
         expect(v7.itens, c.id).toEqual(v6.itens.map(comNovos))
@@ -42,9 +54,24 @@ function fakeLlm(itens: ItemV7[]): LlmClient & { users: string[] } {
   }
 }
 
+describe('"tem mesa pra N?" vira reserva só na v7', () => {
+  const todas = [...FRASES_S2, ...FRASES_S3]
+  for (const [id, e] of Object.entries(MUDA_NA_V7)) {
+    it(`${id}: ${e.mensagem}`, () => {
+      const frase = todas.find((f) => f.id === id)!
+      expect(frase.mensagem).toBe(e.mensagem)
+      // a v6 continua com o gabarito antigo (info/mesa)
+      expect(frase.itens).toEqual([expect.objectContaining({ servico: 'horario_unidades', tipo: 'info', tema: e.v6 })])
+      // na v7 o gabarito é uma reserva válida e diferente da v6
+      expect(parseTriageV7({ itens: e.v7, fora_escopo: false, frustracao: false }).itens).toEqual(e.v7)
+      expect(extracaoCorretaReserva(e.v7, frase.itens.map(comNovos), CONTEXTO, new Date(frase.agora))).toBe(false)
+    })
+  }
+})
+
 describe('gabarito da reserva (triage-v7)', () => {
   it('cobre os casos da spec, com ids únicos', () => {
-    const exigidos: RotuloReserva[] = ['cabe', 'lotado', 'contato_sim', 'contato_nao', 'numero_novo', 'nome', 'cancelar', 'mais_de_60', 'mudar', 'intencao', 'nao_e_reserva']
+    const exigidos: RotuloReserva[] = ['cabe', 'lotado', 'mesa', 'contato_sim', 'contato_nao', 'contato_sem_pergunta', 'numero_novo', 'nome', 'cancelar', 'mais_de_60', 'mudar', 'intencao', 'nao_e_reserva']
     const rotulos = new Set(CASOS_RESERVA.map((c) => c.rotulo))
     for (const r of exigidos) expect(rotulos, r).toContain(r)
     expect(new Set(CASOS_RESERVA.map((c) => c.id)).size).toBe(CASOS_RESERVA.length)
@@ -76,6 +103,14 @@ describe('gabarito da reserva (triage-v7)', () => {
       expect(llm.users[0], caso.id).not.toMatch(/\d{4}-?\d{4}/)
       expect(caso.itens.every((i) => i.contato_ok === false), caso.id).toBe(true)
     }
+  })
+
+  it('contato_ok só com a pergunta do contato pendente; sem ela é null', () => {
+    for (const caso of CASOS_RESERVA) {
+      const pergunta = caso.pendente?.pergunta.includes('número do WhatsApp') ?? false
+      for (const i of caso.itens) if (!pergunta) expect(i.contato_ok, caso.id).toBeNull()
+    }
+    expect(CASOS_RESERVA.some((c) => c.rotulo === 'contato_sem_pergunta')).toBe(true)
   })
 
   it('mais de 60: o número é extraído como o cliente disse, no serviço da reserva', () => {
