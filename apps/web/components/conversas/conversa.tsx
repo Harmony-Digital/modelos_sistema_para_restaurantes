@@ -1,13 +1,14 @@
 'use client'
 import { Bot, CircleCheck, Hand } from 'lucide-react'
 import Link from 'next/link'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { dentroDaJanela, podeTransicionar } from '@atd/core/conversa'
 import type { ConversationState, HandoffMotivo, RespostaRapida } from '@atd/db'
 import { Confirmar } from '@/components/painel/confirmar'
 import { Button } from '@/components/ui/button'
 import { chamarAcao, type ActionResult } from '@/lib/action-result'
+import { ignorarAtalho } from '@/lib/atalhos'
 import { ROTULO_MOTIVO } from '@/lib/conversas'
 import type { AssumirForm, RespostaForm } from '@/lib/schemas/conversas'
 import { Bolha, type MensagemTelaInbox } from './bolha'
@@ -114,6 +115,21 @@ export function Conversa(props: {
     }
   }
 
+  // atalho A: assume a conversa aberta quando ela está livre (fora de campos de texto e de diálogos)
+  const assumirRef = useRef<(() => void) | null>(null)
+  assumirRef.current = podeAssumir && !andando
+    ? () => void rodar(() => props.acoes.assumir(c.id, { forcar: false }), 'Conversa assumida. Agora é com você.')
+    : null
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.key !== 'a' && e.key !== 'A') || e.shiftKey || ignorarAtalho(e) || !assumirRef.current) return
+      e.preventDefault()
+      assumirRef.current()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const foraDaJanela = !dentroDaJanela(c.janelaAte ? new Date(c.janelaAte) : null, props.agora ?? new Date())
 
   return (
@@ -131,7 +147,13 @@ export function Conversa(props: {
         {comOutro && <p className="text-sm text-foreground">{c.atendente ?? 'Outra pessoa'} está atendendo esta conversa.</p>}
         <div className="flex flex-wrap gap-2">
           {podeAssumir && (
-            <Button type="button" disabled={andando} onClick={() => void rodar(() => props.acoes.assumir(c.id, { forcar: false }), 'Conversa assumida. Agora é com você.')}>
+            <Button
+              type="button"
+              disabled={andando}
+              aria-keyshortcuts="A"
+              title="Assumir (atalho: A)"
+              onClick={() => void rodar(() => props.acoes.assumir(c.id, { forcar: false }), 'Conversa assumida. Agora é com você.')}
+            >
               <Hand aria-hidden="true" className="size-4" /> Assumir
             </Button>
           )}
@@ -186,7 +208,7 @@ export function Conversa(props: {
 
       {comigo
         ? (
-          <section aria-label="Responder" className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] rounded-lg border border-border bg-background p-3">
+          <section aria-label="Responder" className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] rounded-lg border border-border bg-background p-3 lg:bottom-4">
             <Compositor conversationId={c.id} foraDaJanela={foraDaJanela} respostasRapidas={props.respostasRapidas} enviar={props.acoes.responder} />
           </section>
         )

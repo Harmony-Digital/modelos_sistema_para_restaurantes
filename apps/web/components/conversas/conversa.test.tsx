@@ -125,4 +125,30 @@ describe('Conversa', () => {
     expect(screen.queryByRole('button', { name: 'Mostrar telefone' })).toBeNull()
     expect(screen.getByText('Simulação')).toBeInTheDocument()
   })
+
+  describe('atalho A (assumir)', () => {
+    it('A assume a conversa aberta quando ela está livre', async () => {
+      montar()
+      await userEvent.setup().keyboard('a')
+      expect(acoes.assumir).toHaveBeenCalledWith(ID, { forcar: false })
+    })
+
+    it('não dispara digitando no compositor, nem com outra pessoa atendendo, nem com Ctrl', async () => {
+      const u = userEvent.setup()
+      const r = montar({ estado: 'humano', atendente: 'Ana', atendenteId: 'eu' })
+      await u.click(screen.getByRole('textbox', { name: 'Resposta' }))
+      await u.keyboard('a')
+      expect(acoes.assumir).not.toHaveBeenCalled()
+      r.unmount()
+      montar({ estado: 'humano', atendente: 'Bia', atendenteId: 'bia' }, { papel: 'gerente' })
+      await u.keyboard('a')
+      expect(acoes.assumir).not.toHaveBeenCalled()
+    })
+
+    it('com Ctrl/Cmd não é atalho', async () => {
+      montar()
+      await userEvent.setup().keyboard('{Control>}a{/Control}')
+      expect(acoes.assumir).not.toHaveBeenCalled()
+    })
+  })
 })

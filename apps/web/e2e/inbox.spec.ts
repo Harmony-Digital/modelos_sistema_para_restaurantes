@@ -160,7 +160,7 @@ test('pedido de atendente: a conversa aparece em Aguardando sem recarregar; assu
   expect(conversa?.estado).toBe('aguardando_humano')
 
   // tempo real: chega pelo Realtime (o fallback sem conexão é de 60 s), sem recarregar a página
-  const item = inbox.locator(`a[href="/conversas/${conversa!.id}"]`)
+  const item = inbox.locator(`a[href^="/conversas/${conversa!.id}"]`)
   await expect(item).toBeVisible({ timeout: 15_000 })
   await expect(item).toContainText('Pediu atendente')
   await expect(item).toContainText('Simulação')
@@ -216,7 +216,7 @@ test('gerente restrito a outra unidade não vê a conversa (nem pela URL)', asyn
   await sql`update staff set unidades_permitidas = ${[unitId]}::uuid[]
     where user_id = (select id from auth.users where email = ${email})`
   await page.goto('/conversas?aba=aguardando')
-  await expect(page.locator(`a[href="/conversas/${conv!.id}"]`)).toContainText(CLIENTE_REAL)
+  await expect(page.locator(`a[href^="/conversas/${conv!.id}"]`)).toContainText(CLIENTE_REAL)
 })
 
 test('horário humano salvo; handoff fora do horário avisa quando a equipe volta (relógio simulado)', async ({ page }) => {
