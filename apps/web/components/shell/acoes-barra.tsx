@@ -31,14 +31,22 @@ export function FaixaDaBarra() {
   return <div className="relative z-20 hidden shrink-0 lg:block">{shell.faixa}</div>
 }
 
-/** Topo do celular (< lg): logo de 24 px e nome do restaurante acima do título. Sem logo, nada (a barra fica como antes). */
-export function MarcaDaBarra() {
+/**
+ * Título da barra superior. Com logo, no celular (< lg) a logo de 24 px e o nome do restaurante ficam na mesma linha do
+ * título (nada de linha extra: a barra mantém os 4rem que as faixas fixas abaixo dela assumem). Sem logo, só o `h1`
+ * de sempre.
+ */
+export function TituloDaBarra(props: { titulo: string; className: string }) {
   const marca = useContext(ShellContexto)?.marca
-  if (!marca?.logo) return null
+  if (!marca?.logo) return <h1 className={props.className}>{props.titulo}</h1>
   return (
-    <div className="flex min-w-0 items-center gap-1.5 lg:hidden">
-      <LogoRestaurante url={marca.logo} nome={marca.nome} tamanho={24} />
-      <span className="min-w-0 truncate text-xs font-medium text-muted-foreground">{marca.nome}</span>
+    <div className="flex min-w-0 items-center gap-2">
+      <div className="flex min-w-0 max-w-[45%] shrink-0 items-center gap-1.5 lg:hidden">
+        <LogoRestaurante url={marca.logo} nome={marca.nome} tamanho={24} decorativa />
+        <span className="min-w-0 truncate text-xs font-medium text-muted-foreground">{marca.nome}</span>
+        <span aria-hidden="true" className="text-muted-foreground">·</span>
+      </div>
+      <h1 className={`min-w-0 ${props.className}`}>{props.titulo}</h1>
     </div>
   )
 }

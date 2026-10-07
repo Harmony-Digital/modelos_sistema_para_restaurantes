@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { LogoForm } from './logo-form'
@@ -34,7 +34,14 @@ describe('LogoForm', () => {
     expect(previa).toHaveAttribute('src', URL_LOGO)
     expect(previa.className).toContain('object-contain')
     expect(screen.getByRole('button', { name: 'Trocar logo' })).toBeInTheDocument()
+    // pede confirmação antes de tirar a logo de todas as telas
     await user.click(screen.getByRole('button', { name: 'Remover logo' }))
+    const dialogo = await screen.findByRole('dialog', { name: 'Remover a logo?' })
+    expect(remover).not.toHaveBeenCalled()
+    await user.click(within(dialogo).getByRole('button', { name: 'Cancelar' }))
+    expect(remover).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Remover logo' }))
+    await user.click(within(await screen.findByRole('dialog', { name: 'Remover a logo?' })).getByRole('button', { name: 'Remover logo' }))
     expect(remover).toHaveBeenCalledTimes(1)
   })
 

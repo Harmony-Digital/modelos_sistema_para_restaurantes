@@ -2,9 +2,10 @@
 import { Trash2, Upload } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Field, SubmitButton } from '@/components/form'
+import { classeArquivo, Field, SubmitButton } from '@/components/form'
 import { LogoRestaurante } from '@/components/shell/logo-restaurante'
 import { Button } from '@/components/ui/button'
+import { Confirmar } from '@/components/painel/confirmar'
 import { chamarAcao, type ActionResult } from '@/lib/action-result'
 import { ACEITA_LOGO, ERRO_TAMANHO_LOGO, LIMITE_LOGO_BYTES } from '@/lib/logo'
 
@@ -22,6 +23,7 @@ export function LogoForm(props: {
 }) {
   const [erros, setErros] = useState<Erros>({})
   const [ocupado, setOcupado] = useState<'enviando' | 'removendo' | null>(null)
+  const [confirmando, setConfirmando] = useState(false)
   const emAndamento = useRef(false)
   const entrada = useRef<HTMLInputElement>(null)
 
@@ -70,7 +72,7 @@ export function LogoForm(props: {
             ref={entrada}
             type="file"
             accept={ACEITA_LOGO}
-            className="min-h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium"
+            className={classeArquivo}
           />
         )}
       </Field>
@@ -79,11 +81,23 @@ export function LogoForm(props: {
           <Upload aria-hidden="true" className="size-4" /> {props.logo ? 'Trocar logo' : 'Enviar logo'}
         </SubmitButton>
         {props.logo && (
-          <Button type="button" variant="outline" disabled={ocupado !== null} onClick={remover}>
+          <Button type="button" variant="outline" disabled={ocupado !== null} onClick={() => setConfirmando(true)}>
             <Trash2 aria-hidden="true" className="size-4" /> Remover logo
           </Button>
         )}
       </div>
+      <Confirmar
+        aberto={confirmando}
+        onAbertoChange={setConfirmando}
+        titulo="Remover a logo?"
+        descricao="A logo sai do menu, do topo do celular e da tela de login. Você pode enviar outra quando quiser."
+        rotuloConfirmar="Remover logo"
+        rotuloAndamento="Removendo…"
+        onConfirmar={async () => {
+          await remover()
+          setConfirmando(false)
+        }}
+      />
     </form>
   )
 }

@@ -14,6 +14,12 @@ describe('LogoRestaurante', () => {
     expect(img.className).toMatch(/\bshrink-0\b/)
   })
 
+  it('decorativa (nome escrito ao lado): alt vazio, fora da árvore de acessibilidade', () => {
+    const { container } = render(<LogoRestaurante url="https://x.test/l.png" nome="Casa Harmonia" decorativa />)
+    expect(screen.queryByRole('img')).toBeNull()
+    expect(container.querySelector('img')).toHaveAttribute('alt', '')
+  })
+
   it('topo do celular: 24 px', () => {
     render(<LogoRestaurante url="https://x.test/l.png" nome="R" tamanho={24} />)
     const img = screen.getByRole('img', { name: 'R' })

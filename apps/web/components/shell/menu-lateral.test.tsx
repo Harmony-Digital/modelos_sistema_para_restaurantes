@@ -110,7 +110,10 @@ describe('MenuLateral', () => {
     it('aberto: logo no quadro de 32 px ao lado do nome, que é cortado com reticências', () => {
       render(<MenuLateral papel="dono" restaurante="Casa Harmonia" logo={URL_LOGO} estadoInicial="aberto" aguardando={0} />)
       const nav = screen.getByRole('navigation', { name: 'Menu principal' })
-      const img = within(nav).getByRole('img', { name: 'Casa Harmonia' })
+      // o nome está escrito ao lado: a logo é decorativa (alt vazio), sem leitura dupla
+      expect(within(nav).queryByRole('img')).toBeNull()
+      const img = nav.querySelector('img')!
+      expect(img).toHaveAttribute('alt', '')
       expect(img).toHaveAttribute('src', URL_LOGO)
       expect(img.className).toMatch(/\bsize-8\b/)
       const nome = within(nav).getByText('Casa Harmonia')
@@ -124,6 +127,7 @@ describe('MenuLateral', () => {
       render(<MenuLateral papel="dono" restaurante="Casa Harmonia" logo={URL_LOGO} estadoInicial="aberto" aguardando={0} />)
       await user.click(screen.getByRole('button', { name: 'Recolher menu' }))
       const nav = screen.getByRole('navigation', { name: 'Menu principal' })
+      // sozinha: alt com o nome
       expect(within(nav).getByRole('img', { name: 'Casa Harmonia' })).toBeInTheDocument()
       expect(within(nav).queryByText('Casa Harmonia')).toBeNull()
       expect(within(nav).getByRole('button', { name: 'Abrir menu' })).toBeInTheDocument()

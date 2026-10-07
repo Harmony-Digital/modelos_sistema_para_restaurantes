@@ -94,7 +94,7 @@ export function MenuLateral(props: {
         {recolhido && props.logo && <LogoRestaurante url={props.logo} nome={props.restaurante} />}
         {!recolhido && (props.logo ? (
           <span className="flex min-w-0 flex-1 items-center gap-2">
-            <LogoRestaurante url={props.logo} nome={props.restaurante} />
+            <LogoRestaurante url={props.logo} nome={props.restaurante} decorativa />
             <span className="min-w-0 flex-1 truncate font-semibold text-primary">{props.restaurante}</span>
           </span>
         ) : <span className="min-w-0 flex-1 truncate font-semibold text-primary">{props.restaurante}</span>)}

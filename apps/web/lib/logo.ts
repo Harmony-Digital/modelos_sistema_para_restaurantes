@@ -6,19 +6,36 @@ export const LIMITE_LOGO_BYTES = 1024 * 1024
 export const ACEITA_LOGO = 'image/png,image/jpeg,image/webp'
 export const ERRO_TIPO_LOGO = 'Envie a logo em PNG, JPG ou WebP (SVG não é aceito).'
 export const ERRO_TAMANHO_LOGO = 'A logo passa de 1 MB. Envie uma imagem menor.'
+export const ERRO_LOGO_INCOMPLETA = 'A imagem parece incompleta ou corrompida. Envie o arquivo de novo.'
 
 export type ImagemLogo = { ok: true; mime: 'image/png' | 'image/jpeg' | 'image/webp'; ext: 'png' | 'jpg' | 'webp' }
 
 const comeca = (b: Uint8Array, sig: number[], desde = 0) => sig.every((x, i) => b[desde + i] === x)
 const ascii = (s: string) => [...s].map((c) => c.charCodeAt(0))
 const ASSINATURA_PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+/**
+ * Tamanhos mínimos plausíveis (bem abaixo de qualquer logo real): recusam o arquivo cortado que só tem a assinatura.
+ * PNG: assinatura + IHDR (25) + IDAT mínimo + IEND (12). JPEG: SOI + cabeçalhos + quadro. WebP: RIFF + bloco VP8*.
+ */
+const MINIMO = { png: 67, jpg: 107, webp: 30 } as const
 
 export function validarImagemLogo(bytes: Uint8Array, tamanho: number = bytes.length): ImagemLogo | { ok: false; erro: string } {
   if (tamanho > LIMITE_LOGO_BYTES || bytes.length > LIMITE_LOGO_BYTES) return { ok: false, erro: ERRO_TAMANHO_LOGO }
   if (tamanho === 0 || bytes.length === 0) return { ok: false, erro: 'O arquivo está vazio.' }
-  if (comeca(bytes, ASSINATURA_PNG)) return { ok: true, mime: 'image/png', ext: 'png' }
-  if (comeca(bytes, [0xff, 0xd8, 0xff])) return { ok: true, mime: 'image/jpeg', ext: 'jpg' }
-  if (comeca(bytes, ascii('RIFF')) && comeca(bytes, ascii('WEBP'), 8)) return { ok: true, mime: 'image/webp', ext: 'webp' }
+  const incompleta = { ok: false as const, erro: ERRO_LOGO_INCOMPLETA }
+  if (comeca(bytes, ASSINATURA_PNG)) {
+    // o primeiro bloco de um PNG é sempre o IHDR (bytes 12–15)
+    if (bytes.length < MINIMO.png || !comeca(bytes, ascii('IHDR'), 12)) return incompleta
+    return { ok: true, mime: 'image/png', ext: 'png' }
+  }
+  if (comeca(bytes, [0xff, 0xd8, 0xff])) {
+    return bytes.length < MINIMO.jpg ? incompleta : { ok: true, mime: 'image/jpeg', ext: 'jpg' }
+  }
+  if (comeca(bytes, ascii('RIFF')) && comeca(bytes, ascii('WEBP'), 8)) {
+    const bloco = ['VP8 ', 'VP8L', 'VP8X'].some((b) => comeca(bytes, ascii(b), 12))
+    if (bytes.length < MINIMO.webp || !bloco) return incompleta
+    return { ok: true, mime: 'image/webp', ext: 'webp' }
+  }
   return { ok: false, erro: ERRO_TIPO_LOGO }
 }
 

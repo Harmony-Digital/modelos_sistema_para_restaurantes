@@ -10,7 +10,10 @@ async function lerMarca(): Promise<MarcaLogin | null> {
     const m = await marcaDoLogin(getDb())
     const logo = urlPublicaLogo(m?.logoPath ?? null)
     return m && logo ? { nome: m.nome, logo } : null
-  } catch {
+  } catch (e) {
+    // só o tipo do erro: a mensagem do driver pode trazer dado da conexão
+    // eslint-disable-next-line no-console -- tela pública: único registro de que a marca não pôde ser lida, sem PII
+    console.warn(`login: marca do restaurante indisponível (${e instanceof Error ? e.name : typeof e})`)
     return null
   }
 }

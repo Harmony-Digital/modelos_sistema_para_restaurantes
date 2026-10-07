@@ -9,7 +9,7 @@ export function AuthCard(props: { title: string; description?: string; marca?: M
       <div className="w-full max-w-sm">
         {props.marca ? (
           <p className="mb-8 flex min-w-0 items-center gap-2 font-display text-lg font-semibold text-foreground">
-            <LogoRestaurante url={props.marca.logo} nome={props.marca.nome} />
+            <LogoRestaurante url={props.marca.logo} nome={props.marca.nome} decorativa />
             <span className="min-w-0 truncate">{props.marca.nome}</span>
           </p>
         ) : (

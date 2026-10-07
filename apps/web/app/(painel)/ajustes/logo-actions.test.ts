@@ -19,7 +19,7 @@ vi.mock('@atd/db', () => ({ salvarLogo, removerLogo }))
 const { enviarLogoAction, removerLogoAction } = await import('./logo-actions')
 
 const REST = '00000000-0000-4000-8000-0000000000aa'
-const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]
+const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, ...new Array(100).fill(0)]
 const sha = (b: number[]) => createHash('sha256').update(Uint8Array.from(b)).digest('hex')
 const form = (bytes: number[] | null, name = 'logo.png', type = 'image/png') => {
   const fd = new FormData()

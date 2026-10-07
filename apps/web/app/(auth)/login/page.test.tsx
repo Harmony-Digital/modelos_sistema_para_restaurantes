@@ -7,11 +7,14 @@ vi.mock('@/lib/server/db', () => ({ getDb: () => 'db' }))
 vi.mock('./login-form', () => ({ LoginForm: () => <form aria-label="Entrar" /> }))
 
 const { default: LoginPage } = await import('./page')
+let aviso: ReturnType<typeof vi.spyOn>
 const pagina = async () => render(await LoginPage({ searchParams: Promise.resolve({}) }))
 
 describe('LoginPage — marca do restaurante', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.restoreAllMocks()
+    aviso = vi.spyOn(globalThis.console, 'warn').mockImplementation(() => {})
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://abc.supabase.co')
   })
 
@@ -19,7 +22,10 @@ describe('LoginPage — marca do restaurante', () => {
     marcaDoLogin.mockResolvedValue({ nome: 'Casa Harmonia', logoPath: 'r1/logo-x.png' })
     await pagina()
     expect(marcaDoLogin).toHaveBeenCalledWith('db')
-    const img = screen.getByRole('img', { name: 'Casa Harmonia' })
+    // nome escrito ao lado: logo decorativa
+    expect(screen.queryByRole('img')).toBeNull()
+    const img = document.querySelector('main img')!
+    expect(img).toHaveAttribute('alt', '')
     expect(img).toHaveAttribute('src', 'https://abc.supabase.co/storage/v1/object/public/marca/r1/logo-x.png')
     expect(img).toHaveAttribute('width', '32')
     expect(screen.getByText('Casa Harmonia').className).toContain('truncate')
@@ -30,15 +36,24 @@ describe('LoginPage — marca do restaurante', () => {
     for (const mock of [
       () => marcaDoLogin.mockResolvedValue(null),
       () => marcaDoLogin.mockResolvedValue({ nome: 'Casa Harmonia', logoPath: null }),
-      () => marcaDoLogin.mockRejectedValue(new Error('banco fora')),
+      () => marcaDoLogin.mockRejectedValue(new Error('banco fora: usuario@x.test')),
     ]) {
       mock()
       const { unmount } = await pagina()
-      expect(screen.queryByRole('img')).toBeNull()
+      expect(document.querySelector('main img')).toBeNull()
       expect(screen.queryByText('Casa Harmonia')).toBeNull()
       expect(screen.getByText('Atendimento')).toBeInTheDocument()
       expect(screen.getByRole('heading', { name: 'Entrar no painel' })).toBeInTheDocument()
       unmount()
     }
+  })
+
+  it('erro ao ler a marca é registrado sem a mensagem (sem PII)', async () => {
+    const warn = aviso
+    marcaDoLogin.mockRejectedValue(new Error('falha com usuario@x.test'))
+    await pagina()
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(String(warn.mock.calls[0])).toContain('login: marca do restaurante indisponível')
+    expect(String(warn.mock.calls[0])).not.toContain('usuario@x.test')
   })
 })

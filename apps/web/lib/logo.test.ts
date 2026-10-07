@@ -3,15 +3,31 @@ import { LIMITE_LOGO_BYTES, urlPublicaLogo, validarImagemLogo } from './logo'
 
 const bytes = (...partes: (number[] | string)[]) =>
   new Uint8Array(partes.flatMap((p) => (typeof p === 'string' ? [...p].map((c) => c.charCodeAt(0)) : p)))
-const PNG = bytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 'resto')
-const JPG = bytes([0xff, 0xd8, 0xff, 0xe0], 'resto')
-const WEBP = bytes('RIFF', [1, 2, 3, 4], 'WEBPVP8 ')
+const corpo = new Array(200).fill(0)
+// cabeçalhos mínimos de verdade: PNG com o bloco IHDR, JPEG com marcador depois do SOI, WebP com o bloco VP8/VP8L/VP8X
+const PNG = bytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13], 'IHDR', corpo)
+const JPG = bytes([0xff, 0xd8, 0xff, 0xe0], corpo)
+const WEBP = bytes('RIFF', [1, 2, 3, 4], 'WEBPVP8 ', corpo)
 
 describe('validarImagemLogo', () => {
   it('aceita PNG, JPG e WebP pelos bytes', () => {
     expect(validarImagemLogo(PNG)).toEqual({ ok: true, mime: 'image/png', ext: 'png' })
     expect(validarImagemLogo(JPG)).toEqual({ ok: true, mime: 'image/jpeg', ext: 'jpg' })
     expect(validarImagemLogo(WEBP)).toEqual({ ok: true, mime: 'image/webp', ext: 'webp' })
+    expect(validarImagemLogo(bytes('RIFF', [1, 2, 3, 4], 'WEBPVP8L', corpo)).ok).toBe(true)
+    expect(validarImagemLogo(bytes('RIFF', [1, 2, 3, 4], 'WEBPVP8X', corpo)).ok).toBe(true)
+  })
+
+  it('recusa arquivo truncado que só tem a assinatura', () => {
+    const erro = { ok: false, erro: 'A imagem parece incompleta ou corrompida. Envie o arquivo de novo.' }
+    expect(validarImagemLogo(bytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toEqual(erro)
+    expect(validarImagemLogo(bytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13], 'IHDR'))).toEqual(erro)
+    // PNG sem o IHDR logo depois da assinatura
+    expect(validarImagemLogo(bytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13], 'XXXX', corpo))).toEqual(erro)
+    expect(validarImagemLogo(bytes([0xff, 0xd8, 0xff]))).toEqual(erro)
+    expect(validarImagemLogo(bytes([0xff, 0xd8, 0xff, 0xe0], new Array(20).fill(0)))).toEqual(erro)
+    expect(validarImagemLogo(bytes('RIFF', [1, 2, 3, 4], 'WEBP'))).toEqual(erro)
+    expect(validarImagemLogo(bytes('RIFF', [1, 2, 3, 4], 'WEBPXXXX', corpo))).toEqual(erro)
   })
 
   it('recusa SVG, PDF renomeado para .png e outros formatos', () => {
@@ -21,7 +37,7 @@ describe('validarImagemLogo', () => {
     expect(validarImagemLogo(bytes('%PDF-1.7 ...'))).toEqual(erro)
     expect(validarImagemLogo(bytes('GIF89a....'))).toEqual(erro)
     // assinatura do PNG pela metade não basta
-    expect(validarImagemLogo(bytes([0x89, 0x50, 0x4e, 0x47], '<svg/>'))).toEqual(erro)
+    expect(validarImagemLogo(bytes([0x89, 0x50, 0x4e, 0x47], '<svg/>', corpo))).toEqual(erro)
   })
 
   it('recusa vazio e acima de 1 MB (pelo tamanho declarado ou pelos bytes)', () => {
