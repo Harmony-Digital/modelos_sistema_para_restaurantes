@@ -42,7 +42,9 @@ describe('SimuladorFlutuante', () => {
     render(<Montar />)
     const p = painel()!
     expect(p.className).toMatch(/\btop-16\b/) // barra superior em lg: 56 px (min-h-14) + margem
-    expect(p.className).toMatch(/\bbottom-4\b/)
+    // < xl (ex.: 1024×768 com o menu aberto) termina acima do compositor de Conversas: o Enviar fica livre
+    expect(p.className).toMatch(/(^|\s)bottom-28(\s|$)/)
+    expect(p.className).toMatch(/(^|\s)xl:bottom-4(\s|$)/)
     expect(p.className).toContain('pointer-events-none')
     for (const filho of Array.from(p.children).filter((c) => !c.classList.contains('sr-only'))) {
       expect(filho.className).toContain('pointer-events-auto')
@@ -53,7 +55,8 @@ describe('SimuladorFlutuante', () => {
     largura(true)
     render(<Montar />)
     const celular = painel()!.querySelector('[data-celular]')!
-    expect(celular.className).toContain('md:h-[min(760px,calc(100dvh-9rem))]')
+    expect(celular.className).toContain('md:h-[min(760px,calc(100dvh-15rem))]')
+    expect(celular.className).toContain('xl:h-[min(760px,calc(100dvh-9rem))]')
     expect(celular.className).toContain('md:w-[320px]')
     expect(celular.className).toContain('xl:w-[360px]')
   })

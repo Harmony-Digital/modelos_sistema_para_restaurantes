@@ -13,7 +13,8 @@ const BOTAO = 'flex size-11 items-center justify-center rounded-full text-muted-
 
 /**
  * Simulador flutuante (≥ lg): "celular" ancorado no canto direito, sobre a tela, sem bloquear o painel (não modal).
- * Fica entre a barra superior (top-16) e a borda de baixo; a altura do celular cabe no que sobra e a área vazia
+ * Fica entre a barra superior (top-16) e a borda de baixo (< xl, acima da faixa do compositor de Conversas, para o
+ * Enviar continuar clicável com o painel aberto); a altura do celular cabe no que sobra e a área vazia
  * ao redor deixa o clique passar (pointer-events-none; só a pílula e o celular capturam).
  * ≥ xl: controles ao lado do celular. < xl (ex.: 1024 px com o menu aberto): compacto — celular mais estreito,
  * controles recolhidos atrás de um botão (abrem sobre o celular) e clicar fora minimiza, para não esconder o
@@ -72,7 +73,7 @@ export default function SimuladorFlutuante(props: {
           e.preventDefault()
           props.onMinimizado(true)
         }}
-        className="pointer-events-none fixed bottom-4 right-4 top-16 z-40 flex flex-col items-end justify-end gap-2"
+        className="pointer-events-none fixed bottom-28 right-4 top-16 z-40 flex flex-col items-end justify-end gap-2 xl:bottom-4"
       >
         <div className="pointer-events-auto flex shrink-0 items-center gap-1 rounded-full border border-border bg-background py-0.5 pl-4 pr-0.5 text-sm shadow-lg">
           <span className="mr-2 font-medium text-foreground">Simulador</span>
@@ -108,8 +109,11 @@ export default function SimuladorFlutuante(props: {
           >
             {props.controles}
           </div>
-          {/* altura: 100dvh − top-16 (4rem) − pílula (~3,1rem) − gap (0,5rem) − bottom-4 (1rem) ≈ 9rem */}
-          <PhoneFrame data-celular="" className="md:h-[min(760px,calc(100dvh-9rem))] md:w-[320px] xl:w-[360px] md:rounded-[44px] md:border-[10px]">
+          {/*
+            altura: 100dvh − top-16 (4rem) − pílula (~3,1rem) − gap (0,5rem) − fundo. ≥ xl o fundo é bottom-4 (1rem) ≈ 9rem;
+            < xl é bottom-28 (7rem) ≈ 15rem: o compositor de Conversas (sticky no pé, ~70 px) e o Enviar ficam livres
+          */}
+          <PhoneFrame data-celular="" className="md:h-[min(760px,calc(100dvh-15rem))] xl:h-[min(760px,calc(100dvh-9rem))] md:w-[320px] xl:w-[360px] md:rounded-[44px] md:border-[10px]">
             <WhatsAppChat restaurante={props.restaurante} mensagens={props.mensagens} digitando={props.digitando} onEnviar={props.onEnviar} onEscolher={props.onEscolher} />
           </PhoneFrame>
         </div>

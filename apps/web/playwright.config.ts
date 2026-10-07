@@ -9,6 +9,10 @@ export default defineConfig({
   testMatch: '**/*.spec.ts',
   workers: 1, // as specs compartilham o banco e limpam usuários @teste.local
   use: { baseURL: base, locale: 'pt-BR' },
-  projects: [{ name: 'celular', use: { ...devices['Pixel 7'] } }],
+  projects: [
+    // celular: todas as specs da raiz; desktop: as specs de e2e/desktop (menu lateral, lista + detalhe, flutuante)
+    { name: 'celular', testIgnore: 'desktop/**', use: { ...devices['Pixel 7'] } },
+    { name: 'desktop', testMatch: 'desktop/**/*.spec.ts', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } },
+  ],
   webServer: { command: `PORT=${porta} pnpm dev`, url: `${base}/login`, reuseExistingServer: true, timeout: 120_000 },
 })
