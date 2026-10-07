@@ -3,16 +3,19 @@ import { LogOut } from 'lucide-react'
 import { cookies } from 'next/headers'
 import { Button } from '@/components/ui/button'
 import { HorarioHumano } from '@/components/painel/horario-humano'
+import { LogoForm } from '@/components/painel/logo-form'
 import { ModoDemonstracao } from '@/components/painel/modo-demonstracao'
 import { RestauranteForm } from '@/components/painel/restaurante-form'
 import { TopBar } from '@/components/shell/top-bar'
 import { requireStaff } from '@/lib/dal'
 import { horarioParaForm, lerHorarioSalvo } from '@/lib/schemas/atendimento'
 import { getDb } from '@/lib/server/db'
+import { lerRestauranteDoPainel } from '@/lib/server/restaurante'
 import { parseTema, THEME_COOKIE } from '@/lib/theme'
 import { setTheme, signOut } from '../actions'
 import { salvarModoDemonstracaoAction, salvarRestauranteAction } from './actions'
 import { salvarHorarioHumanoAction } from './atendimento-humano/actions'
+import { enviarLogoAction, removerLogoAction } from './logo-actions'
 import { ThemeForm } from './theme-form'
 
 export const dynamic = 'force-dynamic'
@@ -26,11 +29,13 @@ export default async function AjustesPage() {
   const dono = session.role === 'dono'
   // restaurante: o dono edita, os demais só veem (como era em "Mais"); modo demonstração: o atendente nem vê
   const gestao = session.role !== 'atendente'
-  const [{ restaurante }, demonstracao, horario] = await Promise.all([
+  const [{ restaurante }, demonstracao, horario, marca] = await Promise.all([
     carregarUnidadesPainel(db, session.claims),
     gestao ? modoDemonstracao(db, session.claims) : null,
     // horário humano: só o dono (a Server Action também exige dono)
     dono ? lerHorarioHumano(db, session.claims) : null,
+    // logo: dono e gerente enviam, trocam e removem (as Server Actions também exigem); o atendente nem vê
+    gestao ? lerRestauranteDoPainel() : null,
   ])
   const tema = parseTema((await cookies()).get(THEME_COOKIE)?.value)
   return (
@@ -44,6 +49,9 @@ export default async function AjustesPage() {
             acao={salvarRestauranteAction}
             somenteLeitura={!dono}
           />
+          {marca !== null && (
+            <LogoForm nome={restaurante.nome} logo={marca.logo} enviar={enviarLogoAction} remover={removerLogoAction} />
+          )}
           {demonstracao !== null && (
             <ModoDemonstracao ligado={demonstracao} acao={salvarModoDemonstracaoAction} somenteLeitura={!dono} />
           )}

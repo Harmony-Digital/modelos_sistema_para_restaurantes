@@ -10,6 +10,8 @@ export function AppShell(props: {
   children: React.ReactNode
   papel: StaffRole
   restaurante: string
+  /** URL pública da logo do restaurante (menu lateral e topo do celular); sem ela, o layout de sempre. */
+  logo?: string | null
   tema: Tema
   menu: EstadoMenu
   floating?: React.ReactNode
@@ -22,13 +24,13 @@ export function AppShell(props: {
 }) {
   const aguardando = props.aguardando ?? 0
   return (
-    <ShellProvider valor={{ tema: props.tema, papel: props.papel, faixa: props.faixa }}>
+    <ShellProvider valor={{ tema: props.tema, papel: props.papel, faixa: props.faixa, marca: { nome: props.restaurante, logo: props.logo ?? null } }}>
       <div
         className="min-h-dvh pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:flex lg:pb-0"
         // altura reservada da faixa (~61 px numa linha): o simulador flutuante começa abaixo dela
         style={props.faixa ? ({ '--faixa-alertas': '4rem' } as React.CSSProperties) : undefined}
       >
-        <MenuLateral papel={props.papel} restaurante={props.restaurante} estadoInicial={props.menu} aguardando={aguardando} />
+        <MenuLateral papel={props.papel} restaurante={props.restaurante} logo={props.logo ?? null} estadoInicial={props.menu} aguardando={aguardando} />
         <div className="min-w-0 flex-1">
           {props.faixa && <div className="lg:hidden">{props.faixa}</div>}
           {props.children}

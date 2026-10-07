@@ -78,3 +78,12 @@ function trocarLogo(
     return ok({ anterior: atual.logoPath })
   }), { restaurants_logo_path_ck: 'valor_invalido' as const })
 }
+
+/**
+ * Nome e logo para a tela de login, que não tem sessão: lido pela conexão do servidor (a mesma de
+ * `getSingleRestaurantId`), só com as duas colunas. Com nenhum ou mais de um restaurante, `null` (a tela fica como antes).
+ */
+export async function marcaDoLogin(db: Db): Promise<{ nome: string; logoPath: string | null } | null> {
+  const rows = await db.select({ nome: restaurants.nome, logoPath: restaurants.logoPath }).from(restaurants).limit(2)
+  return rows.length === 1 ? rows[0]! : null
+}

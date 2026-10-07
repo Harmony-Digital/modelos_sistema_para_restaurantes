@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { eq, sql as dsql } from 'drizzle-orm'
 import { getTestDb, resetDb, seedRestaurant, seedStaff } from './test-utils.ts'
 import { withUserContext, type JwtClaims } from './rls.ts'
-import { removerLogo, salvarLogo, salvarRegrasReserva } from './marca.ts'
+import { marcaDoLogin, removerLogo, salvarLogo, salvarRegrasReserva } from './marca.ts'
 import { auditLog, restaurants } from './schema/index.ts'
 import { REGRAS_RESERVA_PADRAO } from './schema/restaurant.ts'
 
@@ -153,5 +153,22 @@ describe('Storage: bucket marca', () => {
     const upd = await withUserContext(db, as(c.dono), (tx) =>
       tx.execute(dsql`update storage.objects set name = ${`${c.restaurantId}/x.png`} where bucket_id = 'marca' returning id`))
     expect(upd).toHaveLength(0)
+  })
+})
+
+describe('marca na tela de login (sem sessão)', () => {
+  it('com exatamente um restaurante: só nome e caminho da logo; sem logo, caminho nulo', async () => {
+    const c = await cenario()
+    expect(await marcaDoLogin(db)).toEqual({ nome: 'Restaurante Teste', logoPath: null })
+    const path = `${c.restaurantId}/logo-${SHA}.png`
+    await db.update(restaurants).set({ logoPath: path }).where(eq(restaurants.id, c.restaurantId))
+    expect(await marcaDoLogin(db)).toEqual({ nome: 'Restaurante Teste', logoPath: path })
+  })
+
+  it('com nenhum ou com mais de um restaurante: nada', async () => {
+    expect(await marcaDoLogin(db)).toBeNull()
+    await seedRestaurant(db)
+    await seedRestaurant(db)
+    expect(await marcaDoLogin(db)).toBeNull()
   })
 })

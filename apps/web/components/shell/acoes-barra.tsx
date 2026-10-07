@@ -6,9 +6,10 @@ import { setTheme, signOut } from '@/app/(painel)/actions'
 import type { StaffRole } from '@/lib/access'
 import type { Tema } from '@/lib/theme'
 import { abrirBusca } from './abrir-busca'
+import { LogoRestaurante } from './logo-restaurante'
 
 /** `faixa`: alertas do painel (ex.: gastos), mostrados abaixo da barra superior a partir de lg. */
-type ValorShell = { tema: Tema; papel: StaffRole; faixa?: React.ReactNode }
+type ValorShell = { tema: Tema; papel: StaffRole; faixa?: React.ReactNode; marca?: { nome: string; logo: string | null } }
 const ShellContexto = createContext<ValorShell | null>(null)
 
 /** Posto pelo AppShell: a barra superior de cada tela lê tema e papel daqui. */
@@ -28,6 +29,18 @@ export function FaixaDaBarra() {
   if (!shell?.faixa) return null
   // contexto de empilhamento próprio: o z-40 da faixa não passa por cima da barra fixa ao rolar
   return <div className="relative z-20 hidden shrink-0 lg:block">{shell.faixa}</div>
+}
+
+/** Topo do celular (< lg): logo de 24 px e nome do restaurante acima do título. Sem logo, nada (a barra fica como antes). */
+export function MarcaDaBarra() {
+  const marca = useContext(ShellContexto)?.marca
+  if (!marca?.logo) return null
+  return (
+    <div className="flex min-w-0 items-center gap-1.5 lg:hidden">
+      <LogoRestaurante url={marca.logo} nome={marca.nome} tamanho={24} />
+      <span className="min-w-0 truncate text-xs font-medium text-muted-foreground">{marca.nome}</span>
+    </div>
+  )
 }
 
 /** Lado direito da barra superior (≥ lg): busca rápida, tema e conta. Abaixo de lg isso fica em Ajustes. */
