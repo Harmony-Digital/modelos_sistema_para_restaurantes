@@ -24,7 +24,8 @@ describe('Modelos', () => {
     await user.click(screen.getByRole('button', { name: 'Salvar modelo' }))
     expect(await screen.findByText('Inclua {turnos} no texto: é ali que entra a informação.')).toBeInTheDocument()
     expect(salvarModeloAction).not.toHaveBeenCalled()
-  })
+    // digitação caractere a caractere com prévia ao vivo: sob a carga do `pnpm check` passa dos 5 s padrão
+  }, 15_000)
 
   it('ação que lança vira erro geral em português', async () => {
     const user = userEvent.setup()
