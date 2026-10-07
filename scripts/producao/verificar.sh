@@ -195,6 +195,11 @@ else
         t) falha "bucket $b é PÚBLICO" 'Storage → bucket → desmarcar "Public bucket"' ;;
         *) falha "bucket $b não existe" 'a migration 0027 cria os buckets; confira o passo 2' ;; esac
     done
+    # logo do restaurante (0046/0047): público para leitura (logo não é dado pessoal), 1 MB, só PNG/JPG/WebP
+    marca="$(psql_q "$ADMIN_URL" "select public::text || ' ' || coalesce(file_size_limit, 0) from storage.buckets where id = 'marca'")"
+    case "$marca" in 'true 1048576') ok 'bucket marca existe, é público e aceita até 1 MB' ;;
+      '') falha 'bucket marca não existe' 'as migrations 0046–0047 criam o bucket; confira o passo 2' ;;
+      *) falha "bucket marca fora do padrão ($marca)" 'rode as migrations até a 0047 (público, 1 MB); não mude no painel' ;; esac
 
     for r in web_app worker_app; do
       login="$(psql_q "$ADMIN_URL" "select rolcanlogin from pg_roles where rolname = '$r'")"

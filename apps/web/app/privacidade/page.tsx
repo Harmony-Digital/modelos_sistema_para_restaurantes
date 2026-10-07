@@ -20,8 +20,10 @@ export default async function PrivacidadePage() {
       <p><strong>Rascunho sujeito a revisão jurídica.</strong></p>
       <p>
         O atendimento do {r.nome} pelo WhatsApp é feito por um assistente virtual. Tratamos apenas o nome do seu
-        perfil, seu número de telefone e o conteúdo da conversa, para responder suas dúvidas, registrar avisos de
-        presença e pedidos de evento (art. 7º, V, LGPD) e para dar continuidade ao atendimento (art. 7º, IX).
+        perfil, seu número de telefone e o conteúdo da conversa, para responder suas dúvidas, registrar reservas e
+        pedidos de evento (art. 7º, V, LGPD) e para dar continuidade ao atendimento (art. 7º, IX). Na reserva,
+        guardamos o nome informado para ela e o telefone de contato: o próprio número do WhatsApp ou outro que você
+        indicar, também armazenado cifrado.
       </p>
       <p>
         Seu telefone é armazenado cifrado. Antes de qualquer processamento por inteligência artificial, dados como
@@ -29,7 +31,7 @@ export default async function PrivacidadePage() {
         treinamento. Mensagens de áudio são transcritas e o arquivo é descartado.
       </p>
       <p>
-        Prazos de guarda: mensagens por 90 dias; avisos de presença anonimizados 30 dias após a data; pedidos de
+        Prazos de guarda: mensagens por 90 dias; reservas anonimizadas 30 dias após a data (nome e telefone de contato apagados); pedidos de
         evento anonimizados após 2 anos; cadastro sem interação apagado após 12 meses.
       </p>
       <p>

@@ -12,9 +12,9 @@ const vazio = { unidade: UNIDADE, data: null, tema: null, pessoas: null, horario
 
 function triagem(mensagem: string): TriagemFalsa {
   const m = mensagem.toLowerCase()
-  // sem hora fixa: um horário de hoje pode já ter passado quando o teste roda (e o aviso seria recusado)
-  if (m.startsWith('hoje vou')) {
-    return { itens: [{ ...vazio, servico: 'aviso_presenca', tipo: 'registrar', data: 'hoje', pessoas: 4, horario: 'à noite' } as Item], fora_escopo: false }
+  // amanhã às 20h: um horário de hoje pode já ter passado quando o teste roda (e a reserva pediria outro horário)
+  if (m.startsWith('amanhã vou')) {
+    return { itens: [{ ...vazio, servico: 'aviso_presenca', tipo: 'registrar', data: 'amanhã', pessoas: 4, horario: '20h' } as Item], fora_escopo: false }
   }
   if (m.includes('aniversário para 40')) {
     return {
@@ -54,7 +54,8 @@ test.afterAll(async () => {
   await pararWorkerE2e(worker)
   await falso?.fechar()
   const sql = getSql()
-  // as outras specs contam com o isolamento: o modo volta a ficar desligado
+  // as outras specs contam com o isolamento: o modo volta a ficar desligado (o estado de antes da suíte volta no
+  // teardown global, e2e/estado-inicial.ts)
   await sql`update restaurants set modo_demonstracao = false where id = ${restaurantId}`
   const doTeste = sql`split_part(cu.wa_id_hash, ':', 2) in (select id::text from auth.users where email like '%@teste.local')`
   await sql`delete from units where nome like 'E2E %'`
@@ -90,7 +91,8 @@ async function perguntar(page: Page, texto: string) {
   await page.keyboard.press('Enter')
 }
 
-test('modo demonstração: aviso e pedido de evento do simulador aparecem no painel com o selo "Simulação"', async ({ page }) => {
+test('modo demonstração: reserva e pedido de evento do simulador aparecem no painel com o selo "Simulação"', async ({ page }) => {
+  test.setTimeout(120_000) // conversa de várias mensagens, cada uma passando pelo worker
   await entrarComoGestor(page)
   await page.goto('/ajustes')
   const chave = page.getByRole('switch', { name: 'Modo demonstração' })
@@ -100,16 +102,18 @@ test('modo demonstração: aviso e pedido de evento do simulador aparecem no pai
   await expect(chave).toHaveAttribute('aria-checked', 'true')
 
   await abrirSimuladorLimpo(page)
-  await perguntar(page, `Hoje vou na ${UNIDADE} com 4 pessoas à noite`)
-  await expect(simulador(page).getByText(/^Anotado:/)).toBeVisible({ timeout: 20_000 })
+  await perguntar(page, `Amanhã vou na ${UNIDADE} com 4 pessoas às 20h`)
+  await expect(simulador(page).getByText('Em nome de quem fica a reserva?')).toBeVisible({ timeout: 20_000 })
+  await perguntar(page, 'Maria Souza')
+  await expect(simulador(page).getByText(/^Posso usar este número/)).toBeVisible({ timeout: 20_000 })
+  await perguntar(page, 'sim')
+  await expect(simulador(page).getByText(/^Reserva feita:/)).toBeVisible({ timeout: 20_000 })
   await perguntar(page, `quero fazer um aniversário para 40 pessoas na ${UNIDADE} dia amanhã`)
   await expect(simulador(page).getByText(/^Recebemos seu pedido/)).toBeVisible({ timeout: 20_000 })
 
   // endereço antigo da Previsão redireciona para a Agenda do dia
   await page.goto(`/agenda?aba=previsao&unidade=${unitId}`)
   await expect(page).toHaveURL(new RegExp(`/agenda\\?unidade=${unitId}$`))
-  const aviso = page.getByRole('list', { name: 'Linha do tempo do dia' }).getByRole('listitem').filter({ hasText: '4 pessoas' })
-  await expect(aviso).toContainText('Simulação')
 
   await page.goto(`/agenda?unidade=${unitId}`)
   const pendente = page.getByRole('region', { name: 'Pedidos para responder em outros dias' }).getByRole('link')
@@ -120,8 +124,13 @@ test('modo demonstração: aviso e pedido de evento do simulador aparecem no pai
   await expect(detalhe.getByRole('button', { name: /telefone/i })).toHaveCount(0)
   // no celular a folha é modal (o resto da tela sai da árvore de acessibilidade): fecha para ver a linha do tempo
   await fecharFolhaDoPedido(page)
-  const pedido = page.getByRole('list', { name: 'Linha do tempo do dia' }).getByRole('link', { name: /40 convidados/ })
+  // o pedido abre o dia dele (amanhã), o mesmo da reserva do simulador
+  const linhaDoTempo = page.getByRole('list', { name: 'Linha do tempo do dia' })
+  const pedido = linhaDoTempo.getByRole('link', { name: /40 convidados/ })
   await expect(pedido).toContainText('Simulação')
+  const reserva = linhaDoTempo.getByRole('listitem').filter({ hasText: 'Maria Souza' })
+  await expect(reserva).toContainText('4 pessoas')
+  await expect(reserva).toContainText('Simulação')
 
   // Conversas: as simuladas entram sem o filtro, que some
   await page.goto('/conversas?aba=ia')

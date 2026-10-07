@@ -16,13 +16,13 @@ Atendimento ao cliente final de um restaurante com várias unidades, feito **do 
 | # | Serviço | O que a IA faz |
 |---|---|---|
 | S1 | Horários, funcionamento e unidades | Responde horários (incl. feriados/exceções), "está aberto agora?", endereços, como chegar, informações gerais aprovadas (estacionamento, pets, acessibilidade…) |
-| S2 | Aviso de presença | Registra "hoje vou na unidade X com N pessoas". **Não é reserva** — é previsão de movimento para a unidade |
+| S2 | Reserva (antes "aviso de presença"; ver adendo de 07/10/2026) | Registra a reserva de lugar para N pessoas numa unidade, dia e horário, com nome e contato, respeitando a lotação diária da unidade. **Não escolhe mesa** |
 | S3 | Eventos | Informa espaços/condições e **coleta** pedido de reserva de espaço (data, unidade, convidados, tipo). Confirmação é sempre humana |
 | S4 | Cardápio | Envia o cardápio (PDF/imagem) e responde perguntas ("tem carne de sol?") com base no cardápio cadastrado, por unidade |
 
 ### 1.2 Fora de escopo (MVP)
 - Qualquer assunto não relacionado ao restaurante (clima, notícias, conhecimentos gerais, código etc.) — **bloqueado antes do modelo principal**.
-- Reservas reais de mesa, pagamentos, pedidos/delivery.
+- Escolha de mesa, pagamentos, pedidos/delivery (a reserva do S2 garante lugar para N pessoas, não uma mesa).
 - Mensagens ativas de marketing (só com opt-in, futuro).
 - Outros canais (site/chat, Instagram) — o motor é desacoplado do canal para permitir no futuro.
 - Multi-tenant/SaaS — um restaurante, mas todas as tabelas têm `restaurant_id` para não fechar a porta.
@@ -127,17 +127,17 @@ Convenções:
 
 | Tabela | Campos principais | Índices / restrições |
 |---|---|---|
-| `restaurants` | id, nome, timezone, persona_ia (texto curto), mensagens_padrao jsonb, horario_atendimento_humano jsonb, dpo_nome, dpo_contato, politica_url | 1 linha |
-| `units` | id, nome, slug, apelidos `text[]`, endereco, bairro, cidade, uf, cep, lat, lng, maps_url, telefone, ativo | único `(restaurant_id, slug)`; GIN trigram em `nome` e `apelidos` |
+| `restaurants` | id, nome, timezone, persona_ia (texto curto), mensagens_padrao jsonb, horario_atendimento_humano jsonb, dpo_nome, dpo_contato, politica_url, regras_reserva (texto, 1–600, padrão com tolerância de 15 min), logo_path (nullable, `<id>/logo-<sha256>.(png\|jpg\|webp)` no bucket público `marca`) | 1 linha |
+| `units` | id, nome, slug, apelidos `text[]`, endereco, bairro, cidade, uf, cep, lat, lng, maps_url, telefone, ativo, capacidade_pessoas (`smallint` nullable, 1–5000: lotação por dia; nulo = sem controle) | único `(restaurant_id, slug)`; GIN trigram em `nome` e `apelidos` |
 | `unit_hours` | unit_id, weekday (0–6), abre `time`, fecha `time` (fecha < abre ⇒ vira o dia) | `(unit_id, weekday)`; vários turnos por dia permitidos; check de não sobreposição na aplicação + teste |
 | `unit_hour_exceptions` | unit_id, data, fechado bool, abre, fecha, motivo | único `(unit_id, data)` |
 | `knowledge_facts` | id, tema, titulo, texto (aprovado), unit_id nullable, ativo, `search tsvector` gerado | GIN em `search` (config `portuguese` + `unaccent`) |
 
-### 3.2 Avisos de presença (S2)
+### 3.2 Reservas (S2; tabela `attendance_notices`, nome mantido)
 
 | Tabela | Campos | Índices / restrições |
 |---|---|---|
-| `attendance_notices` | id, unit_id, customer_id (nullable, `ON DELETE SET NULL`), nome (opcional: nome de perfil do WhatsApp ou digitado no painel), data, pessoas (1–60), horario_aprox (texto curto, ≤ 40), status (`ativo`/`cancelado`), origem (`ia`/`painel`), simulado bool, criado_por (nullable), anonimizado bool | **único parcial** `(customer_id, unit_id, data) WHERE status='ativo'` (novo aviso do mesmo cliente/unidade/dia **atualiza**); `(unit_id, data)` |
+| `attendance_notices` | id, unit_id, customer_id (nullable, `ON DELETE SET NULL`), nome (exigido em toda reserva nova; os antigos podem ser nulos), data, pessoas (1–60), horario (`time`, HH:MM, exigido na reserva nova e dentro do funcionamento da unidade no dia), horario_aprox (legado, só leitura do histórico), contato_cifrado (telefone de contato cifrado como o de `customers`; nulo = o próprio WhatsApp do cliente; nunca vem do LLM), status (`confirmada`/`cancelada`/`nao_veio`), origem (`ia`/`painel`), simulado bool, criado_por (nullable), anonimizado bool | **único parcial** `(customer_id, unit_id, data) WHERE status='confirmada'` (nova reserva do mesmo cliente/unidade/dia **atualiza**); `(unit_id, data)`. **Lotação:** soma de `pessoas` das `confirmada` da unidade no dia com o mesmo `simulado` ≤ `units.capacidade_pessoas`, checada com a unidade travada (`FOR UPDATE`) na transação que grava |
 
 ### 3.3 Eventos (S3)
 
@@ -237,8 +237,8 @@ Após a chamada: `reservado -= $est, gasto += $real` (custo real de `usage.cost`
 | `buscar_info(tema)` | `knowledge_facts` aprovados | — |
 | `buscar_cardapio(consulta, unidade?)` — Etapa 05: função do domínio, não tool de LLM (ver adendo) | Full-text + trigram, respeita `menu_item_units` | top-k ≤ 8 |
 | `enviar_cardapio(unidade?)` — Etapa 05: função do domínio, não tool de LLM (ver adendo) | Envia `menu_files` (reusa `wa_media_id`) | arquivo ativo existente |
-| `registrar_aviso_presenca(unidade, data, pessoas, horario?)` — Etapa 03: função do domínio, não tool de LLM (ver adendo) | Upsert em `attendance_notices` | data ≥ hoje e ≤ hoje+30; 1 ≤ pessoas ≤ 60; unidade ativa e aberta na data |
-| `cancelar_aviso_presenca(unidade, data)` — Etapa 03: função do domínio, não tool de LLM (ver adendo) | status `cancelado` | aviso do próprio cliente |
+| `registrar_aviso_presenca(unidade, data, pessoas, horario?)` — Etapa 03: função do domínio, não tool de LLM (ver adendo); desde 07/10/2026 é a reserva (`registrarReserva`) | Upsert em `attendance_notices` com a lotação | data ≥ hoje e ≤ hoje+30; 1 ≤ pessoas ≤ 60; unidade ativa e aberta na data; horário dentro do funcionamento; nome; cabe na lotação do dia |
+| `cancelar_aviso_presenca(unidade, data)` — Etapa 03: função do domínio, não tool de LLM (ver adendo) | status `cancelada` | reserva do próprio cliente |
 | `registrar_pedido_evento(...)` — Etapa 04: função do domínio, não tool de LLM (ver adendo) | Cria `event_requests` status `novo` | data de amanhã até hoje+365; 1 ≤ convidados ≤ 1000 e dentro da capacidade do espaço (se informado); nunca "confirmado" pela IA |
 | `transferir_humano(motivo)` | Estado `aguardando_humano`, notifica equipe | — |
 
@@ -321,7 +321,7 @@ Primeira interação de cada cliente (e novamente após 12 meses — `privacy_no
 | Dado | Prazo | Ação |
 |---|---|---|
 | `messages` (conteúdo) | 90 dias | apagar |
-| `attendance_notices` | 30 dias após a data | anonimizar (mantém unidade, dia, pessoas; limpa `nome` e `customer_id`) |
+| `attendance_notices` | 30 dias após a data | anonimizar (mantém unidade, dia, pessoas; limpa `nome`, `contato_cifrado` e `customer_id`) |
 | `event_requests` | 2 anos | anonimizar |
 | `ai_runs` | 13 meses | apagar (não contém conteúdo) |
 | `customers` sem interação | 12 meses | apagar em cascata |
@@ -523,3 +523,15 @@ Decisão do dono: a amostra é mostrada só pelo simulador, e o isolamento das s
 - **Tela:** itens simulados levam o selo **Simulação** (componente único `SeloSimulacao`). Em Conversas, com o modo ligado, o filtro "Mostrar simulações" some (as simuladas sempre entram). O botão de telefone não aparece em pedido simulado (a DAL continua recusando: cliente simulado não tem telefone real).
 - **Não muda:** worker e pipeline; orçamento (escopo `simulacao`); Gastos (simulação à parte); retenção de 7 dias das simulações; LGPD. "Perguntas sem resposta" segue só com clientes reais: o worker não registra lacunas de conversa simulada.
 - **Operação:** ligar o modo antes de apresentar a amostra e desligar ao começar a atender clientes reais (runbook da amostra, passo 9; roteiro em `docs/homologacao/modo-demonstracao.md`).
+
+## Adendo — Reserva com lotação e logo (07/10/2026)
+
+Decisão do dono (spec [docs/specs/2026-10-07-reservas-e-logo-design.md](docs/specs/2026-10-07-reservas-e-logo-design.md); plano [docs/plans/reservas-logo.md](docs/plans/reservas-logo.md)). Prevalece sobre "não é reserva" do §1.1 e sobre os trechos de aviso de presença dos adendos 03 e 04.
+- **S2 vira reserva** (migrations 0045–0047): a tabela continua `attendance_notices`; "reserva" é o nome na tela e na conversa. Dados no §3.2: `horario`, `nome` exigido, `contato_cifrado`, status `confirmada`/`cancelada`/`nao_veio` (a 0045 renomeia os valores do enum: `ativo` → `confirmada`, `cancelado` → `cancelada`; o índice único passa a valer para `confirmada`). `units.capacidade_pessoas` e `restaurants.regras_reserva` no §3.1.
+- **Lotação sem corrida:** registrar ou aumentar uma reserva trava a unidade (`select … for update`; o worker usa `app.travar_unidade_reserva`, `security definer` só para `worker_app`), soma a ocupação do dia sem a própria reserva e só grava se couber; senão, nada é gravado e a resposta é a de lotado (até 3 outras unidades abertas com vaga, outro dia, grupo menor se ainda cabe alguém). Diminuir, cancelar e "não veio" nunca são bloqueados. Reservas do simulador contam só entre si. O painel, ao reconfirmar, passa pela mesma checagem.
+- **Conversa (`triage-v7`):** a IA só extrai unidade, data, pessoas, horário, nome e o sim/não do contato; o código pergunta um dado por vez (unidade, data, pessoas, horário, nome, contato), valida e monta as respostas por modelos de texto (`reserva_*`). "Tem mesa para N?" passa a ser reserva. Respostas curtas ao campo pendente (número, horário, nome, sim/não, telefone) seguem sem o modelo.
+- **Contato (LGPD):** com a pergunta de contato pendente, o worker captura o telefone da mensagem **antes da redação de PII**, cifra (`encryptPhone`) e guarda só em `contato_cifrado`; a mensagem fica gravada com o número mascarado (`[TELEFONE]`). O LLM nunca vê o número. Na segunda falha de leitura, vale o número do WhatsApp, com aviso. A equipe vê o número só por **Ver contato**, auditado `reserva.contato_visualizado`. Retenção e exclusão do titular limpam `nome` e `contato_cifrado`; a exportação do titular não decifra o contato.
+- **Painel:** Agenda com "Reservas", ocupação por unidade ("147/150", "sem limite"), detalhe com Ver contato e as ações Confirmada/Cancelada/Não veio (dono/gerente); Unidades com "Lotação máxima (pessoas por dia)"; Ajustes com "Regras da reserva" (dono/gerente, ≤ 600, restaurar padrão).
+- **Logo do restaurante:** Ajustes → Logo (dono/gerente), PNG/JPG/WebP até 1 MB conferidos pelos bytes (SVG nunca), bucket público `marca` (logo não é dado pessoal), gravação só no prefixo do próprio restaurante, objeto anterior apagado depois que o banco grava. Exibida num quadro de 32×32 (`object-contain`) no menu, 24 px no topo do celular e no login quando há exatamente um restaurante; sem logo, o layout é o de antes.
+- **Deploy:** a 0045 não é compatível com o worker anterior: parar o worker, migrar, subir o worker novo e publicar a web na mesma janela (runbooks `producao-amostra.md` e `deploy.md`).
+- **Melhorias futuras:** **lembrete automático pelo WhatsApp antes da chegada** — depende de um modelo de mensagem (template) aprovado pela Meta, porque o lembrete sai fora da janela de 24 h da conversa; entra com o go-live da Meta. Também fora do escopo desta versão: escolha de mesa, limite por turno ou faixa de horário, limite por dia da semana, CPF e SVG na logo.

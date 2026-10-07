@@ -171,7 +171,7 @@ git check-ignore -q .env.production-bootstrap .env.vercel-producao .env.worker-p
    (você pode abrir o arquivo e passar o conteúdo — não é segredo).
 7. **Project Settings → Data API:** Exposed schemas **vazio** (remover `public` e `graphql_public`; desligar a Data API se o painel permitir).
 8. **Realtime → Settings:** "Allow public access" = **off** (só canais privados, autorizados pela RLS de `realtime.messages` das migrations 0030–0031).
-9. Storage: nada a fazer agora — os buckets privados `cardapio` e `importacoes` são criados pela migration 0027 (conferidos no passo 2).
+9. Storage: nada a fazer agora — os buckets privados `cardapio` e `importacoes` são criados pela migration 0027, e o bucket **público** `marca` (logo do restaurante, 1 MB, PNG/JPG/WebP) pelas 0046–0047 (todos conferidos no passo 2). Não mude a visibilidade nem o limite no painel.
 
 Depois, 🔑 peça ao humano para colar **direto no `.env.production-bootstrap`** (não no chat):
 
@@ -206,8 +206,8 @@ scripts/producao/verificar.sh --bootstrap .env.production-bootstrap
 ```
 
 **Saída esperada:** o drizzle-kit aplica as migrations sem erro; o script mostra
-`OK migrations aplicadas: 45 de 45 (até 0044_…)`, `OK bucket cardapio existe e é privado`,
-`OK bucket importacoes existe e é privado`, `OK role web_app existe com login`, `OK role worker_app existe com login`.
+`OK migrations aplicadas: 48 de 48 (até 0047_marca_bucket_config)`, `OK bucket cardapio existe e é privado`,
+`OK bucket importacoes existe e é privado`, `OK bucket marca existe, é público e aceita até 1 MB`, `OK role web_app existe com login`, `OK role worker_app existe com login`.
 **Se falhar:** erro de `MAINTAIN` → o banco não é PG 17 (passo 1); falha no meio → rode o mesmo comando de novo
 (o drizzle aplica só as que faltam) e, se repetir, pare e relate a mensagem do drizzle-kit. Nunca edite uma migration.
 
@@ -233,6 +233,22 @@ importação que estava sendo lida durante a troca de versão continua do últim
 **Modo demonstração (migrations 0043–0044, 07/10/2026):** só acrescentam a coluna `restaurants.modo_demonstracao`
 (padrão desligado), a função `app.modo_demonstracao()`, a métrica "tempo até assumir" e as policies de leitura e
 atualização de `event_requests`. Nenhum tipo é recriado e o worker não muda: não é preciso parar o worker para elas.
+
+**Reserva com lotação e logo (migrations 0045–0047, 07/10/2026):** **pare o worker antes.** A 0045 renomeia os valores
+do status da reserva (`attendance_status`: `ativo` → `confirmada`, `cancelado` → `cancelada`, mais `nao_veio`): o worker
+antigo grava e lê `'ativo'` e quebra com ela aplicada; o worker novo exige a 0045 (colunas `horario`, `contato_cifrado`)
+e a 0046 (`app.travar_unidade_reserva`, a trava da lotação). A 0046 também cria o bucket público `marca` e as policies
+de gravação no prefixo do próprio restaurante; a 0047 fixa o limite de 1 MB e os tipos do bucket. Ordem, numa janela só:
+
+1. parar o worker (`… docker compose … stop worker`, como acima);
+2. `pnpm db:migrate` (0045–0047) e `scripts/producao/verificar.sh --bootstrap …` (48 de 48 e o bucket `marca`);
+3. subir o **worker novo** (passo 8, `up -d`) e conferir `worker iniciado`;
+4. publicar a **web** logo em seguida (Vercel pelo Git, passo 5): o painel publicado antes também lê o status antigo.
+
+As mensagens que chegarem no intervalo ficam na fila e são respondidas pelo worker novo. Conversas que estavam
+esperando "Para quantas pessoas?" continuam (o worker novo lê o pendente antigo). Não há variável nova. Textos
+personalizados das antigas mensagens `aviso_*` (Conteúdo → Mensagens) deixam de valer: o fluxo virou a reserva, com
+as chaves `reserva_*`.
 
 ## Passo 3 — Senhas dos roles e URLs de conexão
 
@@ -520,11 +536,11 @@ Rode e anote cada item. 🔑 O humano faz os itens de navegador (ou acompanha vo
 | 1 | Script verde | `scripts/producao/verificar.sh --bootstrap .env.production-bootstrap --vercel .env.vercel-producao --worker .env.worker-producao --dominio https://<domínio>` | última linha `Resultado: 0 falha(s)` |
 | 2 | Login com TOTP | 🔑 dono abre o convite (vale 1 h; expirado → recuperação do convite, passo 4), define senha (≥ 12), cadastra o autenticador e entra | "dono entrou com TOTP" |
 | 3 | IA Online | Início mostra a etiqueta **IA online** (heartbeat do worker) | print ou texto do cartão |
-| 4 | Simulador S1–S4 | botão "Abrir simulador de WhatsApp" do painel: "que horas abre a Asa Sul hoje?" (S1), "vou chegar às 20h com 4 pessoas" (S2), "quero fazer um aniversário para 30 pessoas" (S3), "quanto custa a picanha?" (S4) | uma linha por serviço: pergunta → resumo da resposta |
+| 4 | Simulador S1–S4 | botão "Abrir simulador de WhatsApp" do painel: "que horas abre a Asa Sul hoje?" (S1), "quero reservar amanhã na Asa Sul às 20h para 4 pessoas" (S2: a IA pergunta o nome e se pode usar este WhatsApp; responda e ela confirma com as regras da reserva), "quero fazer um aniversário para 30 pessoas" (S3), "quanto custa a picanha?" (S4) | uma linha por serviço: pergunta → resumo da resposta |
 | 5 | Handoff em tempo real | no simulador: "quero falar com um atendente"; com Conversas aberta em outra aba, a conversa aparece **sem recarregar** | "apareceu em N s sem recarregar" |
 | 6 | Importar CSV | Conteúdo (abre na aba Cardápio) → botão **Importar** → CSV pequeno (2 itens) → revisar → aprovar | itens novos visíveis no cardápio |
 | 7 | Gerente restrito | ver abaixo (convite pelo painel) | gerente vê só a unidade dele em Unidades/Agenda/Conversas |
-| 8 | Modo demonstração ligado | 🔑 o **dono**, logado, vai em **Ajustes** (menu lateral; no celular, **Mais → Ajustes**) e liga **Modo demonstração** (toast "Modo demonstração ligado"). Depois, no simulador: "vou hoje na Asa Sul com 4 pessoas à noite" e "quero fazer um aniversário para 30 pessoas na Asa Sul"; na **Agenda** (dia de hoje e "Pedidos para responder em outros dias") os dois aparecem com o selo **Simulação**, e o Início passa a contá-los. Faça isto **antes de apresentar**: com o modo desligado, o painel esconde tudo o que nasce no simulador | "modo ligado; aviso e pedido com o selo Simulação" |
+| 8 | Modo demonstração ligado | 🔑 o **dono**, logado, vai em **Ajustes** (menu lateral; no celular, **Mais → Ajustes**) e liga **Modo demonstração** (toast "Modo demonstração ligado"). Depois, no simulador: "quero reservar hoje na Asa Sul às 21h para 4 pessoas" (responda o nome e "sim"; use um horário de hoje que ainda não passou) e "quero fazer um aniversário para 30 pessoas na Asa Sul"; na **Agenda** (dia de hoje e "Pedidos para responder em outros dias") os dois aparecem com o selo **Simulação**, e o Início passa a contá-los. Faça isto **antes de apresentar**: com o modo desligado, o painel esconde tudo o que nasce no simulador | "modo ligado; reserva e pedido com o selo Simulação" |
 | 9 | Gastos | Início → Gastos mostra o gasto do dia (> US$ 0 após o item 4; o simulador conta na linha **Simulação**, fora do total dos clientes); **Gestão → Gastos** (tela "Gastos e limites"; no celular, **Mais → Gastos**) mostra os limites padrão (IA 2/dia e 40/mês; Simulação 1/dia e 10/mês; WhatsApp 1/dia e 20/mês) — o dono ajusta ali, pelo painel, se quiser | valor exibido e limites conferidos |
 
 Gerente restrito (pelo painel, Etapa 08): 🔑 o **dono**, logado, vai em **Gestão → Equipe → Convidar** (no celular, **Mais → Equipe**): nome
