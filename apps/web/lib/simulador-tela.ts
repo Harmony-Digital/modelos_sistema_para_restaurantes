@@ -89,7 +89,7 @@ export function paraSimMessage(m: MensagemTela, timezone: string, offsetSegundos
 export const TEXTO_LIMITE_SIMULACAO = 'Limite de simulação atingido hoje — ajuste em Gastos e limites'
 export const AVISO_LIMITE_SIMULACAO: SimMessage = {
   id: 'aviso-limite', de: 'sistema', tipo: 'aviso', texto: TEXTO_LIMITE_SIMULACAO,
-  link: { rotulo: 'Gastos e limites', href: '/mais/gastos' },
+  link: { rotulo: 'Gastos e limites', href: '/gestao/gastos' },
 }
 
 export function avisoDoEstado(estado: RespostaSimulador['estado']): SimMessage | null {

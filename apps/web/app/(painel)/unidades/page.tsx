@@ -19,7 +19,7 @@ export default async function UnidadesPage() {
   return (
     <>
       <TopBar title="Unidades" subtitle="Endereços, horários e exceções" action={podeEditar && unidades.length > 0 ? <NovaUnidade /> : undefined} />
-      <main className="mx-auto max-w-xl px-4 py-6">
+      <main className="mx-auto max-w-xl px-4 py-6 lg:mx-0 lg:max-w-6xl lg:px-8">
         {unidades.length === 0 ? (
           <EmptyState
             icon={Store}

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { MensagemTela, RespostaSimulador } from '@/lib/simulador-tela'
@@ -45,7 +45,7 @@ describe('SimulatorLauncher', () => {
     const acoes = acoesFalsas({ abrir: vi.fn(async () => ({ ok: true as const, data: resp([msg(1, 'in', 'oi')], { limiteSimulacao: limite }) })), buscar: vi.fn(async () => ({ ok: true as const, data: resp([], { limiteSimulacao: limite }) })) })
     await abrir(acoes)
     const link = await screen.findByRole('link', { name: 'Gastos e limites' })
-    expect(link).toHaveAttribute('href', '/mais/gastos')
+    expect(link).toHaveAttribute('href', '/gestao/gastos')
     expect(link.parentElement).toHaveTextContent('Limite de simulação atingido hoje — ajuste em Gastos e limites')
     limite = false
     await waitFor(() => expect(screen.queryByRole('link', { name: 'Gastos e limites' })).toBeNull(), { timeout: 4000 })
@@ -59,9 +59,16 @@ describe('SimulatorLauncher', () => {
     await user.click(screen.getByRole('button', { name: 'Abrir simulador de WhatsApp' }))
     const link = await screen.findByRole('link', { name: 'Gastos e limites' }, { timeout: 5000 })
     expect(link.className).toContain('min-h-11')
-    caminho = '/mais/gastos'
+    caminho = '/gestao/gastos'
     rerender(<SimulatorLauncher restaurante="Casa Teste" timezone="America/Sao_Paulo" acoes={acoes} />)
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Simulador de WhatsApp' })).toBeNull())
+  })
+
+  it('o item Simulador do menu abre o simulador sem navegar', async () => {
+    const { abrirSimulador } = await import('./abrir')
+    render(<SimulatorLauncher restaurante="Casa Teste" timezone="America/Sao_Paulo" acoes={acoesFalsas()} />)
+    act(() => abrirSimulador())
+    await screen.findByRole('dialog', { name: 'Simulador de WhatsApp' }, { timeout: 5000 })
   })
 
   it('abre com foco no campo de mensagem, avisa que é simulação e fecha com Esc', async () => {

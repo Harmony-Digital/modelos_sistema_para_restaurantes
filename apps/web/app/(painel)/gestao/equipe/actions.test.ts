@@ -70,7 +70,7 @@ describe('convidar', () => {
     enviar.mockRejectedValue(new Error('fila fora'))
     const r = await criarConviteAction(valido)
     expect(r).toMatchObject({ ok: false, formError: expect.stringContaining('Reenviar convite') })
-    expect(revalidatePath).toHaveBeenCalledWith('/mais/equipe')
+    expect(revalidatePath).toHaveBeenCalledWith('/gestao/equipe')
   })
 })
 

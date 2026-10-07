@@ -221,9 +221,9 @@ test('gerente restrito a outra unidade não vê a conversa (nem pela URL)', asyn
 
 test('horário humano salvo; handoff fora do horário avisa quando a equipe volta (relógio simulado)', async ({ page }) => {
   const { email } = await entrarComoGestor(page, 'dono')
-  await page.getByRole('link', { name: 'Mais', exact: true }).click()
-  await page.getByRole('link', { name: 'Atendimento humano' }).click()
-  await expect(page.getByRole('heading', { level: 1, name: 'Atendimento humano' })).toBeVisible()
+  await page.getByRole('button', { name: 'Mais', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Mais' }).getByRole('link', { name: 'Ajustes', exact: true }).click()
+  await expect(page.getByRole('heading', { level: 2, name: 'Horário de atendimento humano' })).toBeVisible()
   const segunda = page.getByRole('group', { name: 'Segunda' })
   await segunda.getByRole('button', { name: 'Adicionar turno' }).click()
   await segunda.getByLabel(/^Começa/).fill('09:00')

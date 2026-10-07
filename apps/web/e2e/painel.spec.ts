@@ -13,7 +13,8 @@ test('tema: cookie claro chega na primeira resposta e a troca funciona', async (
   expect(await resp!.text()).toContain('data-theme="light"')
   const { email, senha } = await criarMembro('atendente')
   await entrar(page, email, senha)
-  await page.getByRole('link', { name: 'Mais' }).click()
+  await page.getByRole('button', { name: 'Mais', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Mais' }).getByRole('link', { name: 'Ajustes', exact: true }).click()
   await page.getByText('Escuro', { exact: true }).click()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
   await page.reload()
@@ -22,15 +23,18 @@ test('tema: cookie claro chega na primeira resposta e a troca funciona', async (
   expect(cookies.find((c) => c.name === 'atd-tema')?.value).toBe('escuro')
 })
 
-test('navegação inferior leva às 5 seções', async ({ page }) => {
+test('navegação inferior leva às 4 seções e a folha Mais leva a Ajustes', async ({ page }) => {
   const { email, senha } = await criarMembro('atendente')
   await entrar(page, email, senha)
   // com conversa real aguardando, o rótulo vira "Conversas, N aguardando"
-  const links = [[/^Conversas(, \d+ aguardando)?$/, 'Conversas'], ['Agenda', 'Agenda'], ['Conteúdo', 'Conteúdo'], ['Mais', 'Mais'], ['Início', 'Início']] as const
+  const links = [[/^Conversas(, \d+ aguardando)?$/, 'Conversas'], ['Agenda', 'Agenda'], ['Conteúdo', 'Conteúdo'], ['Início', 'Início']] as const
   for (const [link, titulo] of links) {
     await page.getByRole('link', typeof link === 'string' ? { name: link, exact: true } : { name: link }).click()
     await expect(page.getByRole('heading', { level: 1, name: titulo })).toBeVisible()
   }
+  await page.getByRole('button', { name: 'Mais', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Mais' }).getByRole('link', { name: 'Ajustes', exact: true }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Ajustes' })).toBeVisible()
 })
 
 test('devolver à IA tira a conversa da fila', async ({ page }) => {

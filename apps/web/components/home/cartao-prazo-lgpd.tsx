@@ -27,7 +27,7 @@ export function CartaoPrazoLgpd(props: { pedidos: readonly Pick<PedidoTitular, '
         )}
       </ul>
       <Button asChild variant="outline" className="self-start">
-        <Link href="/mais/privacidade">Ver pedidos</Link>
+        <Link href="/gestao/privacidade">Ver pedidos</Link>
       </Button>
     </section>
   )

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const salvarRespostaRapidaAction = vi.fn()
-vi.mock('@/app/(painel)/mais/atendimento-humano/actions', () => ({ salvarRespostaRapidaAction }))
+vi.mock('@/app/(painel)/ajustes/atendimento-humano/actions', () => ({ salvarRespostaRapidaAction }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 const { RespostasRapidas } = await import('./respostas-rapidas')
 

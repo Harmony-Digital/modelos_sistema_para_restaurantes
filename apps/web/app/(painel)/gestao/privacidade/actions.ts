@@ -27,7 +27,7 @@ function resultado<T>(r: ResultadoPrivacidade<T>): ActionResult<T> {
 }
 
 function revalidarFila() {
-  revalidatePath('/mais/privacidade')
+  revalidatePath('/gestao/privacidade')
   revalidatePath('/') // alerta de prazo no Início
 }
 
@@ -100,6 +100,6 @@ export async function salvarRetencaoAction(input: RetencaoForm): Promise<ActionR
   const p = retencaoSchema.safeParse(input)
   if (!p.success) return actionErrorFromZod(p.error)
   const r = await salvarRetencao(getDb(), s.claims, p.data)
-  if (r.ok) revalidatePath('/mais/privacidade')
+  if (r.ok) revalidatePath('/gestao/privacidade')
   return resultado(r)
 }

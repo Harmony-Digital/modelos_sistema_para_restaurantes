@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { carregarUnidadesPainel, lerLimites, relatorioMes, resumoGastos } from '@atd/db'
 import { Limites } from '@/components/painel/limites'
 import { RelatorioGastos } from '@/components/painel/relatorio-gastos'
@@ -26,8 +25,7 @@ export default async function GastosPage(props: { searchParams: Promise<{ mes?: 
   return (
     <>
       <TopBar title="Gastos e limites" subtitle="Quanto a IA e o WhatsApp custam" />
-      <main className="mx-auto flex max-w-xl flex-col gap-8 px-4 py-6">
-        <Link href="/mais" className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 hover:underline">Voltar para Mais</Link>
+      <main className="mx-auto flex max-w-xl lg:mx-0 lg:max-w-6xl lg:px-8 flex-col gap-8 px-4 py-6">
         <section aria-labelledby="limites" className="flex flex-col gap-3">
           <h2 id="limites" className="text-sm font-medium text-foreground">Limites</h2>
           <p className="text-sm text-muted-foreground">

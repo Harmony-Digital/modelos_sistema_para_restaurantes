@@ -49,6 +49,6 @@ describe('SpendCard', () => {
   it('diz a cotação usada e leva para Gastos e limites', () => {
     render(<SpendCard gastos={gastos} cotacao="5.4321" provedor="OpenAI" />)
     expect(screen.getByText(/US\$ 1 = R\$ 5,4321/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Ver gastos e limites' })).toHaveAttribute('href', '/mais/gastos')
+    expect(screen.getByRole('link', { name: 'Ver gastos e limites' })).toHaveAttribute('href', '/gestao/gastos')
   })
 })

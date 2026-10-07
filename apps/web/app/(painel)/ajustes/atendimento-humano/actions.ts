@@ -19,7 +19,7 @@ export async function salvarHorarioHumanoAction(input: HorarioHumanoForm): Promi
   const p = horarioHumanoFormSchema.safeParse(input)
   if (!p.success) return actionErrorFromZod(p.error)
   const r = await salvarHorarioHumano(getDb(), s.claims, p.data)
-  if (r.ok) revalidatePath('/mais/atendimento-humano')
+  if (r.ok) revalidatePath('/ajustes')
   return resultadoDoPainel(r)
 }
 

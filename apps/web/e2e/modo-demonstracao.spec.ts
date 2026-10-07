@@ -83,7 +83,7 @@ async function perguntar(page: Page, texto: string) {
 
 test('modo demonstração: aviso e pedido de evento do simulador aparecem no painel com o selo "Simulação"', async ({ page }) => {
   await entrarComoGestor(page)
-  await page.goto('/mais')
+  await page.goto('/ajustes')
   const chave = page.getByRole('switch', { name: 'Modo demonstração' })
   await expect(chave).toHaveAttribute('aria-checked', 'false')
   await chave.click()

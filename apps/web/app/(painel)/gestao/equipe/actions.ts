@@ -39,7 +39,7 @@ export async function criarConviteAction(input: ConviteForm): Promise<ActionResu
   if (!r.ok) {
     return r.erro === 'ja_existe' ? { ok: false, fieldErrors: { email: MENSAGEM.ja_existe } } : erro(r.erro)
   }
-  revalidatePath('/mais/equipe')
+  revalidatePath('/gestao/equipe')
   if (!(await enfileirar(r.valor.conviteId))) return { ok: false, formError: ERRO_FILA }
   return { ok: true, data: r.valor }
 }
@@ -49,7 +49,7 @@ export async function reenviarConviteAction(conviteId: string): Promise<ActionRe
   if (!idValido(conviteId)) return erro('nao_encontrada')
   const r = await reenviarConvite(getDb(), s.claims, conviteId)
   if (!r.ok) return erro(r.erro)
-  revalidatePath('/mais/equipe')
+  revalidatePath('/gestao/equipe')
   if (!(await enfileirar(conviteId))) return { ok: false, formError: ERRO_FILA }
   return { ok: true, data: null }
 }
@@ -60,6 +60,6 @@ export async function definirAtivoAction(staffId: string, ativo: boolean): Promi
   if (!idValido(staffId) || typeof ativo !== 'boolean') return erro('nao_encontrada')
   const r = await definirAtivo(getDb(), s.claims, staffId, ativo)
   if (!r.ok) return erro(r.erro)
-  revalidatePath('/mais/equipe')
+  revalidatePath('/gestao/equipe')
   return { ok: true, data: null }
 }

@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { carregarUnidadesPainel, lerRetencao, listarPedidosTitular } from '@atd/db'
 import { FilaPrivacidade, PrazosRetencao } from '@/components/painel/privacidade'
 import { TopBar } from '@/components/shell/top-bar'
@@ -31,8 +30,7 @@ export default async function PrivacidadePage() {
   return (
     <>
       <TopBar title="Privacidade (LGPD)" subtitle="Pedidos dos clientes e prazos de guarda" />
-      <main className="mx-auto flex max-w-xl flex-col gap-8 px-4 py-6">
-        <Link href="/mais" className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 hover:underline">Voltar para Mais</Link>
+      <main className="mx-auto flex max-w-xl lg:mx-0 lg:max-w-6xl lg:px-8 flex-col gap-8 px-4 py-6">
         <section aria-labelledby="pedidos-titular" className="flex flex-col gap-3">
           <h2 id="pedidos-titular" className="text-sm font-medium text-foreground">Pedidos dos clientes</h2>
           <p className="text-sm text-muted-foreground">

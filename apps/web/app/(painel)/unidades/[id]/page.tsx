@@ -46,7 +46,7 @@ export default async function UnidadePage(props: { params: Promise<{ id: string 
           </Link>
         }
       />
-      <main className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-6">
+      <main className="mx-auto flex max-w-xl lg:mx-0 lg:max-w-6xl lg:px-8 flex-col gap-4 px-4 py-6">
         <SeloUnidade selo={seloDaUnidade(u, restaurante.politicaFeriado, restaurante.timezone, new Date())} />
         <Abas rotulo="Seções da unidade" itens={ABAS.map((a) => ({ href: `/unidades/${u.id}?aba=${a.chave}`, rotulo: a.rotulo, ativo: a.chave === aba }))} />
         {aba === 'dados' && (

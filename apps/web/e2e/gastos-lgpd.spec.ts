@@ -159,8 +159,8 @@ test('dono ajusta cotação e limite; a simulação estoura só o próprio limit
   await expect(simulador(page)).toBeHidden()
 
   // 2) dono muda a cotação e baixa o limite do dia da simulação para abaixo do que já gastou
-  await page.getByRole('link', { name: 'Mais', exact: true }).click()
-  await page.getByRole('link', { name: 'Gastos e limites' }).click()
+  await page.getByRole('button', { name: 'Mais', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Mais' }).getByRole('link', { name: 'Gastos', exact: true }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Gastos e limites' })).toBeVisible()
   await semRolagemHorizontal(page)
   await page.getByLabel(/^Cotação do dólar/).fill('5,25')
@@ -215,7 +215,7 @@ test('dono ajusta cotação e limite; a simulação estoura só o próprio limit
   const faixa = page.getByRole('region', { name: 'Alerta de gastos' })
   await expect(faixa).toContainText(/Simulação: \d+% do limite do dia/)
   await expect(faixa).toContainText('modo econômico')
-  await expect(faixa.getByRole('link', { name: 'Ajustar limites' })).toHaveAttribute('href', '/mais/gastos')
+  await expect(faixa.getByRole('link', { name: 'Ajustar limites' })).toHaveAttribute('href', '/gestao/gastos')
   await semRolagemHorizontal(page)
 })
 
@@ -312,8 +312,8 @@ test('retenção (chamada direto, como o agendamento das 03:00) apaga a simulaç
 test('dono convida uma atendente pelo painel; o worker envia o convite e cria o membro', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 740 })
   await entrarComoGestor(page)
-  await page.getByRole('link', { name: 'Mais', exact: true }).click()
-  await page.getByRole('link', { name: 'Equipe', exact: true }).click()
+  await page.getByRole('button', { name: 'Mais', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Mais' }).getByRole('link', { name: 'Equipe', exact: true }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Equipe' })).toBeVisible()
   await semRolagemHorizontal(page)
 
@@ -358,13 +358,13 @@ test('dono convida uma atendente pelo painel; o worker envia o convite e cria o 
 test('gerente vê equipe e limites só para leitura; atendente não vê as telas de gestão', async ({ page, browser }) => {
   await page.setViewportSize({ width: 360, height: 740 })
   await entrarComoGestor(page, 'gerente')
-  await page.getByRole('link', { name: 'Mais', exact: true }).click()
-  await page.getByRole('link', { name: 'Equipe', exact: true }).click()
+  await page.getByRole('button', { name: 'Mais', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Mais' }).getByRole('link', { name: 'Equipe', exact: true }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Equipe' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Convidar' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: /^Desativar/ })).toHaveCount(0)
   await semRolagemHorizontal(page)
-  await page.goto('/mais/gastos')
+  await page.goto('/gestao/gastos')
   await expect(page.getByText('Só o dono altera os limites e a cotação.')).toBeVisible()
   await expect(page.getByRole('button', { name: /^Salvar/ })).toHaveCount(0)
   await semRolagemHorizontal(page)
@@ -374,12 +374,13 @@ test('gerente vê equipe e limites só para leitura; atendente não vê as telas
   const { email, senha } = await criarMembro('atendente')
   await entrar(atendente, email, senha)
   await expect(atendente.getByRole('heading', { level: 1, name: 'Início' })).toBeVisible()
-  await atendente.getByRole('link', { name: 'Mais', exact: true }).click()
-  await expect(atendente.getByRole('link', { name: 'Unidades', exact: true })).toBeVisible()
-  for (const nome of ['Gastos e limites', 'Privacidade (LGPD)', 'Equipe']) {
-    await expect(atendente.getByRole('link', { name: nome, exact: true })).toHaveCount(0)
+  await atendente.getByRole('button', { name: 'Mais', exact: true }).click()
+  const folha = atendente.getByRole('dialog', { name: 'Mais' })
+  await expect(folha.getByRole('link', { name: 'Unidades', exact: true })).toBeVisible()
+  for (const nome of ['Gastos', 'Privacidade', 'Equipe']) {
+    await expect(folha.getByRole('link', { name: nome, exact: true })).toHaveCount(0)
   }
-  await atendente.goto('/mais/equipe')
+  await atendente.goto('/gestao/equipe')
   await expect(atendente.getByRole('heading', { level: 1, name: 'Equipe' })).toHaveCount(0)
   await contexto.close()
 })

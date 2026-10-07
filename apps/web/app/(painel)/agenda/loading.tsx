@@ -2,7 +2,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 export default function Carregando() {
   return (
-    <main aria-busy="true" className="mx-auto flex max-w-xl flex-col gap-3 px-4 py-6">
+    <main aria-busy="true" className="mx-auto flex max-w-xl lg:mx-0 lg:max-w-6xl lg:px-8 flex-col gap-3 px-4 py-6">
       <span className="sr-only">Carregando a agenda…</span>
       <Skeleton className="h-11 w-full rounded-md" />
       <Skeleton className="h-6 w-2/3" />

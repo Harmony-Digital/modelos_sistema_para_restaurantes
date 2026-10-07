@@ -42,7 +42,7 @@ describe('horário de atendimento humano', () => {
     expect(salvarHorarioHumano).toHaveBeenCalledWith('db', { sub: 'u' }, {
       dias: { seg: [{ inicio: '09:00', fim: '18:00' }], sab: [{ inicio: '10:00', fim: '14:00' }] },
     })
-    expect(revalidatePath).toHaveBeenCalledWith('/mais/atendimento-humano')
+    expect(revalidatePath).toHaveBeenCalledWith('/ajustes')
   })
 
   it('vazio é permitido (sem promessa de horário)', async () => {

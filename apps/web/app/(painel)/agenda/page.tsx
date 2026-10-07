@@ -39,7 +39,7 @@ export default async function AgendaPage(props: { searchParams: Promise<Busca> }
     return (
       <>
         <TopBar title="Agenda" subtitle="Pedidos de evento dos clientes" />
-        <main className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-6">
+        <main className="mx-auto flex max-w-xl lg:mx-0 lg:max-w-6xl lg:px-8 flex-col gap-4 px-4 py-6">
           {abas}
           <Eventos pedidos={pedidos} unidades={opcoes} status={status} unidade={unidade} membros={membros} agora={new Date()} />
         </main>
@@ -55,7 +55,7 @@ export default async function AgendaPage(props: { searchParams: Promise<Busca> }
   return (
     <>
       <TopBar title="Agenda" subtitle="Quem avisou que vai ao restaurante" />
-      <main className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-6">
+      <main className="mx-auto flex max-w-xl lg:mx-0 lg:max-w-6xl lg:px-8 flex-col gap-4 px-4 py-6">
         {abas}
         <Previsao data={data} hoje={hoje} unidades={unidades} filtro={filtro} mostrarCancelados={mostrarCancelados} podeEditar={s.role !== 'atendente'} />
       </main>

@@ -1,13 +1,16 @@
 import { acessoInbox, contarAguardando, getSingleRestaurantId, schema } from '@atd/db'
 import { eq } from 'drizzle-orm'
+import { cookies } from 'next/headers'
 import { Avisos } from '@/components/conversas/avisos'
 import { FaixaAlertaGastos } from '@/components/painel/alerta-gastos'
 import { AppShell } from '@/components/shell/app-shell'
 import { topicosInbox } from '@/lib/conversas'
 import { SimulatorLauncher } from '@/components/simulator/launcher'
 import { requireStaff } from '@/lib/dal'
+import { MENU_COOKIE, parseMenu } from '@/lib/menu'
 import { getDb } from '@/lib/server/db'
 import { resumoGastosDoRequest } from '@/lib/server/gastos'
+import { parseTema, THEME_COOKIE } from '@/lib/theme'
 import {
   abrirSimuladorAction, buscarSimuladorAction, detalhesSimuladorAction, enviarSimuladorAction, novoClienteSimuladorAction,
   relogioSimuladorAction,
@@ -40,5 +43,20 @@ export default async function PainelLayout({ children }: { children: React.React
   ])
   const avisos = <Avisos aguardando={aguardando} topicos={acesso ? topicosInbox(acesso) : []} />
   const faixa = gastos ? <FaixaAlertaGastos alertas={gastos.alertas} /> : null
-  return <AppShell floating={simulador} avisos={avisos} aguardando={aguardando} faixa={faixa}>{children}</AppShell>
+  // menu recolhido/aberto e tema lidos no servidor: a página já nasce no estado certo, sem piscar
+  const jar = await cookies()
+  return (
+    <AppShell
+      papel={session.role}
+      restaurante={r?.nome ?? 'Restaurante'}
+      tema={parseTema(jar.get(THEME_COOKIE)?.value)}
+      menu={parseMenu(jar.get(MENU_COOKIE)?.value)}
+      floating={simulador}
+      avisos={avisos}
+      aguardando={aguardando}
+      faixa={faixa}
+    >
+      {children}
+    </AppShell>
+  )
 }

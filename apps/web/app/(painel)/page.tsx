@@ -37,7 +37,7 @@ export default async function InicioPage() {
   return (
     <>
       <TopBar title="Início" subtitle="Como está o atendimento agora" />
-      <main className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-6">
+      <main className="mx-auto flex max-w-xl lg:mx-0 lg:max-w-6xl lg:px-8 flex-col gap-4 px-4 py-6">
         <div className="grid grid-cols-2 gap-3">
           <StatCard label="IA" value={online ? 'Online' : 'Offline'} tone={online ? 'ok' : 'alerta'} hint={online ? 'Respondendo clientes' : 'Verifique o worker'} />
           <StatCard label="Conversas abertas" value={String(s.conversasAbertas)} hint={`${s.aguardandoHumano} aguardando atendente`} />

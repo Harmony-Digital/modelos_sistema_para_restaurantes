@@ -42,7 +42,7 @@ export default async function ConversasPage(props: { searchParams: Promise<Busca
   return (
     <>
       <TopBar title="Conversas" subtitle="Atendimento da equipe pelo WhatsApp" />
-      <main className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-6">
+      <main className="mx-auto flex max-w-xl lg:mx-0 lg:max-w-6xl lg:px-8 flex-col gap-4 px-4 py-6">
         <Abas
           rotulo="Situação das conversas"
           itens={ABAS_INBOX.map((a) => ({ href: href({ aba: a.aba, unidade, sim }), rotulo: a.rotulo, ativo: a.aba === aba }))}

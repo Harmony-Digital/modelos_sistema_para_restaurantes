@@ -87,7 +87,7 @@ describe('resumo de acesso e telefone', () => {
 
   it('concluir acesso revalida a fila e o Início; pedido já resolvido vira aviso', async () => {
     expect(await concluirAcessoAction(ID)).toEqual({ ok: true, data: null })
-    expect(revalidatePath).toHaveBeenCalledWith('/mais/privacidade')
+    expect(revalidatePath).toHaveBeenCalledWith('/gestao/privacidade')
     expect(revalidatePath).toHaveBeenCalledWith('/')
     concluirAcesso.mockResolvedValue({ ok: false, erro: 'transicao_invalida' })
     expect(await concluirAcessoAction(ID)).toEqual({ ok: false, formError: 'Esse pedido já foi resolvido ou não aceita essa ação.' })
@@ -105,7 +105,7 @@ describe('exclusão confirmada', () => {
     const r = await excluirTitularAction(ID, '  excluir ')
     expect(r).toEqual({ ok: true, data: { contagens: { mensagens: 3, conversas: 1, avisos: 0, eventos: 1 } } })
     expect(executarExclusao).toHaveBeenCalledWith('db', { sub: 'u' }, ID)
-    expect(revalidatePath).toHaveBeenCalledWith('/mais/privacidade')
+    expect(revalidatePath).toHaveBeenCalledWith('/gestao/privacidade')
     expect(revalidatePath).toHaveBeenCalledWith('/conversas')
     expect(revalidatePath).toHaveBeenCalledWith('/agenda')
   })
@@ -148,7 +148,7 @@ describe('prazos de retenção', () => {
   it('válido: grava e revalida', async () => {
     expect(await salvarRetencaoAction({ dado: 'messages', dias: 7 })).toEqual({ ok: true, data: null })
     expect(salvarRetencao).toHaveBeenCalledWith('db', { sub: 'u' }, { dado: 'messages', dias: 7 })
-    expect(revalidatePath).toHaveBeenCalledWith('/mais/privacidade')
+    expect(revalidatePath).toHaveBeenCalledWith('/gestao/privacidade')
   })
 
   it('sem permissão no banco vira mensagem', async () => {

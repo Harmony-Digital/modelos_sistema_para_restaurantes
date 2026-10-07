@@ -60,7 +60,7 @@ export default async function ConversaPage(props: { params: Promise<{ id: string
           </Link>
         }
       />
-      <main className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-6">
+      <main className="mx-auto flex max-w-xl lg:mx-0 lg:max-w-6xl lg:px-8 flex-col gap-4 px-4 py-6">
         <EscutarConversa topico={topicoConversa(c.id)} />
         {antesDe !== undefined && (
           <Link href={`/conversas/${id}`} className="inline-flex min-h-11 items-center self-center text-sm font-medium text-link">

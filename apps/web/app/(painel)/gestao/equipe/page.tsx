@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { carregarUnidadesPainel, listarEquipe } from '@atd/db'
 import { Equipe, type IntegranteTela } from '@/components/painel/equipe'
 import { TopBar } from '@/components/shell/top-bar'
@@ -20,8 +19,7 @@ export default async function EquipePage() {
   return (
     <>
       <TopBar title="Equipe" subtitle="Quem acessa o painel" />
-      <main className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-6">
-        <Link href="/mais" className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 hover:underline">Voltar para Mais</Link>
+      <main className="mx-auto flex max-w-xl lg:mx-0 lg:max-w-6xl lg:px-8 flex-col gap-4 px-4 py-6">
         <Equipe
           integrantes={integrantes}
           unidades={unidades.filter((u) => u.ativo).map((u) => ({ id: u.id, nome: u.nome }))}

@@ -67,7 +67,7 @@ export default async function ConteudoPage(props: { searchParams: Promise<{ aba?
   return (
     <>
       <TopBar title="Conteúdo" subtitle="O que a IA sabe e o que falta" />
-      <main className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-6">
+      <main className="mx-auto flex max-w-xl lg:mx-0 lg:max-w-6xl lg:px-8 flex-col gap-4 px-4 py-6">
         <Abas rotulo="Seções de conteúdo" itens={abas.map((a) => ({ href: `/conteudo?aba=${a.chave}`, rotulo: a.rotulo, ativo: a.chave === aba }))} />
         {aba === 'cardapio' && (
           <>
