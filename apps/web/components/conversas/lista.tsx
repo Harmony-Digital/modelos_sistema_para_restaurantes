@@ -1,10 +1,13 @@
 import { Inbox, UserRound } from 'lucide-react'
 import Link from 'next/link'
 import type { AbaInbox, ItemInbox } from '@atd/db'
+import { SeloSimulacao } from '@/components/painel/selo-simulacao'
 import { EmptyState } from '@/components/shell/empty-state'
 import { Badge } from '@/components/ui/badge'
 import { haQuanto, ROTULO_ESTADO, ROTULO_MOTIVO, VAZIO_INBOX } from '@/lib/conversas'
 import { cn } from '@/lib/utils'
+
+export { SeloSimulacao }
 
 /** `atendenteId` (vem da DAL) marca as conversas do próprio usuário com "Você". */
 export type ItemLista = ItemInbox
@@ -20,9 +23,6 @@ export function SeloEstado({ estado }: { estado: ItemInbox['estado'] }) {
   return <Badge variant="outline" className={COR_ESTADO[estado]}>{ROTULO_ESTADO[estado]}</Badge>
 }
 
-export function SeloSimulacao() {
-  return <Badge variant="outline" className="border-border text-muted-foreground">Simulação</Badge>
-}
 
 export function ListaConversas(props: { itens: ItemLista[]; aba: AbaInbox; meuId: string; agora?: Date }) {
   const agora = props.agora ?? new Date()

@@ -9,6 +9,7 @@ import type { AvisoPainel, PrevisaoUnidade } from '@atd/db'
 import { cancelarAvisoAction, criarAvisoAction } from '@/app/(painel)/agenda/actions'
 import { EmptyState } from '@/components/shell/empty-state'
 import { Badge } from '@/components/ui/badge'
+import { SeloSimulacao } from './selo-simulacao'
 import { Button } from '@/components/ui/button'
 import { chamarAcao } from '@/lib/action-result'
 import { dataBr, hrefPrevisao, inicioDaPrevisao, limiteDaPrevisao, resumoUnidade, rotuloDoDia } from '@/lib/previsao'
@@ -130,6 +131,7 @@ export function Previsao(props: {
                         <div className="min-w-0 flex-1">
                           <p className={`flex flex-wrap items-center gap-2 font-semibold text-foreground ${a.status === 'cancelado' ? 'line-through decoration-1' : ''}`}>
                             <span className="min-w-0 break-words">{a.nome ?? 'Sem nome'}</span>
+                            {a.simulado && <SeloSimulacao />}
                           </p>
                           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
                             <span>{a.pessoas === 1 ? '1 pessoa' : `${a.pessoas} pessoas`}</span>

@@ -18,7 +18,7 @@ const agora = new Date('2026-10-05T15:00:00Z')
 const pedido = (over = {}) => ({
   id: '00000000-0000-4000-8000-0000000000aa', unitId: U1, unidade: 'Asa Sul', spaceId: null, espaco: 'Salão Jardim', nome: 'Ana',
   data: '2026-10-10', convidados: 30, tipo: 'aniversario' as const, tipoTexto: null, observacoes: 'Sem glúten', status: 'novo' as const,
-  responsavelId: null, responsavel: null, notasInternas: null, temTelefone: true, criadoEm: new Date('2026-10-05T12:00:00Z'), ...over,
+  responsavelId: null, responsavel: null, notasInternas: null, temTelefone: true, simulado: false, criadoEm: new Date('2026-10-05T12:00:00Z'), ...over,
 })
 const base = {
   pedidos: [pedido(), pedido({ id: '00000000-0000-4000-8000-0000000000ab', nome: null, status: 'em_contato', espaco: null, convidados: 1 })],
@@ -32,6 +32,22 @@ beforeEach(() => {
 })
 
 describe('Eventos: fila', () => {
+  it('pedido simulado leva o selo Simulação na fila e no detalhe, sem o botão de telefone', async () => {
+    const user = userEvent.setup()
+    render(<Eventos {...base} pedidos={[pedido({ simulado: true })]} />)
+    const item = screen.getByRole('button', { name: /Ana/ })
+    expect(item).toHaveTextContent('Simulação')
+    await user.click(item)
+    const dialogo = await screen.findByRole('dialog')
+    expect(dialogo).toHaveTextContent('Simulação')
+    expect(within(dialogo).queryByRole('button', { name: /telefone/i })).toBeNull()
+  })
+
+  it('pedido real não leva o selo Simulação', () => {
+    render(<Eventos {...base} />)
+    expect(screen.queryByText('Simulação')).toBeNull()
+  })
+
   it('mostra selo, data com dia da semana, convidados, tipo, unidade/espaço, nome e "há X horas"', () => {
     render(<Eventos {...base} />)
     const item = screen.getByRole('button', { name: /Ana/ })

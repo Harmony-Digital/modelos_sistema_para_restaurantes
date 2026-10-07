@@ -14,7 +14,7 @@ const { AvisoForm } = await import('./aviso-form')
 
 const U1 = '00000000-0000-4000-8000-000000000001'
 const U2 = '00000000-0000-4000-8000-000000000002'
-const aviso = (over = {}) => ({ id: crypto.randomUUID(), unitId: U1, nome: 'Ana', pessoas: 4, horarioAprox: '20:00', origem: 'ia' as const, status: 'ativo' as const, ...over })
+const aviso = (over = {}) => ({ id: crypto.randomUUID(), unitId: U1, nome: 'Ana', pessoas: 4, horarioAprox: '20:00', origem: 'ia' as const, status: 'ativo' as const, simulado: false, ...over })
 const unidades = [
   { unitId: U1, unidade: 'Asa Sul', totalPessoas: 6, avisos: [aviso(), aviso({ nome: null, pessoas: 2, horarioAprox: null, origem: 'painel' })] },
   { unitId: U2, unidade: 'Lago Sul', totalPessoas: 0, avisos: [] },
@@ -26,6 +26,14 @@ beforeEach(() => {
 })
 
 describe('Previsao', () => {
+  it('aviso simulado (modo demonstração) leva o selo Simulação; real não', () => {
+    const sim = [{ unitId: U1, unidade: 'Asa Sul', totalPessoas: 6, avisos: [aviso({ nome: 'Real' }), aviso({ nome: 'Sim', simulado: true })] }]
+    render(<Previsao {...base} unidades={sim} />)
+    const itens = screen.getAllByRole('listitem').filter((li) => li.textContent?.includes('pessoas'))
+    expect(itens.find((li) => li.textContent?.includes('Sim'))).toHaveTextContent('Simulação')
+    expect(itens.find((li) => li.textContent?.includes('Real'))).not.toHaveTextContent('Simulação')
+  })
+
   it('mostra totais, lista com origem, nome ou "Sem nome" e abas de unidade', () => {
     render(<Previsao {...base} />)
     expect(screen.getByText('6 pessoas')).toBeInTheDocument()

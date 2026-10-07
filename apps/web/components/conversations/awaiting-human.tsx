@@ -3,11 +3,12 @@ import { Bot, UserRound } from 'lucide-react'
 import Link from 'next/link'
 import { useTransition } from 'react'
 import { toast } from 'sonner'
+import { SeloSimulacao } from '@/components/painel/selo-simulacao'
 import { Button } from '@/components/ui/button'
 import { chamarAcao, type ActionResult } from '@/lib/action-result'
 import { haQuanto } from '@/lib/conversas'
 
-type Item = { id: string; nome: string | null; estado: 'aguardando_humano' | 'humano'; desde: Date }
+type Item = { id: string; nome: string | null; estado: 'aguardando_humano' | 'humano'; desde: Date; simulada: boolean }
 
 const linkClass = 'inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 [@media(hover:hover)]:hover:underline'
 
@@ -41,7 +42,7 @@ export function AwaitingHuman(props: { itens: Item[]; action: (id: string) => Pr
               <Link href={`/conversas/${c.id}`} className="flex min-w-0 items-center gap-3 rounded-md">
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary"><UserRound aria-hidden="true" className="size-5" /></span>
                 <span className="min-w-0">
-                  <span className="block truncate font-medium text-foreground">{nome}</span>
+                  <span className="flex min-w-0 items-center gap-2"><span className="truncate font-medium text-foreground">{nome}</span>{c.simulada && <SeloSimulacao />}</span>
                   <span className="block text-sm text-muted-foreground">{c.estado === 'humano' ? 'Em atendimento' : 'Pediu atendente'} · {haQuanto(c.desde)}</span>
                 </span>
               </Link>

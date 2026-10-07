@@ -7,13 +7,18 @@ vi.mock('sonner', () => ({ toast }))
 
 import { AwaitingHuman } from './awaiting-human'
 
-const item = { id: '11111111-1111-4111-8111-111111111111', nome: 'Maria', estado: 'aguardando_humano' as const, desde: new Date(Date.now() - 5 * 60_000) }
+const item = { id: '11111111-1111-4111-8111-111111111111', nome: 'Maria', estado: 'aguardando_humano' as const, desde: new Date(Date.now() - 5 * 60_000), simulada: false }
 
 describe('AwaitingHuman', () => {
   it('estado vazio quando ninguém espera, com link para a inbox', () => {
     render(<AwaitingHuman itens={[]} action={vi.fn()} />)
     expect(screen.getByText('Ninguém aguardando atendente')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Abrir conversas' })).toHaveAttribute('href', '/conversas')
+  })
+  it('conversa simulada (modo demonstração) leva o selo Simulação', () => {
+    render(<AwaitingHuman itens={[item, { ...item, id: '22222222-2222-4222-8222-222222222222', nome: 'Teste', simulada: true }]} action={vi.fn()} />)
+    expect(screen.getByRole('link', { name: /Teste/ })).toHaveTextContent('Simulação')
+    expect(screen.getByRole('link', { name: /Maria/ })).not.toHaveTextContent('Simulação')
   })
   it('item leva à conversa', () => {
     render(<AwaitingHuman itens={[item]} action={vi.fn()} />)
