@@ -33,6 +33,23 @@ describe('salvarDadosUnidadeAction', () => {
     expect(await salvarDadosUnidadeAction('não-é-uuid', form)).toEqual({ ok: false, formError: 'Não encontramos essa unidade.' })
     expect(salvarUnidade).not.toHaveBeenCalled()
   })
+  it('lotação máxima: vazia vira null (sem limite), número vai como inteiro; inválida volta no campo sem ir ao banco', async () => {
+    salvarUnidade.mockResolvedValue({ ok: true, valor: { id: ID } })
+    await salvarDadosUnidadeAction(ID, { ...form, capacidadePessoas: '' })
+    expect(salvarUnidade).toHaveBeenLastCalledWith('db', { sub: 'u' }, 'r', ID, expect.objectContaining({ capacidadePessoas: null }))
+    await salvarDadosUnidadeAction(ID, { ...form, capacidadePessoas: '150' })
+    expect(salvarUnidade).toHaveBeenLastCalledWith('db', { sub: 'u' }, 'r', ID, expect.objectContaining({ capacidadePessoas: 150 }))
+    salvarUnidade.mockClear()
+    expect(await salvarDadosUnidadeAction(ID, { ...form, capacidadePessoas: '5001' })).toEqual({
+      ok: false, fieldErrors: { capacidadePessoas: 'Informe de 1 a 5000 pessoas, ou deixe em branco para não limitar.' },
+    })
+    expect(salvarUnidade).not.toHaveBeenCalled()
+    // o banco também confere (check): a recusa vai para o campo
+    salvarUnidade.mockResolvedValue({ ok: false, erro: 'capacidade_invalida' })
+    expect(await salvarDadosUnidadeAction(ID, { ...form, capacidadePessoas: '10' })).toEqual({
+      ok: false, fieldErrors: { capacidadePessoas: 'Informe de 1 a 5000 pessoas, ou deixe em branco para não limitar.' },
+    })
+  })
   it('link do Maps sem coordenadas salva com lat/lng nulos e devolve aviso', async () => {
     coordenadasDoLink.mockResolvedValue(null)
     salvarUnidade.mockResolvedValue({ ok: true, valor: { id: ID } })

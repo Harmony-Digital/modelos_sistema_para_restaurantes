@@ -120,7 +120,7 @@ describe('FilaPrivacidade', () => {
     expect(confirmar).toBeEnabled()
     await user.click(confirmar)
     expect(acoes.excluir).toHaveBeenCalledWith(E, 'excluir')
-    await waitFor(() => expect(toastOk).toHaveBeenCalledWith('Dados excluídos: 10 mensagens, 2 conversas, 1 aviso e 0 pedidos de evento.'))
+    await waitFor(() => expect(toastOk).toHaveBeenCalledWith('Dados excluídos: 10 mensagens, 2 conversas, 1 reserva e 0 pedidos de evento.'))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 

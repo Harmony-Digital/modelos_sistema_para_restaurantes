@@ -8,6 +8,8 @@ export default defineConfig({
   testDir: './e2e',
   testMatch: '**/*.spec.ts',
   workers: 1, // as specs compartilham o banco e limpam usuários @teste.local
+  // modo demonstração desligado durante a suíte e restaurado ao estado inicial no fim
+  globalSetup: './e2e/estado-inicial.ts',
   use: { baseURL: base, locale: 'pt-BR' },
   projects: [
     // celular: todas as specs da raiz; desktop: as specs de e2e/desktop (menu lateral, lista + detalhe, flutuante)

@@ -7,6 +7,7 @@ import { TRIAGE_V3_PROMPT_VERSION, triageV3JsonSchema, triageV3SystemPrompt } fr
 import { TRIAGE_V4_PROMPT_VERSION, triageV4JsonSchema, triageV4SystemPrompt } from './prompts/triage-v4.ts'
 import { TRIAGE_V5_PROMPT_VERSION, triageV5JsonSchema, triageV5SystemPrompt } from './prompts/triage-v5.ts'
 import { TRIAGE_V6_PROMPT_VERSION, triageV6JsonSchema, triageV6SystemPrompt } from './prompts/triage-v6.ts'
+import { TRIAGE_V7_PROMPT_VERSION, triageV7JsonSchema, triageV7SystemPrompt } from './prompts/triage-v7.ts'
 
 export const INTENTS = ['horario_unidades', 'aviso_presenca', 'evento', 'cardapio', 'humano', 'lgpd', 'multiplo', 'fora_escopo'] as const
 export type Intent = (typeof INTENTS)[number]
@@ -139,7 +140,7 @@ export const parseTriageV4 = (raw: unknown): TriageV4 => triageV4Schema.parse(ra
 /** Pergunta que fizemos ao cliente (texto nosso) e o que já foi validado do pedido (sem texto livre do cliente). */
 export type PendenteTriagem = { pergunta: string; conhecido: Record<string, string | number> }
 
-/** Bloco da pergunta pendente (v4 a v6) seguido da mensagem do cliente, cada um delimitado e neutralizado. */
+/** Bloco da pergunta pendente (v4 a v7) seguido da mensagem do cliente, cada um delimitado e neutralizado. */
 function userComPendente(text: string, pendente?: PendenteTriagem): string {
   const blocoPendente = pendente
     ? `<pergunta_pendente>\n${neutralize(pendente.pergunta)}\n</pergunta_pendente>\n<pedido_em_andamento>\n${neutralize(JSON.stringify(pendente.conhecido))}\n</pedido_em_andamento>\n`
@@ -169,7 +170,7 @@ const itemV5Schema = z.object({
   tipo: z.enum([...TIPOS_S1, ...TIPOS_S2, ...TIPOS_S3, ...TIPOS_S4]).nullable(),
   unidade: cortar(120),
   data: cortar(60),
-  tema: cortar(120), // em evento, "mudanca" = o cliente quer mudar um pedido (o core reconhece com ditaComoMudanca)
+  tema: cortar(120), // em evento (e na reserva da v7), "mudanca" = o cliente quer mudar o que já pediu (o core reconhece com ditaComoMudanca)
   pessoas: contagem(1000),
   horario: cortar(40),
   convidados: contagem(10000),
@@ -229,5 +230,52 @@ export function triageV6(
     jsonSchema: triageV6JsonSchema,
     parse: parseTriageV6,
     maxTokens: 520,
+  })
+}
+
+// ------------------------------------------------------------- v7: + reserva (nome e resposta do contato)
+
+/** Marcador da redação de PII ([TELEFONE], [CPF]...), em qualquer caixa e com acento: nunca é nome de reserva. */
+const MARCADOR_PII = /\[\p{L}+\]/u
+const nomeReserva = z
+  .string()
+  .nullable()
+  .transform((s) => {
+    const t = s?.trim().slice(0, 80) ?? ''
+    return t === '' || MARCADOR_PII.test(t) ? null : t
+  })
+
+const itemV7Schema = itemV5Schema
+  .extend({
+    nome: nomeReserva,
+    // resposta a "Posso usar este número do WhatsApp...?": true = sim, false = não/outro número, null = não respondeu
+    contato_ok: z.boolean().nullable(),
+  })
+  // nome e contato só existem na reserva; em outro serviço viram null (o nome não vaza para outro fluxo)
+  .transform((i) => (i.servico === 'aviso_presenca' ? i : { ...i, nome: null, contato_ok: null }))
+const triageV7Schema = z.object({
+  itens: z.array(itemV7Schema).transform((a) => a.slice(0, 5)),
+  fora_escopo: z.boolean(),
+  frustracao: z.boolean(),
+})
+export type TriageV7 = z.infer<typeof triageV7Schema>
+export type ItemTriagemV7 = TriageV7['itens'][number]
+export { TRIAGE_V7_PROMPT_VERSION }
+
+export const parseTriageV7 = (raw: unknown): TriageV7 => triageV7Schema.parse(raw)
+
+/** Triagem da reserva: itens da v6 + `nome` e `contato_ok` na reserva. O horário volta como o cliente disse (o core normaliza). */
+export function triageV7(
+  llm: LlmClient,
+  p: { models: string[]; restaurante: string; text: string; pendente?: PendenteTriagem },
+): Promise<JsonCallResult<TriageV7>> {
+  return llm.completeJson({
+    models: p.models,
+    system: triageV7SystemPrompt(p.restaurante),
+    user: userComPendente(p.text, p.pendente),
+    schemaName: 'triagem_v7',
+    jsonSchema: triageV7JsonSchema,
+    parse: parseTriageV7,
+    maxTokens: 600,
   })
 }

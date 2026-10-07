@@ -55,7 +55,12 @@ describe('texto do resumo de acesso', () => {
     ultimaInteracao: '2026-10-05T18:00:00Z',
     conversas: 3,
     mensagens: 42,
-    avisos: [{ data: '2026-09-12', pessoas: 4, status: 'ativo', unidade: 'Asa Sul' }],
+    avisos: [
+      { data: '2026-09-12', pessoas: 4, status: 'confirmada', unidade: 'Asa Sul', nome: 'Ana Lima', horario: '20:00', contatoInformado: true },
+      { data: '2026-09-20', pessoas: 2, status: 'nao_veio', unidade: 'Asa Sul', nome: 'Ana', horario: '13:30', contatoInformado: false },
+      // aviso antigo (antes da reserva com nome e horário)
+      { data: '2026-08-02', pessoas: 3, status: 'cancelada', unidade: 'Asa Sul', nome: null, horario: null, contatoInformado: false },
+    ],
     eventos: [{ data: '2026-11-20', convidados: 30, tipo: 'aniversario', status: 'confirmado', unidade: 'Asa Sul' }],
     pedidos: [{ tipo: 'acesso', status: 'aberto', criadoEm: '2026-10-01T12:00:00Z' }],
   }
@@ -67,16 +72,20 @@ describe('texto do resumo de acesso', () => {
     expect(t).toContain('Última interação: 05/10/2026')
     expect(t).toContain('Conversas: 3')
     expect(t).toContain('Mensagens: 42')
-    expect(t).toContain('12/09/2026 · Asa Sul · 4 pessoas · Ativo')
+    expect(t).toContain('12/09/2026 · 20h · Asa Sul · 4 pessoas · em nome de Ana Lima · Confirmada · telefone de contato informado: sim')
+    expect(t).toContain('20/09/2026 · 13h30 · Asa Sul · 2 pessoas · em nome de Ana · Não veio · telefone de contato informado: não')
+    expect(t).toContain('02/08/2026 · Asa Sul · 3 pessoas · Cancelada · telefone de contato informado: não')
     expect(t).toContain('20/11/2026 · Asa Sul · Aniversário · 30 convidados · Confirmado')
     expect(t).toContain('Acesso aos dados · Aberto · 01/10/2026')
-    expect(t).not.toMatch(/telefone/i)
+    // o número nunca aparece: só se foi informado
+    expect(t).not.toMatch(/\d{4}-?\d{4}/)
+    expect(t.match(/telefone/gi)).toHaveLength(3)
   })
 
   it('listas vazias e nome ausente ficam explícitos', () => {
     const t = textoResumo({ ...resumo, nomePerfil: null, avisos: [], eventos: [], pedidos: [] }, 'America/Sao_Paulo')
     expect(t).toContain('Nome no WhatsApp: não informado')
-    expect(t).toContain('Avisos de presença: nenhum')
+    expect(t).toContain('Reservas: nenhuma')
     expect(t).toContain('Pedidos de evento: nenhum')
   })
 

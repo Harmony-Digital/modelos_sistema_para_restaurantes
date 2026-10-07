@@ -105,4 +105,44 @@ describe('MenuLateral', () => {
     expect(screen.getByRole('navigation', { name: 'Menu principal' }).className).toMatch(/(^|\s)hidden(\s|$)/)
     expect(screen.getByRole('navigation', { name: 'Menu principal' }).className).toContain('lg:flex')
   })
+  describe('logo do restaurante', () => {
+    const URL_LOGO = 'https://x.test/storage/v1/object/public/marca/r/logo.png'
+    it('aberto: logo no quadro de 32 px ao lado do nome, que é cortado com reticências', () => {
+      render(<MenuLateral papel="dono" restaurante="Casa Harmonia" logo={URL_LOGO} estadoInicial="aberto" aguardando={0} />)
+      const nav = screen.getByRole('navigation', { name: 'Menu principal' })
+      // o nome está escrito ao lado: a logo é decorativa (alt vazio), sem leitura dupla
+      expect(within(nav).queryByRole('img')).toBeNull()
+      const img = nav.querySelector('img')!
+      expect(img).toHaveAttribute('alt', '')
+      expect(img).toHaveAttribute('src', URL_LOGO)
+      expect(img.className).toMatch(/\bsize-8\b/)
+      const nome = within(nav).getByText('Casa Harmonia')
+      expect(nome.className).toContain('truncate')
+      expect(nome.className).toContain('min-w-0')
+      expect(img.parentElement).toBe(nome.parentElement)
+    })
+
+    it('recolhido: só a logo (sem o nome), junto do botão de abrir', async () => {
+      const user = userEvent.setup()
+      render(<MenuLateral papel="dono" restaurante="Casa Harmonia" logo={URL_LOGO} estadoInicial="aberto" aguardando={0} />)
+      await user.click(screen.getByRole('button', { name: 'Recolher menu' }))
+      const nav = screen.getByRole('navigation', { name: 'Menu principal' })
+      // sozinha: alt com o nome
+      expect(within(nav).getByRole('img', { name: 'Casa Harmonia' })).toBeInTheDocument()
+      expect(within(nav).queryByText('Casa Harmonia')).toBeNull()
+      expect(within(nav).getByRole('button', { name: 'Abrir menu' })).toBeInTheDocument()
+    })
+
+    it('sem logo: o cabeçalho fica igual ao de hoje (aberto e recolhido)', () => {
+      for (const estado of ['aberto', 'recolhido'] as const) {
+        const { container: sem, unmount } = render(<MenuLateral papel="dono" restaurante="R" estadoInicial={estado} aguardando={0} />)
+        const antes = sem.innerHTML
+        expect(screen.queryByRole('img')).toBeNull()
+        unmount()
+        const { container: nulo, unmount: u2 } = render(<MenuLateral papel="dono" restaurante="R" logo={null} estadoInicial={estado} aguardando={0} />)
+        expect(nulo.innerHTML).toBe(antes)
+        u2()
+      }
+    })
+  })
 })

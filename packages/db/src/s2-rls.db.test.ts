@@ -67,7 +67,7 @@ describe('RLS de attendance_notices', () => {
         values (${dsql.join(cols.map((c) => dsql`${v[c]}`), dsql`, `)}) returning id`))
     }
     // colunas fora do grant (privilégio de coluna)
-    for (const extra of [{ simulado: true }, { simulado: false }, { status: 'cancelado' }, { anonimizado: true }]) {
+    for (const extra of [{ simulado: true }, { simulado: false }, { status: 'cancelada' }, { anonimizado: true }]) {
       await expect(tenta(extra), JSON.stringify(extra)).rejects.toMatchObject({ cause: { code: '42501' } })
     }
     const [c] = await db.insert(customers).values({ restaurantId, waIdHash: 'h', telefoneCifrado: 'e' }).returning()
@@ -83,30 +83,62 @@ describe('RLS de attendance_notices', () => {
     )).rejects.toMatchObject({ cause: { code: '42501' } })
   })
 
-  it('authenticated só atualiza status; não reativa nem muda outras colunas; atendente não escreve', async () => {
+  it('authenticated só atualiza status (confirmada, cancelada, não veio); outras colunas não; atendente não escreve', async () => {
     const { restaurantId, unitId } = await seedRestaurant(db)
     const dono = await seedStaff(db, sql, { restaurantId, papel: 'dono' })
     const atendente = await seedStaff(db, sql, { restaurantId, papel: 'atendente' })
     const [ativo, cancelado] = await db.insert(attendanceNotices).values([
       { restaurantId, unitId, data: '2026-10-10', pessoas: 2, origem: 'ia' },
-      { restaurantId, unitId, data: '2026-10-11', pessoas: 2, origem: 'ia', status: 'cancelado' },
+      { restaurantId, unitId, data: '2026-10-11', pessoas: 2, origem: 'ia', status: 'cancelada' },
     ]).returning()
-    await expect(withUserContext(db, as(dono), (tx) =>
-      tx.update(attendanceNotices).set({ simulado: true }).where(eq(attendanceNotices.id, ativo!.id)),
-    )).rejects.toMatchObject({ cause: { code: '42501' } })
-    await expect(withUserContext(db, as(dono), (tx) =>
-      tx.update(attendanceNotices).set({ status: 'ativo' }).where(eq(attendanceNotices.id, cancelado!.id)),
-    )).rejects.toMatchObject({ cause: { code: '42501' } })
-    const ok = await withUserContext(db, as(dono), (tx) =>
-      tx.update(attendanceNotices).set({ status: 'cancelado' }).where(eq(attendanceNotices.id, ativo!.id)).returning(),
-    )
-    expect(ok).toHaveLength(1)
+    for (const set of [{ simulado: true }, { pessoas: 9 }, { contatoCifrado: 'x' }, { horario: '20:00' }, { nome: 'Outro' }]) {
+      await expect(withUserContext(db, as(dono), (tx) =>
+        tx.update(attendanceNotices).set(set).where(eq(attendanceNotices.id, ativo!.id)),
+      ), JSON.stringify(set)).rejects.toMatchObject({ cause: { code: '42501' } })
+    }
+    // reconfirmar é permitido pela RLS (a lotação é conferida na DAL, com a unidade travada)
+    for (const [id, status] of [[cancelado!.id, 'confirmada'], [ativo!.id, 'nao_veio'], [ativo!.id, 'cancelada']] as const) {
+      const r = await withUserContext(db, as(dono), (tx) =>
+        tx.update(attendanceNotices).set({ status }).where(eq(attendanceNotices.id, id)).returning())
+      expect(r, status).toHaveLength(1)
+    }
     await expect(withUserContext(db, as(atendente), (tx) =>
       tx.insert(attendanceNotices).values({ restaurantId, unitId, data: '2026-10-10', pessoas: 1, origem: 'painel' }),
     )).rejects.toMatchObject({ cause: { code: '42501' } })
     const r = await withUserContext(db, as(atendente), (tx) =>
-      tx.update(attendanceNotices).set({ status: 'cancelado' }).where(eq(attendanceNotices.id, cancelado!.id)).returning(),
+      tx.update(attendanceNotices).set({ status: 'cancelada' }).where(eq(attendanceNotices.id, cancelado!.id)).returning(),
     )
     expect(r).toHaveLength(0)
+  })
+
+  it('gerente restrito não muda status de reserva de outra unidade', async () => {
+    const { restaurantId, unitId } = await seedRestaurant(db)
+    const [u2] = await db.insert(units).values({ restaurantId, nome: 'Norte', slug: 'norte' }).returning()
+    const gerente = await seedStaff(db, sql, { restaurantId, papel: 'gerente' })
+    await db.update(staff).set({ unidadesPermitidas: [unitId] }).where(eq(staff.userId, gerente))
+    const [outra] = await db.insert(attendanceNotices).values({ restaurantId, unitId: u2!.id, data: '2026-10-10', pessoas: 2, origem: 'ia' }).returning()
+    const r = await withUserContext(db, as(gerente), (tx) =>
+      tx.update(attendanceNotices).set({ status: 'nao_veio' }).where(eq(attendanceNotices.id, outra!.id)).returning())
+    expect(r).toHaveLength(0)
+    const [linha] = await db.select().from(attendanceNotices).where(eq(attendanceNotices.id, outra!.id))
+    expect(linha!.status).toBe('confirmada')
+  })
+
+  it('insert do painel aceita horário e contato cifrado', async () => {
+    const { restaurantId, unitId } = await seedRestaurant(db)
+    const dono = await seedStaff(db, sql, { restaurantId, papel: 'dono' })
+    const rows = await withUserContext(db, as(dono), (tx) => tx.execute(dsql`
+      insert into public.attendance_notices (restaurant_id, unit_id, data, pessoas, horario, nome, contato_cifrado, origem, criado_por)
+      values (${restaurantId}, ${unitId}, '2026-10-10', 2, '20:00', 'Ana', 'cifrado', 'painel', ${dono}) returning id`))
+    expect(rows).toHaveLength(1)
+  })
+
+  it('app.travar_unidade_reserva: só worker_app executa', async () => {
+    const { restaurantId, unitId } = await seedRestaurant(db)
+    const dono = await seedStaff(db, sql, { restaurantId, papel: 'dono' })
+    const chamar = dsql`select capacidade from app.travar_unidade_reserva(${restaurantId}::uuid, ${unitId}::uuid)`
+    expect(await withRole(db, 'worker_app', (tx) => tx.execute(chamar))).toHaveLength(1)
+    await expect(withRole(db, 'web_app', (tx) => tx.execute(chamar))).rejects.toMatchObject({ cause: { code: '42501' } })
+    await expect(withUserContext(db, as(dono), (tx) => tx.execute(chamar))).rejects.toMatchObject({ cause: { code: '42501' } })
   })
 })

@@ -1,12 +1,12 @@
 /**
  * Evals S4 — camada 1: extração de perguntas do cardápio (consulta/tag), mudança de pedido de evento (tema "mudanca")
- * e respostas a pergunta pendente (padrão triage-v6; --triagem v5 mede a anterior) com modelo real via OpenRouter ou OpenAI (--provider ou AI_PROVIDER; padrão openrouter).
- * Uso: pnpm --filter @atd/ai eval:s4 [--modelos a,b,c] [--provider openrouter|openai] [--teto 0.50] [--triagem v6|v5] (padrão v6)
+ * e respostas a pergunta pendente (padrão triage-v7; --triagem v6|v5 mede as anteriores) com modelo real via OpenRouter ou OpenAI (--provider ou AI_PROVIDER; padrão openrouter).
+ * Uso: pnpm --filter @atd/ai eval:s4 [--modelos a,b,c] [--provider openrouter|openai] [--teto 0.50] [--triagem v7|v6|v5] (padrão v7)
  * Custo real, com teto por execução. Grava o relatório em evals/s4/resultados/AAAA-MM-DD-extracao.md.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
-import { triageV5, triageV6 } from '../../src/triage.ts'
+import { triageV5, triageV6, triageV7 } from '../../src/triage.ts'
 import { lerTriagem } from '../triagem.ts'
 import { custoDaChamada } from '../s1/custo.ts'
 import { FRASES } from './casos.ts'
@@ -20,8 +20,8 @@ if (modelos.length === 0) throw new Error('Informe --modelos ou AI_TRIAGE_MODELS
 const teto = Number(values.teto)
 if (!(teto > 0)) throw new Error('--teto deve ser um valor em dólares maior que zero')
 const triagem = lerTriagem(values.triagem, 'v5')
-if (triagem === 'v4') throw new Error('--triagem deve ser v5 ou v6 (a v4 não extrai cardápio)')
-const extrair = triagem === 'v6' ? triageV6 : triageV5
+if (triagem === 'v4') throw new Error('--triagem deve ser v5, v6 ou v7 (a v4 não extrai cardápio)')
+const extrair = triagem === 'v7' ? triageV7 : triagem === 'v6' ? triageV6 : triageV5
 
 const maxChamadas = Number(values['max-chamadas'])
 if (!Number.isInteger(maxChamadas) || maxChamadas <= 0) throw new Error('--max-chamadas deve ser um inteiro maior que zero')

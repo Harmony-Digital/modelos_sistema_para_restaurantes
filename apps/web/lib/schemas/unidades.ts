@@ -2,6 +2,9 @@ import { z } from 'zod'
 import { ehLinkGoogleMaps, validarSemana, validarTurnos } from '@atd/core/s1'
 import { dataBr, hora, telefoneBr } from '@/lib/validation'
 
+/** Mesmo limite do banco (`units_capacidade_ck`). */
+export const CAPACIDADE_MAXIMA = 5000
+export const MSG_CAPACIDADE = `Informe de 1 a ${CAPACIDADE_MAXIMA} pessoas, ou deixe em branco para não limitar.`
 const opcional = (max: number) => z.string().trim().max(max, `Use no máximo ${max} caracteres`)
 const turno = z.object({ abre: hora, fecha: hora })
 /** Só valida a regra de negócio quando todo horário já tem formato válido (senão o erro do campo basta). */
@@ -22,6 +25,22 @@ export const dadosUnidadeSchema = z.object({
   apelidos: z.array(z.string().trim().min(1).max(40, 'Cada apelido pode ter até 40 caracteres')).max(10, 'Use no máximo 10 apelidos'),
   mapsUrl: z.string().trim().refine((v) => v === '' || ehLinkGoogleMaps(v), 'Cole um link do Google Maps (no app: Compartilhar → Copiar link)'),
   ativo: z.boolean(),
+  /** Lotação máxima de pessoas por dia: vazia = sem limite (a saída já transformada também vale, para a action). */
+  capacidadePessoas: z
+    .union([z.string(), z.number(), z.null()])
+    .optional()
+    .transform((v, ctx) => {
+      // ausente = não muda (a DAL omite a coluna); vazio = sem limite
+      if (v === undefined) return undefined
+      const t = typeof v === 'string' ? v.trim() : v
+      if (t === null || t === '') return null
+      const n = typeof t === 'number' ? t : /^\d{1,4}$/.test(t) ? Number(t) : NaN
+      if (!Number.isInteger(n) || n < 1 || n > CAPACIDADE_MAXIMA) {
+        ctx.addIssue({ code: 'custom', message: MSG_CAPACIDADE })
+        return z.NEVER
+      }
+      return n
+    }),
 })
 export type DadosUnidadeForm = z.input<typeof dadosUnidadeSchema>
 

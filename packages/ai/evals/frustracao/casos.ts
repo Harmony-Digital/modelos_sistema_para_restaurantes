@@ -1,5 +1,5 @@
 /**
- * Gabarito da frustração (triage-v6, camada 1): `frustracao = true` só com irritação COM O ATENDIMENTO.
+ * Gabarito da frustração (triage-v7, camada 1): `frustracao = true` só com irritação COM O ATENDIMENTO.
  * As não-frustrações são parecidas de propósito (reclamação de coisa externa, caixa alta sem raiva, "já perguntei"
  * para outra pessoa) — cada uma que virar true é um handoff desnecessário.
  */

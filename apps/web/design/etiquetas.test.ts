@@ -15,6 +15,7 @@ describe('etiquetas de status', () => {
     expect(TOM_DA_VARIANTE.humano).toBe('info')
     expect(TOM_DA_VARIANTE.erro).toBe('destrutivo')
     expect(TOM_DA_VARIANTE.simulacao).toBe('neutro')
+    expect(TOM_DA_VARIANTE.nao_veio).toBe('aviso')
   })
 
   it('as classes usam o mesmo alfa que o teste de contraste mede', () => {

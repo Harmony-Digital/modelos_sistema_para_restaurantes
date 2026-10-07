@@ -32,7 +32,19 @@ export function stripStackParams(stack: string, originalMessages: string[]): str
   return cutParams(out)
 }
 
-const mask = (s: string) => redactPii(stripQueryParams(s))
+/**
+ * Erros do Postgres trazem a linha ("Failing row contains (…)") ou a chave ("Key (…)=(…)") com os valores, como o nome
+ * do cliente numa reserva: tira os valores e mantém o resto (constraint, colunas). Os valores podem ter parênteses
+ * desbalanceados ("Carlos :)"), então a redação vai até o fim da linha; da chave, só o final conhecido fica.
+ */
+export function stripRowValues(s: string): string {
+  return s
+    .replace(/(Failing row contains )\(.*$/gm, '$1([redigido]).')
+    .replace(/(Key \([^)\n]*\))=\(.*?\)( already exists\.| is not present in table "[^"\n]*"\.)?$/gm, '$1=([redigido])$2')
+    .replace(/(Key \([^)\n]*\))=\((?!\[redigido\]\)).*$/gm, '$1=([redigido])')
+}
+
+const mask = (s: string) => redactPii(stripRowValues(stripQueryParams(s)))
 
 export const SENSITIVE = new Set(['texto', 'text', 'body', 'telefone', 'phone', 'waId', 'to'])
 
@@ -42,6 +54,10 @@ const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !
 function dropSensitive(o: Obj): Obj {
   return Object.fromEntries(Object.entries(o).filter(([k]) => !SENSITIVE.has(k)))
 }
+
+/** Campos de erro do Postgres com valores de linha (vêm nos contexts quando o SDK anexa os dados do erro). */
+const DADOS_DE_LINHA = new Set(['detail', 'where', 'parameters', 'params', 'query'])
+const semDadosDeLinha = (o: Obj): Obj => Object.fromEntries(Object.entries(o).filter(([k]) => !DADOS_DE_LINHA.has(k)))
 
 type ScrubInput = {
   request?: unknown
@@ -73,7 +89,7 @@ export function scrubEvent<T extends ScrubInput>(event: T): T {
   }
   if (out.contexts) {
     out.contexts = Object.fromEntries(
-      Object.entries(out.contexts).map(([k, v]) => [k, isObj(v) ? dropSensitive(v) : v]),
+      Object.entries(out.contexts).map(([k, v]) => [k, isObj(v) ? semDadosDeLinha(dropSensitive(v)) : v]),
     )
   }
   if (out.breadcrumbs) {

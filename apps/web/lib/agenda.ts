@@ -1,12 +1,12 @@
 import { somarDias, type DataIso } from '@atd/core/s1'
-import type { AvisoPainel, PedidoPainel, PrevisaoUnidade, StatusPedido } from '@atd/db'
+import type { AvisoPainel, PedidoPainel, PrevisaoUnidade, StatusPedido, StatusReserva } from '@atd/db'
 import { dataIsoValida } from '@/lib/schemas/avisos'
 import { STATUS_PEDIDO } from '@/lib/schemas/eventos'
 
 /**
- * Agenda única por dia (`/agenda?dia&unidade&cancelados&pedido`): avisos de presença e pedidos de evento numa linha
- * do tempo. A consulta vai de um ano atrás a um ano à frente (pedidos de evento chegam com meses de antecedência);
- * o formulário de aviso continua limitado a hoje + 30 (`limiteDaPrevisao`).
+ * Agenda única por dia (`/agenda?dia&unidade&cancelados&pedido&reserva`): reservas e pedidos de evento numa linha do
+ * tempo. A consulta vai de um ano atrás a um ano à frente (pedidos de evento chegam com meses de antecedência); o
+ * formulário de reserva continua limitado a hoje + 30 (`limiteDaPrevisao`).
  */
 export const DIAS_AGENDA = 365
 export const inicioDaAgenda = (hoje: DataIso): DataIso => somarDias(hoje, -DIAS_AGENDA)
@@ -51,6 +51,8 @@ export function hrefAgenda(p: {
   /** Filtro de status da lista de todos os pedidos (só com `ver: 'pedidos'`). */
   status?: readonly StatusPedido[] | undefined
   pedido?: string | null | undefined
+  /** Reserva aberta (`?reserva=`). */
+  reserva?: string | null | undefined
 }): string {
   const q = new URLSearchParams()
   if (p.dia !== p.hoje) q.set('dia', p.dia)
@@ -61,6 +63,7 @@ export function hrefAgenda(p: {
     if (p.status && !ehPadrao(p.status)) q.set('status', STATUS_PEDIDO.filter((s) => p.status!.includes(s)).join(','))
   }
   if (p.pedido) q.set('pedido', p.pedido)
+  if (p.reserva) q.set('reserva', p.reserva)
   const s = q.toString()
   return s ? `/agenda?${s}` : '/agenda'
 }
@@ -72,6 +75,7 @@ export type BuscaAgenda = {
   unidade?: string | undefined
   cancelados?: string | undefined
   pedido?: string | undefined
+  reserva?: string | undefined
   status?: string | undefined
   ver?: string | undefined
 }
@@ -124,6 +128,27 @@ export function horarioDoAviso(h: string | null): string | null {
   return ehHorarioHHMM(h) ? h.slice(0, 5) : h
 }
 
+/** Hora da reserva: o horário marcado (reservas novas); o horário aproximado antigo só quando não há. */
+export const horaDaReserva = (a: Pick<AvisoPainel, 'horario' | 'horarioAprox'>): string | null => a.horario ?? a.horarioAprox
+
+/** Ocupação do dia como aparece no topo da Agenda: "147/150", ou "sem limite" quando a unidade não tem lotação. */
+export function textoOcupacao(u: { capacidade: number | null; ocupadas: number }): string {
+  return u.capacidade === null ? 'sem limite' : `${u.ocupadas}/${u.capacidade}`
+}
+
+export const ROTULO_STATUS_RESERVA: Record<StatusReserva, string> = { confirmada: 'Confirmada', cancelada: 'Cancelada', nao_veio: 'Não veio' }
+const ORDEM_STATUS_RESERVA: readonly StatusReserva[] = ['confirmada', 'cancelada', 'nao_veio']
+
+/**
+ * Para quais situações a reserva pode ir no painel (mesma regra da DAL `mudarStatusReserva`): Confirmada e Cancelada de
+ * hoje em diante; Não veio só no dia da reserva ou depois; um Não veio volta a Confirmada mesmo num dia passado (engano);
+ * nunca a situação atual.
+ */
+export function acoesDaReserva(atual: StatusReserva, data: DataIso, hoje: DataIso): StatusReserva[] {
+  return ORDEM_STATUS_RESERVA.filter((s) => s !== atual
+    && (s === 'nao_veio' ? data <= hoje : data >= hoje || (s === 'confirmada' && atual === 'nao_veio')))
+}
+
 /**
  * Linha do tempo do dia: pedidos de evento (não têm hora: valem o dia todo) primeiro, na ordem da DAL; depois os
  * avisos com "HH:MM" por horário; depois os de horário em texto livre ("à noite"); sem horário no fim. Ordem estável:
@@ -141,27 +166,28 @@ export function linhaDoTempo(
   const avisos = unidades
     .filter((u) => daUnidade(u.unitId))
     .flatMap((u) => u.avisos.map((a) => ({ tipo: 'aviso' as const, chave: `a-${a.id}`, aviso: a, unidade: u.unidade })))
+  const hora = (i: { aviso: AvisoPainel }) => horaDaReserva(i.aviso)
   const comHora = avisos
-    .filter((a) => ehHorarioHHMM(a.aviso.horarioAprox))
-    .sort((a, b) => a.aviso.horarioAprox!.slice(0, 5).localeCompare(b.aviso.horarioAprox!.slice(0, 5)))
-  const livre = avisos.filter((a) => a.aviso.horarioAprox && !ehHorarioHHMM(a.aviso.horarioAprox))
-  const semHora = avisos.filter((a) => !a.aviso.horarioAprox)
+    .filter((a) => ehHorarioHHMM(hora(a)))
+    .sort((a, b) => hora(a)!.slice(0, 5).localeCompare(hora(b)!.slice(0, 5)))
+  const livre = avisos.filter((a) => hora(a) && !ehHorarioHHMM(hora(a)))
+  const semHora = avisos.filter((a) => !hora(a))
   return [...eventos, ...comHora, ...livre, ...semHora]
 }
 
-/** Totais do que está de pé no dia (avisos cancelados e pedidos recusados/cancelados não contam). */
-export function resumoDoDia(itens: ItemAgenda[]): { pessoas: number; avisos: number; eventos: number } {
+/** Totais do que está de pé no dia (reservas canceladas ou "não veio" e pedidos recusados/cancelados não contam). */
+export function resumoDoDia(itens: ItemAgenda[]): { pessoas: number; reservas: number; eventos: number } {
   let pessoas = 0
-  let avisos = 0
+  let reservas = 0
   let eventos = 0
   for (const i of itens) {
-    if (i.tipo === 'aviso' && i.aviso.status === 'ativo') {
-      avisos += 1
+    if (i.tipo === 'aviso' && i.aviso.status === 'confirmada') {
+      reservas += 1
       pessoas += i.aviso.pessoas
     }
     if (i.tipo === 'evento' && DE_PE.includes(i.pedido.status)) eventos += 1
   }
-  return { pessoas, avisos, eventos }
+  return { pessoas, reservas, eventos }
 }
 
 /** Pedidos que ainda pedem trabalho (novo, em contato) marcados para outro dia, por data do evento. */

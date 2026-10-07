@@ -4,7 +4,7 @@ import { getTestDb, resetDb, seedRestaurant, seedStaff } from './test-utils.ts'
 import type { JwtClaims } from './rls.ts'
 import { listAwaitingHuman } from './conversations-panel.ts'
 import { lerModoDemonstracao, modoDemonstracao, salvarModoDemonstracao } from './modo-demonstracao.ts'
-import { cancelarAvisoPainel, previsaoDoDia, totalPrevistoHoje } from './painel-avisos.ts'
+import { mudarStatusReserva, previsaoDoDia, totalPrevistoHoje } from './painel-avisos.ts'
 import { assumirConversa, contarAguardando, listarInbox, tempoAteAssumirHoje } from './painel-conversas.ts'
 import { atualizarPedido, contarPedidosNovos, listarPedidos, revelarTelefonePedido } from './painel-eventos.ts'
 import { getPanelStatus } from './panel.ts'
@@ -72,8 +72,9 @@ describe('modo demonstração: leitura e escrita', () => {
   it('o dono sem MFA não muda; o gerente não consegue gravar direto na coluna (RLS)', async () => {
     const c = await cenario()
     expect((await salvarModoDemonstracao(db, as(c.dono, 'aal1'), c.restaurantId, true)).ok).toBe(false)
-    await withUserContext(db, as(c.gerente), (tx) =>
-      tx.update(restaurants).set({ modoDemonstracao: true }).where(eq(restaurants.id, c.restaurantId)))
+    await expect(withUserContext(db, as(c.gerente), (tx) =>
+      tx.update(restaurants).set({ modoDemonstracao: true }).where(eq(restaurants.id, c.restaurantId))))
+      .rejects.toMatchObject({ cause: { code: '42501' } })
     const [r] = await db.select({ m: restaurants.modoDemonstracao }).from(restaurants)
     expect(r!.m).toBe(false)
   })
@@ -183,7 +184,7 @@ describe('modo demonstração: Agenda e Conversas', () => {
     const [a] = await db.insert(attendanceNotices).values({
       restaurantId: c.restaurantId, unitId: c.u1, data: DIA, pessoas: 4, origem: 'ia', simulado: true,
     }).returning()
-    expect(await cancelarAvisoPainel(db, as(c.gerente), a!.id, new Date('2026-10-09T15:00:00Z'))).toEqual({ ok: true, valor: null })
+    expect(await mudarStatusReserva(db, as(c.gerente), a!.id, 'cancelada', new Date('2026-10-09T15:00:00Z'))).toEqual({ ok: true, valor: null })
   })
 
   it('inbox e contador de aguardando incluem simuladas com o modo ligado, mesmo sem o filtro', async () => {

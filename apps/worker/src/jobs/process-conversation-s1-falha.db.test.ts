@@ -8,6 +8,7 @@ import type { LlmClient } from '@atd/ai'
 import { createLogger } from '../logger.ts'
 import { comMidiaProibida, storageProibido } from './midia-fake.ts'
 import { processConversation, type ProcessDeps } from './process-conversation.ts'
+import { comoV7 } from './triagem-falsa.ts'
 
 vi.mock('@atd/core', async (importOriginal) => {
   const orig = await importOriginal<typeof CoreModule>()
@@ -41,7 +42,7 @@ describe('S1 no worker: falha ao resolver depois da triagem paga', () => {
       async completeJson(p) {
         return {
           ok: true as const,
-          data: p.parse({ itens: [{ servico: 'horario_unidades', tipo: 'horario_dia', unidade: null, data: 'domingo', tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null }], fora_escopo: false, frustracao: false }),
+          data: p.parse(comoV7({ itens: [{ servico: 'horario_unidades', tipo: 'horario_dia', unidade: null, data: 'domingo', tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null }], fora_escopo: false })),
           model: 'fake/m', usage: { tokensIn: 100, tokensOut: 20, tokensCache: 0, costUsd: '0.000200' }, latencyMs: 10,
         }
       },

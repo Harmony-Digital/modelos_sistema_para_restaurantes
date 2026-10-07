@@ -55,6 +55,24 @@ describe('DadosUnidadeForm', () => {
     expect(nova.querySelector('a[href="#nova-nome"]')).not.toBeNull()
   })
 
+  it('lotação máxima (pessoas por dia): vazia vai como sem limite; número vai inteiro; inválida mostra o erro e não envia', async () => {
+    const user = userEvent.setup()
+    const acao = vi.fn().mockResolvedValue({ ok: true, data: { id: 'u1' } })
+    render(<DadosUnidadeForm inicial={{ ...UNIDADE_VAZIA, nome: 'Asa Sul' }} acao={acao} />)
+    const campo = screen.getByLabelText(/^Lotação máxima \(pessoas por dia\)/)
+    expect(campo).toHaveAttribute('inputmode', 'numeric')
+    await user.click(screen.getByRole('button', { name: 'Salvar unidade' }))
+    expect(acao).toHaveBeenLastCalledWith(expect.objectContaining({ capacidadePessoas: null }))
+    await user.type(campo, '9000')
+    await user.click(screen.getByRole('button', { name: 'Salvar unidade' }))
+    expect((await screen.findAllByText('Informe de 1 a 5000 pessoas, ou deixe em branco para não limitar.')).length).toBeGreaterThan(0)
+    expect(acao).toHaveBeenCalledTimes(1)
+    await user.clear(campo)
+    await user.type(campo, '150')
+    await user.click(screen.getByRole('button', { name: 'Salvar unidade' }))
+    await vi.waitFor(() => expect(acao).toHaveBeenLastCalledWith(expect.objectContaining({ capacidadePessoas: 150 })))
+  })
+
   it('somente leitura: campos desabilitados e sem botão de salvar', () => {
     render(<DadosUnidadeForm inicial={{ ...UNIDADE_VAZIA, nome: 'Asa Sul' }} acao={vi.fn()} somenteLeitura />)
     expect(screen.getByLabelText(/^Nome da unidade/)).toBeDisabled()

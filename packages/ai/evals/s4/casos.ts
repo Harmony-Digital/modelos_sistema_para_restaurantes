@@ -148,7 +148,7 @@ export const CASOS: Caso[] = [
     texto: 'Anotei o que você pediu e vou chamar a equipe para ajustar seu pedido de evento.', handoff: true,
     acoesS3: [{ tipo: 'observar_pedido', pedidoId: 'p-sab', observacao: 'Cliente pediu: unidade Asa Norte' }],
   }, { pedidos: [SAB_PED] }),
-  c('m09', 'vou na asa sul amanhã com 4 e quero ver o cardápio', [{ ...ped(), servico: 'aviso_presenca', tipo: 'registrar', unidade: 'asa sul', data: 'amanhã', pessoas: 4 }, enviar('asa sul')], { contem: ['Anotado', ENVIANDO], acoes: [enviarArquivo(AS)] }, { arquivos: [null] }),
+  c('m09', 'vou na asa sul amanhã com 4 e quero ver o cardápio', [{ ...ped(), servico: 'aviso_presenca', tipo: 'registrar', unidade: 'asa sul', data: 'amanhã', pessoas: 4 }, enviar('asa sul')], { contem: ['Para que horas é a reserva?', ENVIANDO], acoes: [enviarArquivo(AS)] }, { arquivos: [null] }),
   c('m10', 'quero falar com alguém e ver o cardápio', [{ ...card(null), servico: 'humano' }, enviar()], { contem: [ENVIANDO], acoes: [enviarArquivo(null)] }, { arquivos: [null] }),
   c('m11', 'quanto é a picanha na asa sul e qual o endereço?', [preco('picanha', 'asa sul'), horario('endereco', 'asa sul')], { contem: ['R$ 89,90', 'SCLS 404 Bloco C'] }, { achados: { 0: [PICANHA] } }),
 

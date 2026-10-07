@@ -28,6 +28,7 @@ export type TagCardapio = (typeof TAGS_CARDAPIO)[number]
  * `convidados`/`tipoEvento`/`espaco` só vêm em eventos (triage-v4); v2/v3 preenchem null.
  * `espaco === '*'`: o cliente disse que tanto faz o espaço ("pode ser qualquer um").
  * `consulta`/`tag` só vêm em perguntas do cardápio (triage-v5); v2–v4 preenchem null.
+ * `nome`/`contato_ok` só vêm na reserva (triage-v7).
  */
 export type ItemExtraido = {
   servico: Servico
@@ -42,6 +43,12 @@ export type ItemExtraido = {
   espaco: string | null
   consulta: string | null
   tag: TagCardapio | null
+  /**
+   * Reserva (triage-v7; ausente nas anteriores): nome para a reserva (≤ 80) e a resposta à pergunta "Posso usar este
+   * número do WhatsApp…?" (`false` = quer outro número). Mesmos nomes do item da v7. O número nunca vem do LLM.
+   */
+  nome?: string | null
+  contato_ok?: boolean | null
 }
 
 export type UnidadeS1 = AgendaUnidade & {

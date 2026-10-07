@@ -205,7 +205,8 @@ export const CASOS: Caso[] = [
   c('m01', 'endereço da asa norte e quais espaços tem lá', [h('endereco', 'asa norte'), esp({ unidade: 'asa norte' })],
     { contem: ['A unidade Asa Norte fica em SCLN 302 Bloco B', 'Espaços para eventos:'] }),
   c('m02', 'vou hoje na asa norte em 2 e quero festa', [aviso({ unidade: 'asa norte', data: 'hoje', pessoas: 2 }), completo({ espaco: '*' })],
-    { contem: ['Anotado: Asa Norte, hoje, 2 pessoas.', 'pedido de aniversário para 40 convidados'], acoes: [registrar()], acoesS2: [{ tipo: 'registrar', unitId: AN, data: '2026-10-05', pessoas: 2, horarioAprox: null, atualiza: false }] }),
+    // a reserva pergunta o horário (um dado por vez); o pedido de evento completo já é registrado
+    { contem: ['pedido de aniversário para 40 convidados', 'Para que horas é a reserva?'], acoes: [registrar()] }),
   c('m03', 'horário da asa sul sábado e festa sem data', [h('horario_dia', 'asa sul', 'sábado'), ped({ unidade: 'asa sul' })],
     { contem: ['Sábado (10/10), a unidade Asa Sul abre das 11h30 às 15h e das 18h às 2h.', 'Para qual data é o evento?'], pergunta: 'data' }),
   c('m04', 'que horas abre sábado? e quero uma festa na asa sul', [h('horario_dia', null, 'sábado'), ped({ unidade: 'asa sul' })],
@@ -217,10 +218,10 @@ export const CASOS: Caso[] = [
     { contem: ['Sobre o cardápio, ainda estou aprendendo', 'pedido de aniversário'], acoes: [registrar()] }),
   c('m07', 'festa e falar com humano', [completo({ espaco: '*' }), outro('humano')],
     { contem: ['pedido de aniversário'], acoes: [registrar()] }),
-  c('m08', 'cancela o evento e o aviso', [can(), avisoCan()],
-    { contem: ['cancelei seu pedido de evento', 'Não encontrei nenhum aviso ativo seu.'], acoes: [cancelar('p-sab', 'Pronto, cancelei seu pedido de evento: Asa Sul, sábado (10/10).')] },
+  c('m08', 'cancela o evento e a reserva', [can(), avisoCan()],
+    { contem: ['cancelei seu pedido de evento', 'Não encontrei nenhuma reserva sua.'], acoes: [cancelar('p-sab', 'Pronto, cancelei seu pedido de evento: Asa Sul, sábado (10/10).')] },
     { pedidos: [SAB_PED] }),
-  c('m09', 'aviso sem pessoas e festa sem data: pergunta de pessoas vem antes', [aviso({ unidade: 'asa norte', data: 'hoje' }), ped({ unidade: 'asa sul' })],
+  c('m09', 'reserva sem pessoas e festa sem data: pergunta de pessoas vem antes', [aviso({ unidade: 'asa norte', data: 'hoje' }), ped({ unidade: 'asa sul' })],
     { contem: ['Para quantas pessoas?'], naoContem: ['Para qual data é o evento?'] }),
 ]
 

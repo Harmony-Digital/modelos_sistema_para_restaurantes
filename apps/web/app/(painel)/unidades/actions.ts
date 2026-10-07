@@ -7,7 +7,7 @@ import { requireStaff } from '@/lib/dal'
 import { coordenadasDoLink } from '@/lib/maps-link'
 import { resultadoDoPainel } from '@/lib/painel-erros'
 import {
-  dadosUnidadeSchema, excecaoSchema, horariosSchema, type DadosUnidadeForm, type ExcecaoForm, type HorariosForm,
+  dadosUnidadeSchema, excecaoSchema, horariosSchema, MSG_CAPACIDADE as MSG_LOTACAO, type DadosUnidadeForm, type ExcecaoForm, type HorariosForm,
 } from '@/lib/schemas/unidades'
 import { espacoSchema, type EspacoForm } from '@/lib/schemas/espacos'
 import { getDb } from '@/lib/server/db'
@@ -56,8 +56,11 @@ export async function salvarDadosUnidadeAction(id: string | null, input: DadosUn
     lat: coords?.lat ?? null,
     lng: coords?.lng ?? null,
     ativo: d.ativo,
+    // ausente = não muda a lotação (a DAL omite a coluna)
+    ...(d.capacidadePessoas === undefined ? {} : { capacidadePessoas: d.capacidadePessoas }),
   })
   if (r.ok) revalidarUnidade(r.valor.id)
+  if (!r.ok && r.erro === 'capacidade_invalida') return { ok: false, fieldErrors: { capacidadePessoas: MSG_LOTACAO } }
   const resultado = resultadoDoPainel(r, { nome_duplicado: 'nome' })
   return resultado.ok && aviso && resultado.data ? { ok: true, data: { ...resultado.data, aviso } } : resultado
 }

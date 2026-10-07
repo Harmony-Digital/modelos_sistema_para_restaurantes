@@ -32,6 +32,19 @@ Antes de migrar, **confirmar que o projeto Supabase de staging/produção é Pos
 
 As migrations (0000–0014) criam as tabelas, RLS, os roles `web_app` e `worker_app` e o schema `pgboss` (migration 0004). **As migrations devem rodar antes da primeira subida do worker em cada ambiente**: o pg-boss usa `createSchema: false` e apenas cria suas tabelas dentro do schema `pgboss`, que pertence a `worker_app`.
 
+Storage: as migrations criam os buckets privados `cardapio` e `importacoes` (0027) e o bucket **público** `marca` (0046–0047: logo do restaurante, até 1 MB, só PNG/JPG/WebP, gravação só por dono/gerente no prefixo `<restaurant_id>/`). Não mude visibilidade, limite nem tipos no painel; `scripts/producao/verificar.sh --bootstrap …` confere os três.
+
+### Reserva com lotação e logo (0045–0048, 07/10/2026) — ordem obrigatória
+
+A 0045 renomeia os valores de `attendance_status` (`ativo` → `confirmada`, `cancelado` → `cancelada`, mais `nao_veio`). O worker antigo grava `'ativo'` e quebra com ela; o worker novo exige a 0045 e a 0046 (`app.travar_unidade_reserva`). Por isso, em cada ambiente (staging e depois produção), numa janela só:
+
+1. **parar o worker** (`docker compose --env-file .deploy.env -f docker-compose.prod.yml stop worker`);
+2. **migrations 0045–0048** (`pnpm db:migrate`; a 0048 só recria `app.resumo_titular`) e `verificar.sh` (bucket `marca` público com 1 MB);
+3. **subir o worker novo** (`IMAGE_TAG` da versão com a reserva, `pull` + `up -d`; conferir `worker iniciado`);
+4. **publicar a web** logo em seguida (o painel antigo também lê o status antigo).
+
+As mensagens do intervalo ficam na fila do pg-boss e são respondidas pelo worker novo. É uma exceção à regra do "Release regular" (migration compatível com a versão anterior do código): a 0045 **não** é compatível com o código anterior.
+
 ## 3. Senhas dos roles
 
 As migrations nunca definem senhas. No SQL Editor do Supabase (cada ambiente):

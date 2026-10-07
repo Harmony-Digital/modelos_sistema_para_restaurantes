@@ -3,11 +3,16 @@ import type { ChildProcess } from 'node:child_process'
 import { closeSql, criarMembro, entrar, entrarComoGestor, getAdmin, getSql } from '../helpers'
 import { iniciarOpenRouterFalso, type TriagemFalsa } from '../openrouter-falso'
 import { iniciarWorkerE2e, pararWorkerE2e } from '../worker'
+import { enviarLogo, lerLogoInicial, logoNoQuadro, removerLogo, restaurarLogo, type LogoInicial } from '../marca'
+import { pngDeTeste } from '../png'
 
 // Projeto desktop (1440×900): menu lateral, lista + detalhe, Agenda com o pedido ao lado, simulador flutuante e Ctrl+K.
 
 const SUFIXO = Date.now().toString(36)
 const UNIDADE = `E2E Desk ${SUFIXO}`
+const LOTADA = `E2E Cheia ${SUFIXO}` // fora do padrão "Desk": a busca rápida acha só a principal
+const NOME_NAO_VEIO = `Dora ${SUFIXO}`
+const REGRAS = 'Guardamos o lugar por até 15 minutos após o horário marcado'
 const CATEGORIA_CSV = `Sobremesas Desk ${SUFIXO}`
 const PEDIDO_ATENDENTE = 'quero falar com um atendente'
 const RESPOSTA = `Oi! Já vou te ajudar (${SUFIXO}).`
@@ -17,9 +22,12 @@ const vazio = { unidade: UNIDADE, data: null, tema: null, pessoas: null, horario
 
 function triagem(mensagem: string): TriagemFalsa {
   const m = mensagem.toLowerCase()
-  // sem hora fixa: um horário de hoje pode já ter passado quando o teste roda (e o aviso seria recusado)
-  if (m.startsWith('hoje vou')) {
-    return { itens: [{ ...vazio, servico: 'aviso_presenca', tipo: 'registrar', data: 'hoje', pessoas: 6, horario: 'à noite' } as Item], fora_escopo: false }
+  // amanhã às 20h: um horário de hoje pode já ter passado quando o teste roda (e a reserva pediria outro horário)
+  if (m.startsWith('amanhã vou')) {
+    return { itens: [{ ...vazio, servico: 'aviso_presenca', tipo: 'registrar', data: 'amanhã', pessoas: 6, horario: '20h' } as Item], fora_escopo: false }
+  }
+  if (m.startsWith('quero reservar amanhã para 6')) {
+    return { itens: [{ ...vazio, unidade: LOTADA, servico: 'aviso_presenca', tipo: 'registrar', data: 'amanhã', pessoas: 6, horario: '20h' } as Item], fora_escopo: false }
   }
   // sem unidade e com mais de 3 unidades: a resposta vem com a lista interativa "Ver unidades"
   if (m.startsWith('está aberto')) {
@@ -44,6 +52,8 @@ let worker: ChildProcess | undefined
 let falso: Awaited<ReturnType<typeof iniciarOpenRouterFalso>> | undefined
 let restaurantId = ''
 let unitId = ''
+let lotadaId = ''
+let logoInicial: LogoInicial | undefined
 /** Alerta de gasto inserido para o arquivo todo (faixa de alertas na barra): removido no afterAll se foi este teste que criou. */
 let alertaId: string | null = null
 
@@ -65,6 +75,15 @@ test.beforeAll(async () => {
     await sql`insert into unit_hours (restaurant_id, unit_id, weekday, turno, abre, fecha)
       values (${restaurantId}, ${unitId}, ${weekday}, 1, '00:00', '23:59')`
   }
+  const [l] = await sql`insert into units (restaurant_id, nome, slug, endereco)
+    values (${restaurantId}, ${LOTADA}, ${'e2e-cheia-' + SUFIXO}, 'Rua da Lotação, 1') returning id`
+  lotadaId = l!.id as string
+  for (let weekday = 0; weekday < 7; weekday++) {
+    await sql`insert into unit_hours (restaurant_id, unit_id, weekday, turno, abre, fecha)
+      values (${restaurantId}, ${lotadaId}, ${weekday}, 1, '00:00', '23:59')`
+  }
+  logoInicial = await lerLogoInicial()
+  await sql`update restaurants set logo_path = null where id = ${restaurantId}`
   // mais 3 unidades (nomes fora do padrão "Desk", para a busca rápida achar só a principal): pergunta sem unidade vira lista
   for (const n of [1, 2, 3]) {
     await sql`insert into units (restaurant_id, nome, slug, endereco)
@@ -86,7 +105,9 @@ test.afterAll(async () => {
   await falso?.fechar()
   const sql = getSql()
   if (alertaId) await sql`delete from budget_alerts where id = ${alertaId}`
-  // as outras specs contam com o isolamento: o modo volta a ficar desligado
+  await restaurarLogo(logoInicial)
+  // as outras specs contam com o isolamento: o modo volta a ficar desligado (o estado de antes da suíte volta no
+  // teardown global, e2e/estado-inicial.ts)
   if (restaurantId) await sql`update restaurants set modo_demonstracao = false where id = ${restaurantId}`
   const doTeste = sql`split_part(cu.wa_id_hash, ':', 2) in (select id::text from auth.users where email like '%@teste.local')`
   const caminhos = await sql<{ storage_path: string }[]>`
@@ -301,7 +322,8 @@ test('Conversas lado a lado: a conversa chega na lista ao vivo, abre ao lado, as
   await expect(page.getByRole('region', { name: 'Conversa aberta' })).toContainText('Escolha uma conversa')
 })
 
-test('Ajustes e Agenda unificada: modo demonstração ligado, aviso e pedido do simulador no dia, pedido aberto ao lado', async ({ page }) => {
+test('Ajustes e Agenda unificada: modo demonstração ligado, reserva e pedido do simulador no dia, pedido aberto ao lado', async ({ page }) => {
+  test.setTimeout(120_000) // conversa de várias mensagens, cada uma passando pelo worker
   await entrarComoGestor(page)
   await menu(page).getByRole('link', { name: 'Ajustes', exact: true }).click()
   const chave = page.getByRole('switch', { name: 'Modo demonstração' })
@@ -311,8 +333,12 @@ test('Ajustes e Agenda unificada: modo demonstração ligado, aviso e pedido do 
   await expect(chave).toHaveAttribute('aria-checked', 'true')
 
   await abrirSimuladorPeloMenu(page)
-  await perguntar(page, `Hoje vou na ${UNIDADE} com 6 pessoas à noite`)
-  await expect(simulador(page).getByText(/^Anotado:/)).toBeVisible({ timeout: 20_000 })
+  await perguntar(page, `Amanhã vou na ${UNIDADE} com 6 pessoas às 20h`)
+  await expect(simulador(page).getByText('Em nome de quem fica a reserva?')).toBeVisible({ timeout: 20_000 })
+  await perguntar(page, 'Maria Souza')
+  await expect(simulador(page).getByText(/^Posso usar este número/)).toBeVisible({ timeout: 20_000 })
+  await perguntar(page, 'sim')
+  await expect(simulador(page).getByText(/^Reserva feita:/)).toBeVisible({ timeout: 20_000 })
   await perguntar(page, `quero fazer um aniversário para 30 pessoas na ${UNIDADE} dia amanhã`)
   await expect(simulador(page).getByText(/^Recebemos seu pedido/)).toBeVisible({ timeout: 20_000 })
 
@@ -324,7 +350,6 @@ test('Ajustes e Agenda unificada: modo demonstração ligado, aviso e pedido do 
 
   await page.goto(`/agenda?unidade=${unitId}`)
   const linha = page.getByRole('list', { name: 'Linha do tempo do dia' })
-  await expect(linha.getByRole('listitem').filter({ hasText: '6 pessoas' })).toContainText('Simulação')
   const pendente = page.getByRole('region', { name: 'Pedidos para responder em outros dias' }).getByRole('link')
   await expect(pendente).toContainText('Simulação')
   await pendente.click()
@@ -336,12 +361,98 @@ test('Ajustes e Agenda unificada: modo demonstração ligado, aviso e pedido do 
   await expect(page.getByRole('dialog', { name: 'Pedido de evento' })).toHaveCount(0)
   const pedido = linha.getByRole('link', { name: /30 convidados/ })
   await expect(pedido).toContainText('Simulação')
+  // a reserva do simulador está no mesmo dia (amanhã), com o selo
+  await expect(linha.getByRole('listitem').filter({ hasText: 'Maria Souza' })).toContainText('6 pessoas')
+  await expect(linha.getByRole('listitem').filter({ hasText: 'Maria Souza' })).toContainText('Simulação')
   await ladoALado(linha, detalhe)
   await semRolagemHorizontal(page)
 
   await detalhe.getByRole('link', { name: 'Fechar o pedido' }).click()
   await expect(detalhe).toHaveCount(0)
   await expect(page).not.toHaveURL(/pedido=/)
+})
+
+test('reserva com lotação: capacidade na Unidade ao lado da lista, lotado com alternativas, grupo menor confirma com as regras', async ({ page }) => {
+  test.setTimeout(120_000) // conversa de várias mensagens, cada uma passando pelo worker
+  await entrarComoGestor(page)
+  await page.goto(`/unidades/${lotadaId}`)
+  const unidade = page.getByRole('region', { name: `Unidade ${LOTADA}` })
+  await unidade.getByLabel(/^Lotação máxima \(pessoas por dia\)/).fill('5')
+  await unidade.getByRole('button', { name: 'Salvar unidade' }).click()
+  await expect(page.getByText('Unidade salva')).toBeVisible()
+
+  await abrirSimuladorPeloMenu(page)
+  await perguntar(page, `quero reservar amanhã para 6 pessoas às 20h na ${LOTADA}`)
+  const lotado = simulador(page).getByText(/^A unidade .* está lotada/)
+  await expect(lotado).toBeVisible({ timeout: 20_000 })
+  await expect(lotado).toContainText('Nesse dia, temos vaga para 6 pessoas em:')
+  await expect(lotado).toContainText(`Na unidade ${LOTADA}, ainda temos vaga para até 5 pessoas.`)
+  await perguntar(page, '5')
+  await expect(simulador(page).getByText('Em nome de quem fica a reserva?')).toBeVisible({ timeout: 20_000 })
+  await perguntar(page, 'Carlos Lima')
+  await expect(simulador(page).getByText(/^Posso usar este número/)).toBeVisible({ timeout: 20_000 })
+  await perguntar(page, 'pode sim')
+  const feita = simulador(page).getByText(/^Reserva feita:/)
+  await expect(feita).toBeVisible({ timeout: 20_000 })
+  await expect(feita).toContainText('5 pessoas')
+  await expect(feita).toContainText(REGRAS)
+  const [a] = await getSql()`select pessoas, status, simulado from attendance_notices where unit_id = ${lotadaId}`
+  expect(a).toEqual({ pessoas: 5, status: 'confirmada', simulado: true })
+})
+
+test('Agenda: "Não veio" no detalhe ao lado libera a vaga na lotação do dia', async ({ page }) => {
+  await getSql()`update units set capacidade_pessoas = 30 where id = ${unitId}`
+  await getSql()`insert into attendance_notices (restaurant_id, unit_id, nome, data, pessoas, horario, origem)
+    values (${restaurantId}, ${unitId}, ${NOME_NAO_VEIO}, (now() at time zone 'America/Sao_Paulo')::date, 4, '12:00', 'painel')`
+  await entrarComoGestor(page)
+  await page.goto(`/agenda?unidade=${unitId}`)
+  const lotacao = page.getByRole('list', { name: 'Lotação do dia' })
+  await expect(lotacao).toContainText('4/30')
+  const linha = page.getByRole('list', { name: 'Linha do tempo do dia' })
+  await linha.getByRole('listitem').filter({ hasText: NOME_NAO_VEIO }).getByRole('link').click()
+  // ≥ lg a reserva abre ao lado da linha do tempo, sem folha modal
+  const detalhe = page.getByRole('complementary', { name: 'Reserva' })
+  await expect(detalhe).toContainText(NOME_NAO_VEIO)
+  await expect(page.getByRole('dialog', { name: 'Reserva' })).toHaveCount(0)
+  await ladoALado(linha, detalhe)
+  await detalhe.getByRole('button', { name: 'Não veio' }).click()
+  await expect(page.getByText('Reserva marcada como “Não veio”.')).toBeVisible()
+  await expect(lotacao).toContainText('0/30')
+  await semRolagemHorizontal(page)
+  await getSql()`update units set capacidade_pessoas = null where id = ${unitId}`
+})
+
+test('logo extrema (4000×200 e 50×50) fica no quadro de 32×32 do menu aberto e recolhido; o menu não estoura; remover volta ao nome', async ({ page }) => {
+  await entrarComoGestor(page)
+  const [r] = await getSql()`select nome from restaurants where id = ${restaurantId}`
+  const nome = r!.nome as string
+  for (const [largura, altura] of [[4000, 200], [50, 50]] as const) {
+    await page.goto('/ajustes')
+    await enviarLogo(page, { name: `logo-${largura}.png`, buffer: pngDeTeste(largura, altura) })
+    await expect(page.getByText(/^Logo (enviada|trocada)$/)).toBeVisible()
+    await page.reload()
+    // aberto: logo decorativa (o nome está ao lado), cortado com "…" sem empurrar o botão de recolher
+    await expect(menu(page)).toHaveAttribute('data-estado', 'aberto')
+    await logoNoQuadro(menu(page).locator('img'), 32, { largura, altura })
+    await expect(menu(page).getByText(nome, { exact: true })).toBeVisible()
+    expect((await menu(page).boundingBox())!.width).toBeCloseTo(240, 0)
+    await clicavel(menu(page).getByRole('button', { name: 'Recolher menu' }))
+    expect(await menu(page).evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true)
+    // recolhido: só a logo (com o nome no alt), acima do botão de abrir
+    await menu(page).getByRole('button', { name: 'Recolher menu' }).click()
+    await expect(menu(page)).toHaveAttribute('data-estado', 'recolhido')
+    await logoNoQuadro(menu(page).getByRole('img', { name: nome }), 32, { largura, altura })
+    expect((await menu(page).boundingBox())!.width).toBeCloseTo(56, 0)
+    expect(await menu(page).evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true)
+    await clicavel(menu(page).getByRole('button', { name: 'Abrir menu' }))
+    await menu(page).getByRole('button', { name: 'Abrir menu' }).click()
+    await semRolagemHorizontal(page)
+  }
+  await page.goto('/ajustes')
+  await removerLogo(page)
+  await page.reload()
+  await expect(menu(page).locator('img')).toHaveCount(0)
+  await expect(menu(page).getByText(nome, { exact: true })).toBeVisible()
 })
 
 test('Importar a partir do Cardápio (CSV): aba padrão de Conteúdo, revisão, confirmar e os itens aparecem', async ({ page }) => {

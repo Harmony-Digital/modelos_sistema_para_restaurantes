@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { descartarImportacaoAction, estadoImportacaoAction, importarCsvAction } from '@/app/(painel)/conteudo/importar-actions'
 import { lerArquivosAction } from '@/app/(painel)/conteudo/importar-alvo-actions'
-import { Field, SubmitButton } from '@/components/form'
+import { classeArquivo, Field, SubmitButton } from '@/components/form'
 import { Confirmar } from '@/components/painel/confirmar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -54,8 +54,7 @@ function tipo(i: ImportacaoTela): string {
 const quando = (iso: string) =>
   new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
 
-export const classeArquivo =
-  'min-h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium'
+export { classeArquivo }
 
 /** Importações recentes (de um alvo), com o estado de cada uma. */
 export function HistoricoImportacoes(props: { alvo: AlvoImportacaoTela; importacoes: ImportacaoTela[]; vazio: string }) {

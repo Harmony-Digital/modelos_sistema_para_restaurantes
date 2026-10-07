@@ -32,7 +32,13 @@ export type ResumoTitular = {
   ultimaInteracao: string
   conversas: number
   mensagens: number
-  avisos: { data: string; pessoas: number; status: string; unidade: string }[]
+  /**
+   * Reservas com nome e horário (null nos avisos antigos); `contatoInformado`: há um telefone de contato informado
+   * (guardado cifrado) — o número em si nunca sai no resumo.
+   */
+  avisos: {
+    data: string; pessoas: number; status: string; unidade: string; nome: string | null; horario: string | null; contatoInformado: boolean
+  }[]
   eventos: { data: string; convidados: number; tipo: string; status: string; unidade: string }[]
   pedidos: { tipo: TipoDsr; status: StatusDsr; criadoEm: string }[]
 }

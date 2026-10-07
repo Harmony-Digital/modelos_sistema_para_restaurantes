@@ -13,6 +13,8 @@ export type ItemNav = {
   /** Sem `papeis`: todos os papéis veem. As páginas continuam conferindo o papel na DAL. */
   papeis?: readonly StaffRole[]
   contador?: 'aguardando'
+  /** Outros termos que levam a esta tela na busca rápida (Ctrl+K). */
+  palavras?: readonly string[]
 }
 export type GrupoNav = { id: string; rotulo: string | null; itens: ItemNav[] }
 
@@ -28,7 +30,7 @@ export const GRUPOS_NAV: readonly GrupoNav[] = [
     rotulo: 'Atendimento',
     itens: [
       { id: 'conversas', rotulo: 'Conversas', href: '/conversas', icone: MessagesSquare, contador: 'aguardando' },
-      { id: 'agenda', rotulo: 'Agenda', href: '/agenda', icone: CalendarDays },
+      { id: 'agenda', rotulo: 'Agenda', href: '/agenda', icone: CalendarDays, palavras: ['Reservas', 'Eventos'] },
       { id: 'simulador', rotulo: 'Simulador', acao: 'simulador', icone: FlaskConical, papeis: PAPEIS_SIMULADOR },
     ],
   },

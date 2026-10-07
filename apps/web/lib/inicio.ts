@@ -1,5 +1,6 @@
 import { rotuloTipoEvento } from '@atd/core/s3'
 import type { ImportacaoPainel, PedidoPainel, PrevisaoUnidade, StatusPedido } from '@atd/db'
+import { horaDaReserva } from './agenda.ts'
 
 export function percentual(respondidos: number, validos: number): string {
   if (validos <= 0) return '—'
@@ -28,13 +29,13 @@ export function pontosDoGrafico(valores: readonly number[], largura: number, alt
   return serie.map((v, i) => `${arred(i * passo)},${arred(faixa === 0 ? altura : altura - ((v - min) / faixa) * altura)}`).join(' ')
 }
 
-/** Agenda do dia, filtrada por unidade (formato da Agenda única, decisão 4 do plano). */
-export const hrefAvisosDoDia = (dia: string, unitId: string) => `/agenda?dia=${dia}&unidade=${encodeURIComponent(unitId)}`
+/** Reserva aberta na Agenda do dia dela. */
+export const hrefReserva = (dia: string, id: string) => `/agenda?dia=${dia}&reserva=${encodeURIComponent(id)}`
 /** Pedido de evento aberto ao lado na Agenda do dia dele. */
 export const hrefPedido = (p: { id: string; data: string }) => `/agenda?dia=${p.data}&pedido=${encodeURIComponent(p.id)}`
 
 export type LinhaAgendaHoje =
-  | { tipo: 'aviso'; id: string; hora: string | null; titulo: string; detalhe: string; unidade: string; simulado: boolean; href: string }
+  | { tipo: 'reserva'; id: string; hora: string | null; titulo: string; detalhe: string; unidade: string; simulado: boolean; href: string }
   | { tipo: 'evento'; id: string; hora: null; titulo: string; detalhe: string; unidade: string; simulado: boolean; href: string; status: StatusPedido }
 
 const STATUS_ATIVOS: readonly StatusPedido[] = ['novo', 'em_contato', 'confirmado']
@@ -50,16 +51,16 @@ function minutosDe(horario: string | null): number | null {
 }
 
 /**
- * Agenda de hoje do Início: avisos de presença ativos (por horário; sem horário depois) e, em seguida, pedidos de
+ * Agenda de hoje do Início: reservas confirmadas (pelo horário; sem horário depois) e, em seguida, pedidos de
  * evento do dia que ainda valem (novo, em contato, confirmado). Cada linha leva à Agenda já no item.
  */
 export function agendaDeHoje(previsao: readonly PrevisaoUnidade[], pedidos: readonly PedidoPainel[], hoje: string): LinhaAgendaHoje[] {
-  const avisos = previsao.flatMap((u) => u.avisos
-    .filter((a) => a.status === 'ativo')
+  const reservas = previsao.flatMap((u) => u.avisos
+    .filter((a) => a.status === 'confirmada')
     .map((a) => ({
-      tipo: 'aviso' as const, id: a.id, hora: a.horarioAprox, titulo: a.pessoas === 1 ? '1 pessoa' : `${a.pessoas} pessoas`,
-      detalhe: a.nome ?? 'Sem nome', unidade: u.unidade, simulado: a.simulado, href: hrefAvisosDoDia(hoje, u.unitId),
-      ordem: minutosDe(a.horarioAprox) ?? Number.MAX_SAFE_INTEGER,
+      tipo: 'reserva' as const, id: a.id, hora: horaDaReserva(a), titulo: a.pessoas === 1 ? '1 pessoa' : `${a.pessoas} pessoas`,
+      detalhe: a.nome ?? 'Sem nome', unidade: u.unidade, simulado: a.simulado, href: hrefReserva(hoje, a.id),
+      ordem: minutosDe(horaDaReserva(a)) ?? Number.MAX_SAFE_INTEGER,
     })))
     .sort((a, b) => a.ordem - b.ordem)
     .map(({ ordem: _ordem, ...linha }) => linha)
@@ -70,7 +71,7 @@ export function agendaDeHoje(previsao: readonly PrevisaoUnidade[], pedidos: read
       titulo: `${maiuscula(rotuloTipoEvento(p.tipo, p.tipoTexto))} · ${p.convidados} convidados`,
       detalhe: p.nome ?? 'Sem nome', unidade: p.unidade, simulado: p.simulado, href: hrefPedido(p),
     }))
-  return [...avisos, ...eventos]
+  return [...reservas, ...eventos]
 }
 
 /** A tela de leitura desiste depois de 10 min sem nenhuma mudança salva: daí em diante a importação está parada. */

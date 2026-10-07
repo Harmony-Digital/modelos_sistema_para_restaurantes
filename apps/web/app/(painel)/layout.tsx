@@ -1,5 +1,4 @@
-import { acessoInbox, contarAguardando, getSingleRestaurantId, schema } from '@atd/db'
-import { eq } from 'drizzle-orm'
+import { acessoInbox, contarAguardando } from '@atd/db'
 import { cookies } from 'next/headers'
 import { Avisos } from '@/components/conversas/avisos'
 import { FaixaAlertaGastos } from '@/components/painel/alerta-gastos'
@@ -12,6 +11,7 @@ import { MENU_COOKIE, parseMenu } from '@/lib/menu'
 import { PAPEIS_SIMULADOR } from '@/lib/navegacao'
 import { getDb } from '@/lib/server/db'
 import { resumoGastosDoRequest } from '@/lib/server/gastos'
+import { lerRestauranteDoPainel } from '@/lib/server/restaurante'
 import { parseTema, THEME_COOKIE } from '@/lib/theme'
 import {
   abrirSimuladorAction, buscarSimuladorAction, detalhesSimuladorAction, enviarSimuladorAction, novoClienteSimuladorAction,
@@ -31,12 +31,11 @@ const acoes = {
 export default async function PainelLayout({ children }: { children: React.ReactNode }) {
   const session = await requireStaff()
   const db = getDb()
-  const [r] = await db.select({ nome: schema.restaurants.nome, timezone: schema.restaurants.timezone }).from(schema.restaurants)
-    .where(eq(schema.restaurants.id, await getSingleRestaurantId(db)))
+  const r = await lerRestauranteDoPainel()
   // simulador gasta IA real: mesma regra do item Simulador do menu
   const simulador = !PAPEIS_SIMULADOR.includes(session.role)
     ? null
-    : <SimulatorLauncher restaurante={r?.nome ?? 'Restaurante'} timezone={r?.timezone ?? 'America/Sao_Paulo'} acoes={acoes} />
+    : <SimulatorLauncher restaurante={r.nome} timezone={r.timezone} acoes={acoes} />
   // contador de Aguardando (barra e título) e tópicos privados do Realtime que a pessoa pode escutar
   const [aguardando, acesso, gastos] = await Promise.all([
     contarAguardando(db, session.claims),
@@ -52,7 +51,8 @@ export default async function PainelLayout({ children }: { children: React.React
   return (
     <AppShell
       papel={session.role}
-      restaurante={r?.nome ?? 'Restaurante'}
+      restaurante={r.nome}
+      logo={r.logo}
       tema={parseTema(jar.get(THEME_COOKIE)?.value)}
       menu={parseMenu(jar.get(MENU_COOKIE)?.value)}
       floating={simulador}

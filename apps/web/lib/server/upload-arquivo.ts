@@ -1,6 +1,7 @@
 import 'server-only'
 import { createHash } from 'node:crypto'
 import { LIMITE_ARQUIVO_BYTES, MENSAGEM_LIMITE, validarArquivoCardapio } from '@/lib/arquivo-cardapio'
+import { LIMITE_LOGO_BYTES, ERRO_TAMANHO_LOGO, validarImagemLogo } from '@/lib/logo'
 import { createClient } from '@/lib/supabase/server'
 
 /**
@@ -29,19 +30,33 @@ export async function lerArquivoCardapio(arquivo: File): Promise<ArquivoRecebido
   return { ok: true, bytes, mime: v.mime, ext: v.ext, sha256: sha256(bytes) }
 }
 
+/** Logo do restaurante: PNG, JPG ou WebP até 1 MB, conferida pelos bytes (`validarImagemLogo`). */
+export async function lerImagemLogo(arquivo: File): Promise<ArquivoRecebido> {
+  if (arquivo.size > LIMITE_LOGO_BYTES) return { ok: false, erro: ERRO_TAMANHO_LOGO }
+  const bytes = new Uint8Array(await arquivo.arrayBuffer())
+  const v = validarImagemLogo(bytes)
+  if (!v.ok) return v
+  return { ok: true, bytes, mime: v.mime, ext: v.ext, sha256: sha256(bytes) }
+}
+
 const jaExiste = (e: { statusCode?: string | number; message?: string }) => String(e.statusCode) === '409' || /already exists/i.test(e.message ?? '')
 
-/** Grava em `<bucket>/<restaurant_id>/<sha256>.<ext>` e devolve esse caminho (o mesmo conteúdo já gravado é aceito). */
+/**
+ * Grava em `<bucket>/<restaurant_id>/<prefixo><sha256>.<ext>` e devolve esse caminho (o mesmo conteúdo já gravado é
+ * aceito). A logo usa o prefixo `logo-`.
+ */
 export async function subirArquivo(
-  bucket: 'cardapio' | 'importacoes',
+  bucket: 'cardapio' | 'importacoes' | 'marca',
   restaurantId: string,
   a: { bytes: Uint8Array; mime: string; ext: string; sha256: string },
-): Promise<{ ok: true; storagePath: string } | { ok: false }> {
-  const objeto = `${restaurantId}/${a.sha256}.${a.ext}`
+  prefixo = '',
+): Promise<{ ok: true; storagePath: string; criado: boolean } | { ok: false }> {
+  const objeto = `${restaurantId}/${prefixo}${a.sha256}.${a.ext}`
   const supabase = await createClient()
   const { error } = await supabase.storage.from(bucket).upload(objeto, a.bytes, { contentType: a.mime, upsert: false })
   if (error && !jaExiste(error as { statusCode?: string; message?: string })) return { ok: false }
-  return { ok: true, storagePath: `${bucket}/${objeto}` }
+  // `criado: false` = o mesmo conteúdo já estava gravado (pode estar em uso; quem chama não deve apagá-lo)
+  return { ok: true, storagePath: `${bucket}/${objeto}`, criado: !error }
 }
 
 /**
@@ -54,4 +69,15 @@ export async function copiarParaCardapio(storagePath: string): Promise<boolean> 
   const supabase = await createClient()
   const { error } = await supabase.storage.from('importacoes').copy(objeto, objeto, { destinationBucket: 'cardapio' })
   return !error || jaExiste(error as { statusCode?: string; message?: string })
+}
+
+/** Apaga um objeto do bucket `marca` com a sessão do usuário (policies de dono/gerente). Falha não lança: devolve false. */
+export async function apagarDaMarca(objeto: string): Promise<boolean> {
+  try {
+    const supabase = await createClient()
+    const { error } = await supabase.storage.from('marca').remove([objeto])
+    return !error
+  } catch {
+    return false
+  }
 }

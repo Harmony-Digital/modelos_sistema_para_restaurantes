@@ -1,6 +1,6 @@
 import pino from 'pino'
 import { redactPii } from '@atd/core'
-import { stripQueryParams, stripStackParams } from '@atd/core/scrub'
+import { stripQueryParams, stripRowValues, stripStackParams } from '@atd/core/scrub'
 
 const SENSITIVE = ['texto', 'text', 'body', 'telefone', 'phone', 'waId', 'to']
 const paths = SENSITIVE.flatMap((k) => [k, `*.${k}`, `*.*.${k}`])
@@ -20,8 +20,9 @@ export function serializeErr(err: unknown, depth = 0): unknown {
   delete s.params
   delete s.parameters
   delete s.query
-  for (const k of ['message', 'detail'] as const) {
-    if (typeof s[k] === 'string') s[k] = redactPii(stripQueryParams(s[k]))
+  // `detail`/`where` do Postgres trazem os valores da linha (o nome do cliente na reserva): só a forma fica
+  for (const k of ['message', 'detail', 'where'] as const) {
+    if (typeof s[k] === 'string') s[k] = redactPii(stripRowValues(stripQueryParams(s[k])))
   }
   // o stack do pino dobra as causas ("caused by"), então remove os params de todas as mensagens da cadeia
   if (typeof s.stack === 'string') s.stack = redactPii(stripStackParams(s.stack, chainMessages(err)))

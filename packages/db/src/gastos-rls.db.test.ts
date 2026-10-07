@@ -62,7 +62,8 @@ describe('RLS e grants da Etapa 08', () => {
     expect(r!.cotacaoUsdBrl).toBe('5.5000')
     const upd = (quem: string, v: string) => withUserContext(db, as(quem), (tx) =>
       tx.update(restaurants).set({ cotacaoUsdBrl: v }).where(eq(restaurants.id, a.restaurantId)).returning({ id: restaurants.id }))
-    expect(await upd(gerente, '6')).toHaveLength(0)
+    // o gerente atualiza o restaurante só nas colunas da marca (0046): as demais o gatilho recusa
+    await expect(upd(gerente, '6')).rejects.toMatchObject({ cause: { code: '42501' } })
     expect(await upd(dono, '5.4321')).toHaveLength(1)
     await expect(upd(dono, '51')).rejects.toMatchObject({ cause: { constraint_name: 'restaurants_cotacao_ck' } })
   })

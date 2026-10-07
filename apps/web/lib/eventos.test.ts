@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dataDoEvento, haQuanto, linksTelefone, membrosDaUnidade, statusPossiveis } from './eventos'
+import { dataDoEvento, haQuanto, linksTelefone, membrosDaUnidade, statusPossiveis, telefoneLegivel } from './eventos'
 
 describe('eventos: transições', () => {
   it('statusPossiveis: atual mais as transições válidas', () => {
@@ -24,6 +24,9 @@ describe('eventos: apresentação', () => {
   })
   it('links do telefone só com dígitos', () => {
     expect(linksTelefone('+55 (61) 99999-0000')).toEqual({ tel: 'tel:+5561999990000', wa: 'https://wa.me/5561999990000' })
+    expect(telefoneLegivel('5561999998888')).toBe('+55 (61) 99999-8888')
+    expect(telefoneLegivel('+556133334444')).toBe('+55 (61) 3333-4444')
+    expect(telefoneLegivel('14155550100')).toBe('+14155550100')
   })
 })
 

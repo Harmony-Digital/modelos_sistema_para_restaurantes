@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { avisoSchema } from './avisos'
+import { reservaSchema, statusReservaSchema } from './avisos'
 
 const HOJE = '2026-10-05'
 const U = '00000000-0000-4000-8000-000000000001'
-const base = { unitId: U, data: '2026-10-05', pessoas: '4', horario: '', nome: '' }
+const base = { unitId: U, data: '2026-10-05', pessoas: '4', horario: '20:00', nome: 'Ana', contato: '' }
 const msgs = (r: { success: boolean; error?: { issues: { path: PropertyKey[]; message: string }[] } }) =>
   Object.fromEntries((r.error?.issues ?? []).map((i) => [i.path.join('.'), i.message]))
-const s = avisoSchema(HOJE)
+const s = reservaSchema(HOJE)
 
-describe('avisoSchema', () => {
+describe('reservaSchema', () => {
   it('aceita hoje e hoje+30; recusa ontem e hoje+31', () => {
     expect(s.safeParse(base).success).toBe(true)
     expect(s.safeParse({ ...base, data: '2026-11-04' }).success).toBe(true)
@@ -26,12 +26,27 @@ describe('avisoSchema', () => {
     expect(s.parse({ ...base, pessoas: '60' }).pessoas).toBe(60)
     expect(s.parse({ ...base, pessoas: 1 }).pessoas).toBe(1)
   })
-  it('horário vazio ou HH:mm; nome até 60; unidade uuid', () => {
-    expect(s.parse(base).horario).toBe('')
-    expect(s.safeParse({ ...base, horario: '20:30' }).success).toBe(true)
+  it('nome e horário são obrigatórios; horário em HH:mm; nome até 60; unidade uuid', () => {
+    expect(msgs(s.safeParse({ ...base, nome: '  ' }))).toEqual({ nome: 'Informe o nome da reserva.' })
+    expect(msgs(s.safeParse({ ...base, horario: '' }))).toEqual({ horario: 'Informe o horário, como 20:00.' })
     expect(msgs(s.safeParse({ ...base, horario: '25:00' }))).toEqual({ horario: 'Use o formato 24h HH:mm, como 20:00.' })
     expect(msgs(s.safeParse({ ...base, horario: '8h' }))).toEqual({ horario: 'Use o formato 24h HH:mm, como 20:00.' })
     expect(msgs(s.safeParse({ ...base, nome: 'x'.repeat(61) }))).toEqual({ nome: 'Use no máximo 60 caracteres.' })
     expect(msgs(s.safeParse({ ...base, unitId: '' }))).toEqual({ unitId: 'Escolha uma unidade.' })
+    expect(s.parse({ ...base, nome: ' Ana ' }).nome).toBe('Ana')
+  })
+  it('contato opcional: vazio vale; telefone com DDD em vários formatos vira E.164; texto ou número inválido não', () => {
+    expect(s.parse(base).contato).toBeNull()
+    for (const t of ['(61) 9 9999-8888', '+55 61 99999-8888', '61999998888']) expect(s.parse({ ...base, contato: t }).contato).toBe('+5561999998888')
+    for (const t of ['não sei', '9999-8888', '(00) 99999-8888']) {
+      expect(msgs(s.safeParse({ ...base, contato: t }))).toEqual({ contato: 'Informe o telefone com DDD, como (61) 99999-8888.' })
+    }
+  })
+})
+
+describe('statusReservaSchema', () => {
+  it('só confirmada, cancelada e não veio', () => {
+    for (const v of ['confirmada', 'cancelada', 'nao_veio']) expect(statusReservaSchema.safeParse(v).success).toBe(true)
+    for (const v of ['ativo', 'cancelado', '', null]) expect(statusReservaSchema.safeParse(v).success).toBe(false)
   })
 })

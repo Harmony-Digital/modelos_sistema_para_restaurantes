@@ -68,7 +68,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > c
     },
     "unitId": null,
   },
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": null,
   "validos": 0,
@@ -103,7 +103,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > c
     },
     "unitId": "u-asa-sul",
   },
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "Para qual data é o evento?",
   "validos": 0,
@@ -138,7 +138,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > c
     },
     "unitId": "u-asa-sul",
   },
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "Para quantos convidados?",
   "validos": 0,
@@ -173,7 +173,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > c
     },
     "unitId": "u-asa-sul",
   },
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "Qual o tipo do evento? (aniversário, casamento, corporativo, confraternização…)",
   "validos": 0,
@@ -208,7 +208,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > c
     },
     "unitId": "u-asa-sul",
   },
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "Para qual data é o evento?",
   "validos": 0,
@@ -243,7 +243,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > c
     },
     "unitId": "u-asa-sul",
   },
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "Consigo registrar eventos de 1 a 1000 convidados. Para quantos convidados?",
   "validos": 0,
@@ -278,7 +278,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > c
     },
     "unitId": "u-asa-sul",
   },
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "Consigo registrar eventos de 1 a 1000 convidados. Para quantos convidados?",
   "validos": 0,
@@ -313,7 +313,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > c
     },
     "unitId": "u-asa-sul",
   },
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "Para qual data é o evento?",
   "validos": 0,
@@ -342,7 +342,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > c
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Norte, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
   "validos": 1,
@@ -371,7 +371,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > c
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
   "validos": 1,
@@ -446,7 +446,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > c
     },
     "unitId": null,
   },
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": null,
   "validos": 0,
@@ -475,7 +475,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > c
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Norte, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
   "validos": 1,
@@ -493,7 +493,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > c
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "Ainda não tenho essa informação; vou verificar com a equipe.",
   "validos": 1,
@@ -522,7 +522,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > c
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
   "validos": 1,
@@ -557,7 +557,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > c
     },
     "unitId": "u-asa-sul",
   },
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "Qual o tipo do evento? (aniversário, casamento, corporativo, confraternização…)",
   "validos": 0,
@@ -592,7 +592,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > c
     },
     "unitId": "u-asa-sul",
   },
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "Qual o tipo do evento? (aniversário, casamento, corporativo, confraternização…)",
   "validos": 0,
@@ -617,7 +617,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > m
   ],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 2,
   "texto": "A unidade Asa Norte fica em SCLN 302 Bloco B, Asa Norte, Brasília/DF.
 
@@ -630,16 +630,7 @@ Espaços para eventos:
 
 exports[`evals S3 — camada 2 (resolução + composição, determinística) > m02: vou hoje na asa norte em 2 e quero festa 1`] = `
 {
-  "acoesS2": [
-    {
-      "atualiza": false,
-      "data": "2026-10-05",
-      "horarioAprox": null,
-      "pessoas": 2,
-      "tipo": "registrar",
-      "unitId": "u-asa-norte",
-    },
-  ],
+  "acoesS2": [],
   "acoesS3": [
     {
       "convidados": 40,
@@ -659,12 +650,30 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > m
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
-  "respondidos": 2,
-  "texto": "Anotado: Asa Norte, hoje, 2 pessoas. Se mudar de ideia, é só me avisar.
+  "perguntarReserva": {
+    "campo": "horario",
+    "item": {
+      "consulta": null,
+      "convidados": null,
+      "data": "2026-10-05",
+      "espaco": null,
+      "horario": null,
+      "pessoas": 2,
+      "servico": "aviso_presenca",
+      "tag": null,
+      "tema": null,
+      "tipo": "registrar",
+      "tipoEvento": null,
+      "unidade": "Asa Norte",
+    },
+    "tentativasNumero": 0,
+    "unitId": "u-asa-norte",
+  },
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.
 
-Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
-  "validos": 2,
+Para que horas é a reserva?",
+  "validos": 1,
 }
 `;
 
@@ -696,7 +705,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > m
     },
     "unitId": "u-asa-sul",
   },
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Sábado (10/10), a unidade Asa Sul abre das 11h30 às 15h e das 18h às 2h.
 
@@ -775,7 +784,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > m
     "unitId": "u-asa-sul",
   },
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": null,
   "validos": 0,
@@ -800,7 +809,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > m
   ],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "A unidade Asa Sul fica em SCLS 404 Bloco C, Asa Sul, Brasília/DF.
 
@@ -831,7 +840,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > m
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Sobre o cardápio, ainda estou aprendendo e em breve vou conseguir responder por aqui.
 
@@ -862,14 +871,14 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > m
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
   "validos": 1,
 }
 `;
 
-exports[`evals S3 — camada 2 (resolução + composição, determinística) > m08: cancela o evento e o aviso 1`] = `
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > m08: cancela o evento e a reserva 1`] = `
 {
   "acoesS2": [],
   "acoesS3": [
@@ -889,16 +898,16 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > m
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
-  "texto": "Não encontrei nenhum aviso ativo seu.
+  "texto": "Não encontrei nenhuma reserva sua.
 
 Pronto, cancelei seu pedido de evento: Asa Sul, sábado (10/10).",
   "validos": 2,
 }
 `;
 
-exports[`evals S3 — camada 2 (resolução + composição, determinística) > m09: aviso sem pessoas e festa sem data: pergunta de pessoas vem antes 1`] = `
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > m09: reserva sem pessoas e festa sem data: pergunta de pessoas vem antes 1`] = `
 {
   "acoesS2": [],
   "acoesS3": [],
@@ -928,7 +937,8 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > m
     "unitId": "u-asa-sul",
   },
   "perguntarEvento": null,
-  "perguntarPessoas": {
+  "perguntarReserva": {
+    "campo": "pessoas",
     "item": {
       "consulta": null,
       "convidados": null,
@@ -943,6 +953,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > m
       "tipoEvento": null,
       "unidade": "Asa Norte",
     },
+    "tentativasNumero": 0,
     "unitId": "u-asa-norte",
   },
   "respondidos": 0,
@@ -973,7 +984,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.
 
@@ -1005,7 +1016,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Recebemos seu pedido de casamento para 100 convidados na unidade Asa Norte, sábado (17/10). Nossa equipe vai entrar em contato para confirmar.
 
@@ -1037,7 +1048,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10), no espaço Salão Principal. Nossa equipe vai entrar em contato para confirmar.",
   "validos": 1,
@@ -1066,7 +1077,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
   "validos": 1,
@@ -1101,7 +1112,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
     },
     "unitId": "u-asa-sul",
   },
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "O espaço Varanda recebe de 10 a 30 pessoas. Para 40 pessoas, sugiro: Salão Principal. Qual espaço prefere? Se tanto faz, diga "pode ser qualquer um".",
   "validos": 0,
@@ -1136,7 +1147,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
     },
     "unitId": "u-asa-sul",
   },
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "O espaço Varanda recebe de 10 a 30 pessoas. Qual espaço prefere? Se tanto faz, diga "pode ser qualquer um".",
   "validos": 0,
@@ -1165,7 +1176,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.
 
@@ -1197,7 +1208,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.
 
@@ -1229,7 +1240,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Recebemos seu pedido de evento para 1 convidado na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
   "validos": 1,
@@ -1258,7 +1269,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Recebemos seu pedido de evento para 50 convidados na unidade Asa Norte, sábado (17/10). Nossa equipe vai entrar em contato para confirmar.
 
@@ -1290,7 +1301,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Recebemos seu pedido de aniversário para 15 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.
 
@@ -1323,7 +1334,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Recebemos seu pedido de confraternização para 60 convidados na unidade Lago Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
   "validos": 1,
@@ -1352,7 +1363,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, segunda-feira (19/10). Nossa equipe vai entrar em contato para confirmar.",
   "validos": 1,
@@ -1381,7 +1392,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Recebemos seu pedido de aniversário para 30 convidados na unidade Águas Claras, sexta-feira (09/10). Nossa equipe vai entrar em contato para confirmar.
 
@@ -1419,7 +1430,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
     },
     "unitId": "u-asa-sul",
   },
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "Consigo registrar pedidos de evento de amanhã até 05/10/2027. Qual data você prefere?",
   "validos": 0,
@@ -1448,7 +1459,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, amanhã. Nossa equipe vai entrar em contato para confirmar.",
   "validos": 1,
@@ -1477,7 +1488,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Norte, sexta-feira (25/12, Natal). Nossa equipe vai entrar em contato para confirmar.",
   "validos": 1,
@@ -1506,7 +1517,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
   "validos": 1,
@@ -1545,7 +1556,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 2,
   "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.
 
@@ -1582,7 +1593,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
     },
     "unitId": "u-asa-sul",
   },
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "Consigo registrar pedidos de evento de amanhã até 05/10/2027. Qual data você prefere?",
   "validos": 0,
@@ -1611,7 +1622,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Recebemos seu pedido de evento para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.
 
@@ -1632,7 +1643,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Já temos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
   "validos": 1,
@@ -1650,7 +1661,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > p
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Já temos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
   "validos": 1,
@@ -1668,7 +1679,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > s
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Espaços para eventos:
 • Sala Privativa (Asa Sul) — 8 a 20 pessoas.
@@ -1729,7 +1740,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > s
     },
   ],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": null,
   "validos": 0,
@@ -1747,7 +1758,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > s
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Espaços para eventos:
 • Sala Privativa (Asa Sul) — 8 a 20 pessoas.
@@ -1770,7 +1781,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > s
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Espaços para eventos:
 • Salão Jardim (Asa Norte) — 40 a 120 pessoas.",
@@ -1789,7 +1800,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > s
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Espaços para eventos:
 • Mezanino (Asa Norte) — 15 a 40 pessoas. Área no andar de cima.
@@ -1814,7 +1825,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > s
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "Ainda não tenho essa informação; vou verificar com a equipe.",
   "validos": 1,
@@ -1832,7 +1843,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > s
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Espaços para eventos:
 • Adega (Lago Sul) — 6 a 12 pessoas. Taxa de rolha.
@@ -1852,7 +1863,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > s
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Espaços para eventos:
 • Sala Privativa (Asa Sul) — 8 a 20 pessoas.
@@ -1872,7 +1883,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > x
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "Não encontrei pedido de evento seu em andamento.",
   "validos": 1,
@@ -1899,7 +1910,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > x
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Pronto, cancelei seu pedido de evento: Asa Sul, sábado (10/10).",
   "validos": 1,
@@ -1917,7 +1928,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > x
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "Você tem estes pedidos:
 • Asa Sul — sábado (10/10), 40 convidados, aniversário
@@ -1947,7 +1958,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > x
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Pronto, cancelei seu pedido de evento: Asa Norte, sábado (17/10).",
   "validos": 1,
@@ -1974,7 +1985,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > x
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Pronto, cancelei seu pedido de evento: Asa Norte, sábado (17/10).",
   "validos": 1,
@@ -1992,7 +2003,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > x
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "Você tem estes pedidos:
 • Asa Sul — sábado (10/10), 40 convidados, aniversário
@@ -2013,7 +2024,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > x
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "Esse evento já foi confirmado pela equipe. Vou chamar um atendente para te ajudar.",
   "validos": 1,
@@ -2031,7 +2042,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > x
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "Não encontrei pedido de evento seu em andamento.",
   "validos": 1,
@@ -2049,7 +2060,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > x
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "Você tem estes pedidos:
 • Asa Sul — sábado (10/10), 40 convidados, evento
@@ -2079,7 +2090,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > x
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Pronto, cancelei seu pedido de evento: Asa Sul, sábado (10/10).",
   "validos": 1,
@@ -2097,7 +2108,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > x
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 0,
   "texto": "Esse evento já foi confirmado pela equipe. Vou chamar um atendente para te ajudar.",
   "validos": 1,
@@ -2124,7 +2135,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > x
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarPessoas": null,
+  "perguntarReserva": null,
   "respondidos": 1,
   "texto": "Pronto, cancelei seu pedido de evento: Asa Norte, sábado (17/10).",
   "validos": 1,

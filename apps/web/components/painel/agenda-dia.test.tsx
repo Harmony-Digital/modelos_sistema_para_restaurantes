@@ -6,9 +6,10 @@ const push = vi.fn()
 const replace = vi.fn()
 const refresh = vi.fn()
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace, refresh }), usePathname: () => '/agenda' }))
-const criarAvisoAction = vi.fn()
-const cancelarAvisoAction = vi.fn()
-vi.mock('@/app/(painel)/agenda/actions', () => ({ criarAvisoAction, cancelarAvisoAction }))
+const criarReservaAction = vi.fn()
+const mudarStatusReservaAction = vi.fn()
+const revelarContatoReservaAction = vi.fn()
+vi.mock('@/app/(painel)/agenda/actions', () => ({ criarReservaAction, mudarStatusReservaAction, revelarContatoReservaAction }))
 const atualizarPedidoAction = vi.fn()
 const revelarTelefoneAction = vi.fn()
 vi.mock('@/app/(painel)/agenda/eventos-actions', () => ({ atualizarPedidoAction, revelarTelefoneAction }))
@@ -22,21 +23,26 @@ const U2 = '00000000-0000-4000-8000-000000000002'
 const M1 = '00000000-0000-4000-8000-0000000000b1'
 const P1 = '00000000-0000-4000-8000-0000000000aa'
 const aviso = (over = {}) => ({
-  id: crypto.randomUUID(), unitId: U1, nome: 'Ana', pessoas: 4, horarioAprox: '20:00' as string | null,
-  origem: 'ia' as const, status: 'ativo' as 'ativo' | 'cancelado', simulado: false, ...over,
+  id: crypto.randomUUID(), unitId: U1, nome: 'Ana', pessoas: 4, horarioAprox: '20:00' as string | null, horario: null as string | null,
+  origem: 'ia' as 'ia' | 'painel', status: 'confirmada' as 'confirmada' | 'cancelada' | 'nao_veio', simulado: false, temContato: true, ...over,
 })
 const pedido = (over = {}) => ({
   id: P1, unitId: U1, unidade: 'Asa Sul', spaceId: null, espaco: 'Salão Jardim' as string | null, nome: 'Caio' as string | null, data: '2026-10-05',
   convidados: 30, tipo: 'aniversario' as const, tipoTexto: null, observacoes: 'Sem glúten', status: 'novo' as 'novo' | 'em_contato' | 'confirmado' | 'recusado' | 'cancelado',
   responsavelId: null, responsavel: null, notasInternas: null, temTelefone: true, simulado: false, criadoEm: new Date('2026-10-05T12:00:00Z'), ...over,
 })
+const lot = { capacidade: null as number | null, ocupadas: 0, ocupadasSimulacao: 0 }
+const R1 = '00000000-0000-4000-8000-0000000000c1'
 const unidades = [
-  { unitId: U1, unidade: 'Asa Sul', totalPessoas: 6, avisos: [aviso({ horarioAprox: '20:00' }), aviso({ nome: null, pessoas: 2, horarioAprox: '12:30', origem: 'painel' })] },
-  { unitId: U2, unidade: 'Lago Sul', totalPessoas: 0, avisos: [] },
+  {
+    unitId: U1, unidade: 'Asa Sul', totalPessoas: 6, capacidade: 150 as number | null, ocupadas: 147, ocupadasSimulacao: 0,
+    avisos: [aviso({ id: R1, horarioAprox: '20:00' }), aviso({ nome: null, pessoas: 2, horarioAprox: '12:30', origem: 'painel' })],
+  },
+  { unitId: U2, unidade: 'Lago Sul', totalPessoas: 0, ...lot, avisos: [] },
 ]
 const base = {
   dia: '2026-10-05', hoje: '2026-10-05', unidades, pedidos: [pedido()], unidade: null as string | null, cancelados: false,
-  pedidoId: null as string | null, membros: [{ id: M1, nome: 'Bia', todas: true, unidades: [] }], podeEditar: true,
+  pedidoId: null as string | null, reservaId: null as string | null, membros: [{ id: M1, nome: 'Bia', todas: true, unidades: [] }], podeEditar: true,
   agora: new Date('2026-10-05T15:00:00Z'), ver: 'dia' as 'dia' | 'pedidos', status: ['novo', 'em_contato'] as StatusPedidoTeste[], novos: 0,
 }
 type StatusPedidoTeste = 'novo' | 'em_contato' | 'confirmado' | 'recusado' | 'cancelado'
@@ -74,11 +80,12 @@ describe('AgendaDia: linha do tempo', () => {
     expect(l[2]).toHaveTextContent('Ana')
     expect(l[2]).toHaveTextContent('IA')
     expect(screen.getByText('Hoje · Segunda-feira, 05/10/2026')).toBeInTheDocument()
-    expect(screen.getByTestId('resumo-do-dia')).toHaveTextContent('6 pessoas · 2 avisos · 1 evento')
+    expect(screen.getByTestId('resumo-do-dia')).toHaveTextContent('6 pessoas · 2 reservas · 1 evento')
+    expect(l[2]).toHaveTextContent('Confirmada')
   })
 
   it('horário livre do aviso aparece inteiro, depois dos horários "HH:MM"', () => {
-    const us = [{ unitId: U1, unidade: 'Asa Sul', totalPessoas: 6, avisos: [aviso({ nome: 'Noite', horarioAprox: 'no fim da tarde' }), aviso({ horarioAprox: '20:00' })] }]
+    const us = [{ unitId: U1, unidade: 'Asa Sul', totalPessoas: 6, ...lot, avisos: [aviso({ nome: 'Noite', horarioAprox: 'no fim da tarde' }), aviso({ horarioAprox: '20:00' })] }]
     render(<AgendaDia {...base} unidades={us} pedidos={[]} />)
     const l = linhas()
     expect(l[0]).toHaveTextContent('20:00')
@@ -219,48 +226,116 @@ describe('AgendaDia: todos os pedidos', () => {
   })
 })
 
-describe('AgendaDia: avisos', () => {
-  it('atendente não vê Novo aviso nem Cancelar', () => {
+describe('AgendaDia: reservas', () => {
+  it('lotação do dia por unidade no topo: "147/150" ou "sem limite"', () => {
+    render(<AgendaDia {...base} />)
+    const lotacao = screen.getByRole('list', { name: 'Lotação do dia' })
+    const itens = within(lotacao).getAllByRole('listitem')
+    expect(itens[0]).toHaveTextContent('Asa Sul')
+    expect(itens[0]).toHaveTextContent('147/150')
+    expect(itens[1]).toHaveTextContent('Lago Sul')
+    expect(itens[1]).toHaveTextContent('sem limite')
+  })
+
+  it('lotação: só a unidade do filtro; unidade cheia ganha a etiqueta Lotada; simulação aparece à parte', () => {
+    const us = [{ ...unidades[0]!, ocupadas: 150, ocupadasSimulacao: 6 }, unidades[1]!]
+    render(<AgendaDia {...base} unidades={us} unidade={U1} />)
+    const itens = within(screen.getByRole('list', { name: 'Lotação do dia' })).getAllByRole('listitem')
+    expect(itens).toHaveLength(1)
+    expect(itens[0]).toHaveTextContent('150/150')
+    expect(within(itens[0]!).getByText('Lotada')).toHaveAttribute('data-slot', 'etiqueta-status')
+    expect(itens[0]).toHaveTextContent('Simulação: 6/150')
+  })
+
+  it('linha da reserva: horário, nome, pessoas e a etiqueta da situação; abre o detalhe pela URL', () => {
+    const us = [{ ...unidades[0]!, avisos: [
+      aviso({ id: R1, nome: 'Bia', horario: '19:00:00', horarioAprox: null }),
+      aviso({ nome: 'Caio', status: 'cancelada' }),
+      aviso({ nome: 'Duda', status: 'nao_veio', horarioAprox: '21:00' }),
+    ] }]
+    render(<AgendaDia {...base} cancelados unidades={us} pedidos={[]} />)
+    const l = linhas()
+    expect(l[0]).toHaveTextContent('19:00')
+    expect(l[0]).toHaveTextContent('Bia')
+    expect(l[0]).toHaveTextContent('Reserva · 4 pessoas')
+    expect(within(l[0]!).getByText('Confirmada')).toHaveAttribute('data-slot', 'etiqueta-status')
+    expect(within(l[1]!).getByText('Cancelada')).toHaveAttribute('data-slot', 'etiqueta-status')
+    expect(within(l[2]!).getByText('Não veio')).toHaveAttribute('data-slot', 'etiqueta-status')
+    expect(within(l[0]!).getByRole('link')).toHaveAttribute('href', `/agenda?cancelados=1&reserva=${R1}`)
+  })
+
+  it('atendente não vê Nova reserva', () => {
     render(<AgendaDia {...base} podeEditar={false} />)
-    expect(screen.queryByRole('button', { name: 'Novo aviso' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^Cancelar aviso/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Nova reserva' })).not.toBeInTheDocument()
   })
 
-  it('dia passado ou além de 30 dias: sem Novo aviso nem Cancelar', () => {
+  it('dia passado ou além de 30 dias: sem Nova reserva', () => {
     const { rerender } = render(<AgendaDia {...base} dia="2026-10-04" />)
-    expect(screen.getByText('Dia passado: só consulta.')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Novo aviso' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^Cancelar aviso/ })).not.toBeInTheDocument()
+    expect(screen.getByText('Dia passado: só consulta (e marcar quem não veio).')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Nova reserva' })).not.toBeInTheDocument()
     rerender(<AgendaDia {...base} dia="2026-11-20" />)
-    expect(screen.queryByRole('button', { name: 'Novo aviso' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Nova reserva' })).not.toBeInTheDocument()
+    // atendente não marca quem não veio: o aviso não promete isso
+    rerender(<AgendaDia {...base} dia="2026-10-04" podeEditar={false} />)
+    expect(screen.getByText('Dia passado: só consulta.')).toBeInTheDocument()
+    expect(screen.queryByText(/marcar quem não veio/)).not.toBeInTheDocument()
   })
 
-  it('Novo aviso abre o formulário com o dia escolhido', async () => {
+  it('Nova reserva abre o formulário com o dia escolhido', async () => {
     const user = userEvent.setup()
     render(<AgendaDia {...base} dia="2026-10-06" unidade={U1} />)
-    await user.click(screen.getByRole('button', { name: 'Novo aviso' }))
-    const dialogo = await screen.findByRole('dialog', { name: 'Novo aviso' })
-    expect(within(dialogo).getByRole('button', { name: 'Anotar aviso' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Nova reserva' }))
+    const dialogo = await screen.findByRole('dialog', { name: 'Nova reserva' })
+    expect(within(dialogo).getByRole('button', { name: 'Salvar reserva' })).toBeInTheDocument()
+    expect(within(dialogo).getByLabelText(/^Dia/)).toHaveValue('2026-10-06')
   })
 
-  it('cancelar pede confirmação e só então chama a action', async () => {
-    const user = userEvent.setup()
-    cancelarAvisoAction.mockResolvedValue({ ok: true, data: null })
-    render(<AgendaDia {...base} />)
-    await user.click(screen.getByRole('button', { name: 'Cancelar aviso de Ana, 4 pessoas' }))
-    expect(cancelarAvisoAction).not.toHaveBeenCalled()
-    const dialogo = await screen.findByRole('dialog')
-    await user.click(within(dialogo).getByRole('button', { name: 'Cancelar aviso' }))
-    await waitFor(() => expect(cancelarAvisoAction).toHaveBeenCalledWith(unidades[0]!.avisos[0]!.id))
-    expect(cancelarAvisoAction).toHaveBeenCalledTimes(1)
-  })
-
-  it('cancelados: sem botão, com selo, e link para ocultar', () => {
-    const cancelado = aviso({ status: 'cancelado', nome: 'Bia' })
-    render(<AgendaDia {...base} cancelados unidades={[{ ...unidades[0]!, avisos: [aviso(), cancelado] }]} />)
-    expect(screen.getAllByText('Cancelado').length).toBeGreaterThan(0)
-    expect(screen.queryByRole('button', { name: /Cancelar aviso de Bia/ })).not.toBeInTheDocument()
+  it('cancelados ficam ocultos até pedir; link para mostrar e ocultar', () => {
+    render(<AgendaDia {...base} cancelados unidades={[{ ...unidades[0]!, avisos: [aviso(), aviso({ status: 'cancelada', nome: 'Bia' })] }]} />)
     expect(screen.getByRole('link', { name: 'Ocultar cancelados' })).toHaveAttribute('href', '/agenda')
+  })
+
+  it('no celular a reserva abre em folha; fechar tira a reserva da URL', async () => {
+    render(<AgendaDia {...base} unidade={U1} reservaId={R1} />)
+    const dialogo = await screen.findByRole('dialog', { name: 'Reserva' })
+    expect(dialogo).toHaveTextContent('Ana')
+    expect(within(dialogo).getByRole('group', { name: 'Mudar a situação' })).toBeInTheDocument()
+    await userEvent.setup().keyboard('{Escape}')
+    expect(push).toHaveBeenCalledWith(`/agenda?unidade=${U1}`, { scroll: false })
+  })
+
+  it('no desktop a reserva abre ao lado, marca a linha (cartão + barra, nunca accent); cancelar com cancelados ocultos fecha', async () => {
+    comoDesktop()
+    const user = userEvent.setup()
+    mudarStatusReservaAction.mockResolvedValue({ ok: true, data: null })
+    render(<AgendaDia {...base} reservaId={R1} />)
+    const lado = await screen.findByRole('complementary', { name: 'Reserva' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    const linha = within(screen.getByRole('list', { name: 'Linha do tempo do dia' })).getByRole('link', { name: /Ana/ })
+    expect(linha).toHaveAttribute('aria-current', 'true')
+    expect(linha.className).toContain('bg-card')
+    expect(linha.className).not.toMatch(/(^|\s)bg-accent/)
+    expect(within(lado).getByRole('link', { name: 'Fechar a reserva' })).toHaveAttribute('href', '/agenda')
+    await user.click(within(lado).getByRole('button', { name: 'Cancelada' }))
+    await waitFor(() => expect(mudarStatusReservaAction).toHaveBeenCalledWith(R1, 'cancelada'))
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/agenda', { scroll: false }))
+  })
+
+  it('com "mostrar cancelados", mudar a situação mantém a reserva aberta e recarrega', async () => {
+    comoDesktop()
+    const user = userEvent.setup()
+    mudarStatusReservaAction.mockResolvedValue({ ok: true, data: null })
+    render(<AgendaDia {...base} cancelados reservaId={R1} />)
+    const lado = await screen.findByRole('complementary', { name: 'Reserva' })
+    await user.click(within(lado).getByRole('button', { name: 'Não veio' }))
+    await waitFor(() => expect(refresh).toHaveBeenCalled())
+    expect(push).not.toHaveBeenCalled()
+  })
+
+  it('reserva da URL que não está no dia não abre nada', async () => {
+    render(<AgendaDia {...base} reservaId="00000000-0000-4000-8000-0000000000ff" />)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })
 

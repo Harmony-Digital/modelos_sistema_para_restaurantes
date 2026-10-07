@@ -11,11 +11,12 @@ export function normalizarBusca(t: string): string {
   return t.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim()
 }
 
-/** Telas do menu que o papel vê, filtradas pelo termo (no rótulo da tela ou do grupo). */
+/** Telas do menu que o papel vê, filtradas pelo termo (no rótulo da tela, nas palavras dela ou no rótulo do grupo). */
 export function telasDaBusca(papel: StaffRole, termo: string): ItemNav[] {
   const t = normalizarBusca(termo)
+  const acha = (texto: string) => normalizarBusca(texto).includes(t)
   return gruposDoMenu(papel).flatMap((g) =>
-    g.itens.filter((i) => !t || normalizarBusca(i.rotulo).includes(t) || normalizarBusca(g.rotulo ?? '').includes(t)))
+    g.itens.filter((i) => !t || acha(i.rotulo) || (i.palavras ?? []).some(acha) || acha(g.rotulo ?? '')))
 }
 
 /** Onde cada resultado aparece no painel. */

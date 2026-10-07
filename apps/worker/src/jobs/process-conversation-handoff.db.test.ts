@@ -9,6 +9,7 @@ import type { SendResult } from '@atd/whatsapp'
 import { createLogger } from '../logger.ts'
 import { comMidiaProibida, storageProibido } from './midia-fake.ts'
 import { processConversation, type ProcessDeps } from './process-conversation.ts'
+import { comoV7 } from './triagem-falsa.ts'
 
 const { db, sql } = getTestDb()
 beforeEach(() => resetDb(sql))
@@ -71,7 +72,7 @@ function fakeLlm(script: Passo[]) {
       const passo = script[Math.min(calls.length - 1, script.length - 1)]!
       if (passo === 'erro') return { ok: false as const, error: 'upstream', retryable: true, status: 502, model: null, usage: null, latencyMs: 1 }
       return {
-        ok: true as const, data: p.parse(passo), model: 'fake/m',
+        ok: true as const, data: p.parse(comoV7(passo)), model: 'fake/m',
         usage: { tokensIn: 100, tokensOut: 20, tokensCache: 0, costUsd: '0.000200' }, latencyMs: 10,
       }
     },
@@ -226,7 +227,7 @@ describe('handoff por falhas seguidas', () => {
     await receive(restaurantId, 'boa noite, gostaria de uma informação')
     await processConversation(deps(llm, wa), conv)
     expect(await conversa(conv)).toMatchObject({ estado: 'ia', falhasConsecutivas: 1, handoffMotivo: null })
-    expect(wa.textos.at(-1)).toBe('Posso ajudar com horários e unidades, aviso de presença, eventos e cardápio. É só me dizer do que precisa. 😊')
+    expect(wa.textos.at(-1)).toBe('Posso ajudar com horários e unidades, reservas, eventos e cardápio. É só me dizer do que precisa. 😊')
     expect((await saidas()).at(-1)).toMatchObject({ replyKey: 'cortesia' })
   })
 
@@ -348,13 +349,13 @@ describe('unidade de contexto da conversa', () => {
     expect(await conversa(conv)).toMatchObject({ estado: 'aguardando_humano', unidadeContextoId: null })
   })
 
-  it('aviso de presença à espera de "quantas pessoas" grava a unidade do pendente', async () => {
+  it('reserva à espera de "quantas pessoas" grava a unidade do pendente', async () => {
     const { restaurantId, ids } = await setup({ unidades: ['Asa Norte'] })
     const conv = await receive(restaurantId, 'vou hoje na asa norte')
     const aviso = { ...h('registrar', { unidade: 'asa norte', data: 'hoje' }), servico: 'aviso_presenca' } as Item
     await processConversation(deps(fakeLlm([triagem([aviso])]).llm, fakeWa()), conv)
     const c = await conversa(conv)
-    expect(c.pendente).toMatchObject({ tipo: 'pessoas' })
+    expect(c.pendente).toMatchObject({ tipo: 'reserva', campo: 'pessoas' })
     expect(c.unidadeContextoId).toBe(ids['Asa Norte'])
   })
 })

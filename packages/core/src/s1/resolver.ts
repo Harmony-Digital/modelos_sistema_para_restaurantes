@@ -32,7 +32,7 @@ export function unidadesOrdenadas(ctx: ContextoS1): UnidadeS1[] {
 /** Lista interativa "Ver unidades" (as mesmas opções para pendentes do S1, S2 e S3; muda só o texto). */
 export function listaDeUnidades(
   ctx: ContextoS1,
-  corpo: 'escolher_unidade' | 'escolher_unidade_aviso' | 'evento_pergunta_unidade' = 'escolher_unidade',
+  corpo: 'escolher_unidade' | 'escolher_unidade_reserva' | 'evento_pergunta_unidade' = 'escolher_unidade',
 ): ListaUnidades {
   return {
     corpo: renderModelo(corpo, {}, ctx.modelos),

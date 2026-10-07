@@ -1,4 +1,4 @@
-import type { DataIso } from '@atd/core/s1'
+import { formatarHora, type DataIso } from '@atd/core/s1'
 import { rotuloTipoEvento, type TipoEvento } from '@atd/core/s3'
 import type { DadoRetencao, PedidoTitular, ResumoTitular, StatusDsr, StatusPedido, TipoDsr } from '@atd/db'
 import { ROTULO_STATUS } from '@/lib/eventos'
@@ -23,7 +23,7 @@ export const ROTULO_STATUS_DSR: Record<StatusDsr, string> = {
 
 export const ROTULO_DADO_RETENCAO: Record<DadoRetencao, { titulo: string; descricao: string }> = {
   messages: { titulo: 'Mensagens das conversas', descricao: 'Apagadas depois do prazo.' },
-  attendance_notices: { titulo: 'Avisos de presença', descricao: 'Anonimizados depois do prazo (conta a data do aviso).' },
+  attendance_notices: { titulo: 'Reservas', descricao: 'Anonimizadas depois do prazo (conta a data da reserva).' },
   event_requests: { titulo: 'Pedidos de evento', descricao: 'Anonimizados depois do prazo (conta a data do evento).' },
   ai_runs: { titulo: 'Registros de uso da IA', descricao: 'Apagados depois do prazo.' },
   customers_inativos: { titulo: 'Clientes sem contato', descricao: 'Apagados depois do prazo sem nenhuma interação.' },
@@ -69,11 +69,11 @@ function dataNoFuso(iso: string | Date, timeZone: string): string {
   return new Intl.DateTimeFormat('pt-BR', { timeZone, day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(iso))
 }
 
-const ROTULO_STATUS_AVISO: Record<string, string> = { ativo: 'Ativo', cancelado: 'Cancelado' }
+const ROTULO_STATUS_AVISO: Record<string, string> = { confirmada: 'Confirmada', cancelada: 'Cancelada', nao_veio: 'Não veio' }
 const maiuscula = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`
 
-/** Texto entregue ao titular (copiar/baixar). Nunca inclui telefone nem notas internas. */
+/** Texto entregue ao titular (copiar/baixar). Nunca inclui número de telefone nem notas internas. */
 export function textoResumo(r: ResumoTitular, timeZone: string): string {
   const linhas = [
     'Resumo dos seus dados pessoais',
@@ -85,11 +85,17 @@ export function textoResumo(r: ResumoTitular, timeZone: string): string {
     `Mensagens: ${r.mensagens}`,
     '',
   ]
-  if (r.avisos.length === 0) linhas.push('Avisos de presença: nenhum')
+  if (r.avisos.length === 0) linhas.push('Reservas: nenhuma')
   else {
-    linhas.push('Avisos de presença:')
+    linhas.push('Reservas:')
     for (const a of r.avisos) {
-      linhas.push(`- ${dataBr(a.data as DataIso)} · ${a.unidade} · ${plural(a.pessoas, 'pessoa', 'pessoas')} · ${ROTULO_STATUS_AVISO[a.status] ?? a.status}`)
+      // o número de contato nunca entra (só sob clique, auditado): só se foi informado
+      const partes = [
+        dataBr(a.data as DataIso), a.horario ? formatarHora(a.horario) : null, a.unidade, plural(a.pessoas, 'pessoa', 'pessoas'),
+        a.nome ? `em nome de ${a.nome}` : null, ROTULO_STATUS_AVISO[a.status] ?? a.status,
+        `telefone de contato informado: ${a.contatoInformado ? 'sim' : 'não'}`,
+      ]
+      linhas.push(`- ${partes.filter((x): x is string => x !== null).join(' · ')}`)
     }
   }
   linhas.push('')

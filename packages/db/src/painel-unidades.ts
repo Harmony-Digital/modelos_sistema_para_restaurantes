@@ -7,8 +7,16 @@ import { montarUnidades } from './s1.ts'
 import { restaurants, units } from './schema/restaurant.ts'
 import { unitHourExceptions, unitHours } from './schema/s1.ts'
 
-export type UnidadePainel = UnidadeS1 & { ativo: boolean; slug: string; cep: string | null; telefone: string | null }
-export type RestaurantePainel = { id: string; nome: string; timezone: string; politicaFeriado: PoliticaFeriado; politicaUrl: string | null }
+export type UnidadePainel = UnidadeS1 & {
+  ativo: boolean; slug: string; cep: string | null; telefone: string | null
+  /** Lotação máxima de pessoas por dia; null = sem limite. */
+  capacidadePessoas: number | null
+}
+export type RestaurantePainel = {
+  id: string; nome: string; timezone: string; politicaFeriado: PoliticaFeriado; politicaUrl: string | null
+  /** Texto enviado depois de confirmar a reserva (Ajustes → Regras da reserva). */
+  regrasReserva: string
+}
 export type DadosUnidade = {
   nome: string
   endereco: string | null
@@ -22,7 +30,12 @@ export type DadosUnidade = {
   lat: number | null
   lng: number | null
   ativo: boolean
+  /** Lotação máxima de pessoas por dia (1..5000) ou null (sem controle). Omitida: não muda. */
+  capacidadePessoas?: number | null
 }
+export const CAPACIDADE_MAXIMA = 5000
+const capacidadeValida = (c: number | null | undefined) =>
+  c === undefined || c === null || (Number.isInteger(c) && c >= 1 && c <= CAPACIDADE_MAXIMA)
 export type ExcecaoInput = { data: DataIso; fechado: boolean; turnos: Turno[]; motivo: string | null }
 
 const GESTAO = ['dono', 'gerente'] as const
@@ -36,7 +49,7 @@ export function carregarUnidadesPainel(
 ): Promise<{ restaurante: RestaurantePainel; unidades: UnidadePainel[] }> {
   return withUserContext(db, claims, async (tx) => {
     const [r] = await tx
-      .select({ id: restaurants.id, nome: restaurants.nome, timezone: restaurants.timezone, politicaFeriado: restaurants.politicaFeriado, politicaUrl: restaurants.politicaUrl })
+      .select({ id: restaurants.id, nome: restaurants.nome, timezone: restaurants.timezone, politicaFeriado: restaurants.politicaFeriado, politicaUrl: restaurants.politicaUrl, regrasReserva: restaurants.regrasReserva })
       .from(restaurants)
       .limit(1)
     if (!r) throw new Error('Restaurante não encontrado')
@@ -56,7 +69,7 @@ export function carregarUnidadesPainel(
     const linhas = new Map(us.map((u) => [u.id, u]))
     const unidades = montarUnidades(us, hs, exs).map((b) => {
       const u = linhas.get(b.id)!
-      return { ...b, ativo: u.ativo, slug: u.slug, cep: u.cep, telefone: u.telefone }
+      return { ...b, ativo: u.ativo, slug: u.slug, cep: u.cep, telefone: u.telefone, capacidadePessoas: u.capacidadePessoas }
     })
     return { restaurante: r, unidades }
   })
@@ -68,7 +81,8 @@ export function salvarUnidade(
   restaurantId: string,
   id: string | null,
   dados: DadosUnidade,
-): Promise<ResultadoPainel<{ id: string }>> {
+): Promise<ResultadoPainel<{ id: string }> | { ok: false; erro: 'capacidade_invalida' }> {
+  if (!capacidadeValida(dados.capacidadePessoas)) return Promise.resolve({ ok: false, erro: 'capacidade_invalida' })
   return semPermissaoVira(
     () => withUserContext(db, claims, async (tx) => {
       if (!(await exigirPapel(tx, GESTAO))) return falha('sem_permissao')
@@ -83,7 +97,7 @@ export function salvarUnidade(
       await registrarAuditoria(tx, claims, { restaurantId, acao: 'unidade.atualizada', entidade: 'unit', entidadeId: u.id, diff: valores })
       return ok({ id: u.id })
     }),
-    { units_restaurant_slug_uq: 'nome_duplicado' },
+    { units_restaurant_slug_uq: 'nome_duplicado' as const, units_capacidade_ck: 'capacidade_invalida' as const },
   )
 }
 

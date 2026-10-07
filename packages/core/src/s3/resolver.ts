@@ -1,4 +1,4 @@
-import { normalizeText } from '../normalize.ts'
+import { ditaComoMudanca } from '../mudanca.ts'
 import { encontrarUnidade } from '../s1/busca.ts'
 import { resolverData } from '../s1/datas.ts'
 import { feriadosNacionais, mapaFeriados } from '../s1/feriados.ts'
@@ -23,9 +23,7 @@ const MAX_UNIDADES_SEM_LISTA = 3
 const MAX_OBSERVACAO = 300
 export const OBSERVACAO_MUDANCA_GENERICA = 'Cliente pediu mudança no pedido (ver conversa).'
 
-/** "na verdade são 60", "quero mudar a data": a triagem resume a intenção do pedido em `tema`. */
-const DITA_MUDANCA = /\b(?:na verdade|mud(?:ar|a|e|ei|anca)|alter(?:ar|a|e|ei|acao)|troc(?:ar|a|ei)|troque|corrig(?:ir|e))\b/
-export const ditaComoMudanca = (tema: string | null): boolean => DITA_MUDANCA.test(normalizeText(tema ?? ''))
+export { ditaComoMudanca }
 
 /** Pergunta com o texto que a acompanha (null quando a pergunta é o corpo da lista de unidades). */
 export type PerguntaEventoComTexto = PerguntaEvento & { texto: string | null }

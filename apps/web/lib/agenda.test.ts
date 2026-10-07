@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
-  alternarStatus, diaDaAgenda, horarioDoAviso, hrefAgenda, hrefDaAgendaAntiga, inicioDaAgenda, limiteDaAgenda, linhaDoTempo, pendentesForaDoDia,
-  resumoDoDia, statusDaAgenda, statusDaFila,
+  acoesDaReserva, alternarStatus, diaDaAgenda, horaDaReserva, horarioDoAviso, hrefAgenda, hrefDaAgendaAntiga, inicioDaAgenda, limiteDaAgenda, linhaDoTempo, pendentesForaDoDia,
+  resumoDoDia, statusDaAgenda, statusDaFila, textoOcupacao,
 } from './agenda'
 
 const U1 = '00000000-0000-4000-8000-000000000001'
 const U2 = '00000000-0000-4000-8000-000000000002'
 const aviso = (over = {}) => ({
-  id: crypto.randomUUID(), unitId: U1, nome: 'Ana', pessoas: 4, horarioAprox: '20:00' as string | null,
-  origem: 'ia' as const, status: 'ativo' as 'ativo' | 'cancelado', simulado: false, ...over,
+  id: crypto.randomUUID(), unitId: U1, nome: 'Ana', pessoas: 4, horarioAprox: '20:00' as string | null, horario: null as string | null,
+  origem: 'ia' as const, status: 'confirmada' as 'confirmada' | 'cancelada' | 'nao_veio', simulado: false, temContato: false, ...over,
 })
+const LOT = { capacidade: null, ocupadas: 0, ocupadasSimulacao: 0 }
 const pedido = (over = {}) => ({
   id: crypto.randomUUID(), unitId: U1, unidade: 'Asa Sul', spaceId: null, espaco: null, nome: 'Caio', data: '2026-10-05',
   convidados: 30, tipo: 'aniversario' as const, tipoTexto: null, observacoes: null, status: 'novo' as 'novo' | 'em_contato' | 'confirmado' | 'recusado' | 'cancelado',
@@ -75,10 +76,10 @@ describe('agenda: dia e links', () => {
 
 describe('agenda: linha do tempo', () => {
   const unidades = [
-    { unitId: U1, unidade: 'Asa Sul', totalPessoas: 0, avisos: [
+    { unitId: U1, unidade: 'Asa Sul', totalPessoas: 0, ...LOT, avisos: [
       aviso({ nome: 'sem hora', horarioAprox: null }), aviso({ nome: 'tarde', horarioAprox: '20:30' }), aviso({ nome: 'cedo', horarioAprox: '12:00' }),
     ] },
-    { unitId: U2, unidade: 'Lago Sul', totalPessoas: 0, avisos: [aviso({ unitId: U2, nome: 'lago', horarioAprox: '19:00' })] },
+    { unitId: U2, unidade: 'Lago Sul', totalPessoas: 0, ...LOT, avisos: [aviso({ unitId: U2, nome: 'lago', horarioAprox: '19:00' })] },
   ]
   const pedidos = [
     pedido({ nome: 'evento hoje' }),
@@ -100,12 +101,12 @@ describe('agenda: linha do tempo', () => {
   })
 
   it('horário com segundos ordena igual', () => {
-    const us = [{ unitId: U1, unidade: 'Asa Sul', totalPessoas: 0, avisos: [aviso({ nome: 'b', horarioAprox: '21:00:00' }), aviso({ nome: 'a', horarioAprox: '09:15' })] }]
+    const us = [{ unitId: U1, unidade: 'Asa Sul', totalPessoas: 0, ...LOT, avisos: [aviso({ nome: 'b', horarioAprox: '21:00:00' }), aviso({ nome: 'a', horarioAprox: '09:15' })] }]
     expect(linhaDoTempo(us, [], { dia: '2026-10-05', unidade: null }).map((i) => i.tipo === 'aviso' && i.aviso.nome)).toEqual(['a', 'b'])
   })
 
   it('horário livre ("à noite") aparece inteiro e vai depois dos "HH:MM", na ordem estável', () => {
-    const us = [{ unitId: U1, unidade: 'Asa Sul', totalPessoas: 0, avisos: [
+    const us = [{ unitId: U1, unidade: 'Asa Sul', totalPessoas: 0, ...LOT, avisos: [
       aviso({ nome: 'noite', horarioAprox: 'à noite' }),
       aviso({ nome: 'tarde', horarioAprox: '20:30' }),
       aviso({ nome: 'jantar', horarioAprox: 'no jantar' }),
@@ -123,9 +124,9 @@ describe('agenda: linha do tempo', () => {
   })
 
   it('resumo: pessoas só de avisos ativos, contagem de avisos ativos e de eventos do dia', () => {
-    const us = [{ unitId: U1, unidade: 'Asa Sul', totalPessoas: 6, avisos: [aviso({ pessoas: 6 }), aviso({ pessoas: 3, status: 'cancelado' })] }]
+    const us = [{ unitId: U1, unidade: 'Asa Sul', totalPessoas: 6, ...LOT, avisos: [aviso({ pessoas: 6 }), aviso({ pessoas: 3, status: 'cancelada' })] }]
     const itens = linhaDoTempo(us, [pedido()], { dia: '2026-10-05', unidade: null })
-    expect(resumoDoDia(itens)).toEqual({ pessoas: 6, avisos: 1, eventos: 1 })
+    expect(resumoDoDia(itens)).toEqual({ pessoas: 6, reservas: 1, eventos: 1 })
   })
 
   it('pendentes em outros dias: só novos/em contato fora do dia, em ordem de data', () => {
@@ -136,5 +137,42 @@ describe('agenda: linha do tempo', () => {
       pedido({ nome: 'confirmado', data: '2026-10-09', status: 'confirmado' }),
     ]
     expect(pendentesForaDoDia(ps, '2026-10-05').map((p) => p.nome)).toEqual(['antes', 'depois'])
+  })
+})
+
+describe('agenda: reservas', () => {
+  it('hrefAgenda abre a reserva pela URL (?reserva=), sem o pedido junto', () => {
+    expect(hrefAgenda({ dia: '2026-10-06', hoje: '2026-10-05', unidade: U1, reserva: 'r1' })).toBe(`/agenda?dia=2026-10-06&unidade=${U1}&reserva=r1`)
+    expect(hrefAgenda({ dia: '2026-10-05', hoje: '2026-10-05', reserva: null })).toBe('/agenda')
+  })
+
+  it('hora da reserva: o horário marcado vale; o horário aproximado antigo só quando não há', () => {
+    expect(horaDaReserva({ horario: '20:30:00', horarioAprox: 'à noite' })).toBe('20:30:00')
+    expect(horaDaReserva({ horario: null, horarioAprox: 'à noite' })).toBe('à noite')
+    expect(horaDaReserva({ horario: null, horarioAprox: null })).toBeNull()
+    const us = [{ unitId: U1, unidade: 'Asa Sul', totalPessoas: 0, capacidade: null, ocupadas: 0, ocupadasSimulacao: 0, avisos: [
+      aviso({ nome: 'nova 19h', horario: '19:00:00', horarioAprox: null }),
+      aviso({ nome: 'antiga 18h', horario: null, horarioAprox: '18:00' }),
+      aviso({ nome: 'nova 21h', horario: '21:00:00', horarioAprox: '08:00' }),
+    ] }]
+    expect(linhaDoTempo(us, [], { dia: '2026-10-05', unidade: null }).map((i) => i.tipo === 'aviso' && i.aviso.nome))
+      .toEqual(['antiga 18h', 'nova 19h', 'nova 21h'])
+  })
+
+  it('ocupação: "147/150" ou "sem limite"', () => {
+    expect(textoOcupacao({ capacidade: 150, ocupadas: 147 })).toBe('147/150')
+    expect(textoOcupacao({ capacidade: null, ocupadas: 12 })).toBe('sem limite')
+  })
+
+  it('ações: confirmada e cancelada de hoje em diante; não veio só no dia ou depois; nunca a situação atual', () => {
+    const hoje = '2026-10-05'
+    expect(acoesDaReserva('confirmada', '2026-10-06', hoje)).toEqual(['cancelada'])
+    expect(acoesDaReserva('confirmada', hoje, hoje)).toEqual(['cancelada', 'nao_veio'])
+    expect(acoesDaReserva('confirmada', '2026-10-04', hoje)).toEqual(['nao_veio'])
+    expect(acoesDaReserva('cancelada', '2026-10-06', hoje)).toEqual(['confirmada'])
+    expect(acoesDaReserva('cancelada', '2026-10-04', hoje)).toEqual(['nao_veio'])
+    expect(acoesDaReserva('nao_veio', hoje, hoje)).toEqual(['confirmada', 'cancelada'])
+    // "não veio" marcado por engano num dia passado volta a Confirmada (a DAL confere a lotação)
+    expect(acoesDaReserva('nao_veio', '2026-10-04', hoje)).toEqual(['confirmada'])
   })
 })

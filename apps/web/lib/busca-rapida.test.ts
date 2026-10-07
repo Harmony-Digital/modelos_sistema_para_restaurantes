@@ -15,6 +15,10 @@ describe('busca rápida — telas e destinos', () => {
     // grupo também conta: "gestão" acha as telas do grupo que o papel vê
     expect(telasDaBusca('atendente', 'gestao').map((t) => t.id)).toEqual(['ajustes'])
     expect(telasDaBusca('atendente', 'gastos')).toEqual([])
+    // "reserva" e "evento" levam à Agenda (onde ficam as reservas e os pedidos de evento)
+    expect(telasDaBusca('atendente', 'reserva').map((t) => t.id)).toEqual(['agenda'])
+    expect(telasDaBusca('dono', 'Reservas').map((t) => t.id)).toEqual(['agenda'])
+    expect(telasDaBusca('dono', 'evento').map((t) => t.id)).toEqual(['agenda'])
   })
 
   it('cada resultado leva à tela onde ele aparece', () => {

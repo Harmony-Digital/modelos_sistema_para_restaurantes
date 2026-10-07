@@ -9,6 +9,7 @@ import { cookieDoMenu, type EstadoMenu } from '@/lib/menu'
 import { gruposDoMenu, itemAtivo, type ItemNav } from '@/lib/navegacao'
 import { cn } from '@/lib/utils'
 import { ContadorAguardando } from './contador'
+import { LogoRestaurante } from './logo-restaurante'
 
 const ITEM = cn(
   'group relative flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition-colors duration-150',
@@ -57,7 +58,14 @@ function Item(props: { item: ItemNav; recolhido: boolean; ativo: boolean; aguard
 }
 
 /** Menu lateral fixo (≥ lg), recolhível; o estado inicial vem do cookie lido no servidor. */
-export function MenuLateral(props: { papel: StaffRole; restaurante: string; estadoInicial: EstadoMenu; aguardando: number }) {
+export function MenuLateral(props: {
+  papel: StaffRole
+  restaurante: string
+  /** URL pública da logo; sem ela, o cabeçalho fica como sempre foi (só o nome). */
+  logo?: string | null
+  estadoInicial: EstadoMenu
+  aguardando: number
+}) {
   const caminho = usePathname()
   const [estado, setEstado] = useState<EstadoMenu>(props.estadoInicial)
   const recolhido = estado === 'recolhido'
@@ -75,8 +83,21 @@ export function MenuLateral(props: { papel: StaffRole; restaurante: string; esta
         recolhido ? 'w-14' : 'w-60',
       )}
     >
-      <div className={cn('flex min-h-14 items-center gap-2 border-b border-border', recolhido ? 'justify-center' : 'pl-4 pr-2')}>
-        {!recolhido && <span className="min-w-0 flex-1 truncate font-semibold text-primary">{props.restaurante}</span>}
+      <div
+        className={cn(
+          'flex min-h-14 items-center gap-2 border-b border-border',
+          recolhido ? 'justify-center' : 'pl-4 pr-2',
+          // recolhido com logo: a logo fica acima do botão de abrir (os dois não cabem lado a lado em 56 px)
+          recolhido && props.logo && 'flex-col gap-1 py-2',
+        )}
+      >
+        {recolhido && props.logo && <LogoRestaurante url={props.logo} nome={props.restaurante} />}
+        {!recolhido && (props.logo ? (
+          <span className="flex min-w-0 flex-1 items-center gap-2">
+            <LogoRestaurante url={props.logo} nome={props.restaurante} decorativa />
+            <span className="min-w-0 flex-1 truncate font-semibold text-primary">{props.restaurante}</span>
+          </span>
+        ) : <span className="min-w-0 flex-1 truncate font-semibold text-primary">{props.restaurante}</span>)}
         <button
           type="button"
           onClick={alternar}

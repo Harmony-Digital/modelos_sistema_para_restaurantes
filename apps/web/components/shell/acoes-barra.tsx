@@ -6,9 +6,10 @@ import { setTheme, signOut } from '@/app/(painel)/actions'
 import type { StaffRole } from '@/lib/access'
 import type { Tema } from '@/lib/theme'
 import { abrirBusca } from './abrir-busca'
+import { LogoRestaurante } from './logo-restaurante'
 
 /** `faixa`: alertas do painel (ex.: gastos), mostrados abaixo da barra superior a partir de lg. */
-type ValorShell = { tema: Tema; papel: StaffRole; faixa?: React.ReactNode }
+type ValorShell = { tema: Tema; papel: StaffRole; faixa?: React.ReactNode; marca?: { nome: string; logo: string | null } }
 const ShellContexto = createContext<ValorShell | null>(null)
 
 /** Posto pelo AppShell: a barra superior de cada tela lê tema e papel daqui. */
@@ -28,6 +29,26 @@ export function FaixaDaBarra() {
   if (!shell?.faixa) return null
   // contexto de empilhamento próprio: o z-40 da faixa não passa por cima da barra fixa ao rolar
   return <div className="relative z-20 hidden shrink-0 lg:block">{shell.faixa}</div>
+}
+
+/**
+ * Título da barra superior. Com logo, no celular (< lg) a logo de 24 px e o nome do restaurante ficam na mesma linha do
+ * título (nada de linha extra: a barra mantém os 4rem que as faixas fixas abaixo dela assumem). Sem logo, só o `h1`
+ * de sempre.
+ */
+export function TituloDaBarra(props: { titulo: string; className: string }) {
+  const marca = useContext(ShellContexto)?.marca
+  if (!marca?.logo) return <h1 className={props.className}>{props.titulo}</h1>
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <div className="flex min-w-0 max-w-[45%] shrink-0 items-center gap-1.5 lg:hidden">
+        <LogoRestaurante url={marca.logo} nome={marca.nome} tamanho={24} decorativa />
+        <span className="min-w-0 truncate text-xs font-medium text-muted-foreground">{marca.nome}</span>
+        <span aria-hidden="true" className="text-muted-foreground">·</span>
+      </div>
+      <h1 className={`min-w-0 ${props.className}`}>{props.titulo}</h1>
+    </div>
+  )
 }
 
 /** Lado direito da barra superior (≥ lg): busca rápida, tema e conta. Abaixo de lg isso fica em Ajustes. */

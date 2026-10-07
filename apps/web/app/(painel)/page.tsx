@@ -72,7 +72,7 @@ export default async function InicioPage() {
           <Indicador
             rotulo="Previstos hoje"
             valor={String(previstos)}
-            dica={previstos === 1 ? 'pessoa avisou que vai' : 'pessoas avisaram que vão'}
+            dica={previstos === 1 ? 'pessoa com reserva' : 'pessoas com reserva'}
             href={`/agenda?dia=${hoje}`}
           />
           <Indicador

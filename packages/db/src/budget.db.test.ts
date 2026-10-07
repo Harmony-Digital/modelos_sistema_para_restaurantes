@@ -187,7 +187,7 @@ describe('alertas de gasto (registrarAlertas)', () => {
     expect(await registrar(rid)).toEqual([100])
     expect(await registrar(rid)).toEqual([])
     expect((await alertas()).map((a) => [a.periodo, a.inicioPeriodo, a.nivel])).toEqual([['dia', '2026-10-05', 80], ['dia', '2026-10-05', 100]])
-    const audit = await db.select().from(auditLog).where(eq(auditLog.acao, 'orcamento.alerta'))
+    const audit = await db.select().from(auditLog).where(eq(auditLog.acao, 'orcamento.alerta')).orderBy(auditLog.id)
     expect(audit.map((l) => [l.atorTipo, l.diff])).toEqual([
       ['sistema', { escopo: 'ia', periodo: 'dia', inicioPeriodo: '2026-10-05', nivel: 80 }],
       ['sistema', { escopo: 'ia', periodo: 'dia', inicioPeriodo: '2026-10-05', nivel: 100 }],
