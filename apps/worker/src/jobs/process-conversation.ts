@@ -224,7 +224,10 @@ async function decide(deps: ProcessDeps, conversationId: string): Promise<Outcom
     .orderBy(asc(messages.id))
   if (pending.length === 0) return 'nothing'
   const upTo = pending.at(-1)!.id
-  const silent: Decision = { replies: [], autor: 'sistema' }
+  // número de contato respondendo à pergunta da reserva: a mensagem fica mascarada em qualquer caminho (humano no
+  // controle, bloqueio, sem orçamento, resposta normal)
+  const mascarar = mascaraDoContato(ctx, pending, agoraDaConversa(now, ctx.conv))
+  const silent: Decision = { replies: [], autor: 'sistema', ...mascarar }
 
   if (ctx.conv.estado === 'humano' || ctx.conv.estado === 'aguardando_humano') {
     await commit(db, ctx, upTo, silent, now)
@@ -254,7 +257,7 @@ async function decide(deps: ProcessDeps, conversationId: string): Promise<Outcom
 
   // relógio simulado vale para S1 e pendente; bloqueio, aviso de privacidade e orçamento seguem o real
   const agora = agoraDaConversa(now, ctx.conv)
-  const decision = await classify(deps, ctx, pending, agora)
+  const decision: Decision = { ...await classify(deps, ctx, pending, agora), ...mascarar }
   try {
     await completarHandoff(db, ctx, decision, agora)
     const lastNotice = ctx.customer.privacyNoticeSentAt?.getTime() ?? 0
@@ -303,7 +306,7 @@ async function classify(deps: ProcessDeps, ctx: Ctx, pending: Pending[], now: Da
     case 'unsupported_media':
       return { replies: ['midiaNaoSuportada'], autor: 'sistema' }
     case 'pass':
-      return triageDecision(deps, ctx, pre.text, pending, now)
+      return triageDecision(deps, ctx, pre.text, now)
   }
 }
 
@@ -465,6 +468,7 @@ async function atender(
   escolhidaId: string | undefined,
   resposta: RespostaDaReserva = {},
 ): Promise<Atendido> {
+  itens = semNomeDeLugar(itens, nomesDeLugar(s1, ctx.restaurant.nome))
   const s4 = await carregarS4(deps, ctx, itens, s1, escolhidaId)
   const reserva = await contextoReserva(deps, ctx, itens, s1, avisos, now, resposta)
   const r = resolverAtendimento(itens, s1, now, avisos, escolhidaId, s3, s4?.contexto, reserva)
@@ -686,12 +690,13 @@ function telefoneDoCliente(ctx: Ctx, phoneKey: Buffer): string | null {
  * vale como "sim". `contatoOk` substitui o que o modelo disse.
  */
 type Contato = RespostaDaReserva & { pergunta: PerguntaReserva; contatoOk?: boolean; capturou: boolean }
-function contatoDaResposta(p: PendenteReserva, textoBruto: string, proprio: string | null): Contato {
+function contatoDaResposta(p: PendenteReserva, textoBruto: string, proprio: () => string | null): Contato {
   const pergunta = perguntaDoPendente(p)
   if (p.campo !== 'contato' && p.campo !== 'contato_numero') return { pergunta, capturou: false }
   const valor = capturarTelefone(textoBruto)
   const tentativas = p.campo === 'contato_numero' ? p.tentativasNumero : 0
-  if (valor && valor === proprio) return { pergunta: { ...pergunta, campo: 'contato' }, contatoOk: true, capturou: true }
+  // o telefone do cliente só é decifrado aqui, com a pergunta de contato e um número na resposta
+  if (valor && valor === proprio()) return { pergunta: { ...pergunta, campo: 'contato' }, contatoOk: true, capturou: true }
   if (valor) {
     return {
       pergunta: { ...pergunta, campo: 'contato_numero', item: { ...p.item, contato_ok: false } },
@@ -742,10 +747,33 @@ const NAO_E_NOME = new Set([
   'ola', 'bom', 'boa', 'hoje', 'amanha', 'pessoa', 'pessoas', 'horas', 'nome', 'meu', 'minha', 'eu', 'sou', 'pra', 'para', 'com',
   'mesmo', 'mesma', 'outro', 'outra', 'numero', 'whatsapp', 'isso', 'esse', 'essa', 'sabado', 'domingo', 'segunda', 'terca',
   'quarta', 'quinta', 'sexta', 'unidade', 'tchau',
+  // concordância, desistência e perguntas: "Beleza", "Esquece", "Quanto custa" não são nome
+  'beleza', 'blz', 'tudo', 'bem', 'certo', 'combinado', 'perfeito', 'otimo', 'show', 'legal', 'joia', 'top', 'fechado', 'feito',
+  'esquece', 'desisto', 'deixa', 'depois', 'nada', 'ninguem', 'quanto', 'qual', 'quais', 'onde', 'quando', 'como', 'porque',
+  'vou', 'vamos', 'custa', 'preco', 'cardapio', 'aberto', 'fechado', 'evento', 'festa', 'restaurante', 'mesa', 'entao',
 ])
+// data no texto: "e 15 de outubro?", "e no 12?", "pode ser 3 de novembro", "e na unidade 2?" não são pessoas
+const DATA_OU_LUGAR = new RegExp(
+  '\\b(?:janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|jan|fev|abr|jun|jul|ago|set|out|nov|dez|'
+  + 'unidade|loja|filial)\\b|\\b(?:no|na|num|numa|em|ate|de|do|da)\\s+\\d',
+)
+
+/** Nomes que não são de pessoa: unidades (com apelidos) e o restaurante, normalizados. */
+function nomesDeLugar(s1: ContextoS1, restaurante: string): Set<string> {
+  return new Set([restaurante, ...s1.unidades.flatMap((u) => [u.nome, ...u.apelidos])].map(normalizeText).filter(Boolean))
+}
+
+/** Nome da reserva que é o nome de uma unidade ou do restaurante (o modelo confundiu): descartado, o core pergunta. */
+const semNomeDeLugar = (itens: readonly ItemExtraido[], lugares: ReadonlySet<string>): ItemExtraido[] =>
+  itens.map((i) => (i.servico === 'aviso_presenca' && i.nome && lugares.has(normalizeText(i.nome)) ? { ...i, nome: null } : i))
 
 /** Resposta curta ao campo pendente, sem o modelo; null = a triagem decide (resposta ambígua ou com outro pedido). */
-function respostaCurta(campo: PendenteReserva['campo'], texto: string, contato: Contato): Partial<ItemExtraido> | null {
+function respostaCurta(
+  campo: PendenteReserva['campo'],
+  texto: string,
+  contato: Contato,
+  lugares: ReadonlySet<string>,
+): Partial<ItemExtraido> | null {
   const t = normalizeText(texto)
   const palavras = t ? t.split(' ').length : 0
   switch (campo) {
@@ -758,13 +786,18 @@ function respostaCurta(campo: PendenteReserva['campo'], texto: string, contato: 
     case 'pessoas':
     case 'lotado': {
       // "somos 80" vai com o número real: acima de 60 o atendimento segue como pedido de evento
+      if (DATA_OU_LUGAR.test(t)) return null
       const n = lerPessoas(texto, { min: 1, max: 1000 })
       return typeof n === 'number' ? { pessoas: n } : null
     }
-    case 'horario':
-      return HORARIO_CURTO.test(t) && normalizarHorario(texto).hhmm ? { horario: texto.trim() } : null
+    case 'horario': {
+      // "20 30" (sem separador) é 20:30, não 20:00
+      const horario = texto.trim().replace(/(?<!\d)(\d{1,2})\s+(\d{2})(?!\d)/, '$1:$2')
+      return HORARIO_CURTO.test(t) && normalizarHorario(horario).hhmm ? { horario } : null
+    }
     case 'nome': {
       const ok = palavras >= 1 && palavras <= 4 && /^[\p{L}\s'.-]+$/u.test(texto.trim()) && !t.split(' ').some((w) => NAO_E_NOME.has(w))
+        && !lugares.has(t)
       return ok ? { nome: texto.trim() } : null
     }
     case 'data':
@@ -781,22 +814,31 @@ async function respostaCurtaDaReserva(deps: ProcessDeps, ctx: Ctx, pending: Pend
   const p = lerPendente(ctx.conv.pendente)
   if (p?.tipo !== 'reserva' || new Date(p.expiraEm) <= now) return null
   const texto = pending[0]!.texto ?? ''
-  const contato = contatoDaResposta(p, texto, telefoneDoCliente(ctx, deps.phoneKey))
-  const curta = respostaCurta(p.campo, texto, contato)
+  const contato = contatoDaResposta(p, texto, () => telefoneDoCliente(ctx, deps.phoneKey))
+  const atendimento = await carregarAtendimento(deps, ctx, now)
+  const curta = respostaCurta(p.campo, texto, contato, nomesDeLugar(atendimento.s1, ctx.restaurant.nome))
   if (!curta) return null
   const c = continuarDoPendente([{ ...ITEM_RESERVA, ...curta }], p, contato)
-  const a = await atender(deps, ctx, await carregarAtendimento(deps, ctx, now), c.itens, now, c.escolhidaId, contato)
+  const a = await atender(deps, ctx, atendimento, c.itens, now, c.escolhidaId, contato)
   const run: AiRunRow = {
     etapa: 'resposta', modelo: 'deterministico', promptVersion: 's2-reserva', costUsd: '0', intent: `resposta_${p.campo}`, resultado: 'ok',
   }
   // terminada a reserva, a pergunta do evento que ficou para depois sai agora (pendência 2)
   const d = decisaoDe(a, now, p.pergunta, p.eventoAdiado)
-  return { ...d, runs: [run], ...(contato.capturou ? { mascarar: mascaradas(pending) } : {}) }
+  return { ...d, runs: [run] }
 }
 
-/** O texto que fica guardado da mensagem que trouxe o número: o número sai (só a reserva o guarda, cifrado). */
-const mascaradas = (pending: readonly Pending[]) =>
-  pending.flatMap((m) => (m.texto && redactPii(m.texto) !== m.texto ? [{ id: m.id, texto: redactPii(m.texto) }] : []))
+/**
+ * Com a pergunta de contato da reserva pendente, a mensagem que trouxe um número fica guardada mascarada (o número só
+ * existe cifrado na reserva). Vale para todo caminho da decisão, inclusive humano no controle e sem orçamento.
+ */
+function mascaraDoContato(ctx: Ctx, pending: readonly Pending[], now: Date): Pick<Decision, 'mascarar'> {
+  const p = lerPendente(ctx.conv.pendente)
+  if (p?.tipo !== 'reserva' || (p.campo !== 'contato' && p.campo !== 'contato_numero') || new Date(p.expiraEm) <= now) return {}
+  if (!pending.some((m) => m.texto && capturarTelefone(m.texto))) return {}
+  const mascarar = pending.flatMap((m) => (m.texto && redactPii(m.texto) !== m.texto ? [{ id: m.id, texto: redactPii(m.texto) }] : []))
+  return mascarar.length ? { mascarar } : {}
+}
 
 /** A pergunta que espera resposta sai por último no texto composto (um parágrafo). */
 const ultimoTrecho = (texto: string | null) => (texto?.split('\n\n').at(-1) ?? '').slice(0, MAX_PERGUNTA_ENVIADA)
@@ -905,7 +947,7 @@ function toRun(r: JsonCallResult<TriageV7>, fallbackModel: string): AiRunRow {
   }
 }
 
-async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, pending: Pending[], now: Date): Promise<Decision> {
+async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, now: Date): Promise<Decision> {
   const { db } = deps
   // simulador tem limite próprio (`simulacao`): estourá-lo só põe a conversa simulada no modo econômico
   const reservation = await reserveBudget(db, {
@@ -926,8 +968,7 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, pending
   const contexto = pendenteDaTriagem(pendenteAtual, now)
   // reserva esperando resposta: o número (pergunta de contato) sai do texto bruto antes da triagem, que só vê [TELEFONE]
   const reservaPendente = contexto && pendenteAtual?.tipo === 'reserva' ? pendenteAtual : null
-  const contato = reservaPendente ? contatoDaResposta(reservaPendente, text, telefoneDoCliente(ctx, deps.phoneKey)) : null
-  const mascarar = contato?.capturou ? { mascarar: mascaradas(pending) } : {}
+  const contato = reservaPendente ? contatoDaResposta(reservaPendente, text, () => telefoneDoCliente(ctx, deps.phoneKey)) : null
   let result: JsonCallResult<TriageV7>
   const runs: AiRunRow[] = []
   try {
@@ -955,14 +996,14 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, pending
     deps.log.error({ conversationId: ctx.conv.id, erro: result.error, status: result.status }, 'triagem falhou')
     // a triagem já tentou de novo: a falha do modelo passa direto para a equipe (e conta como falha)
     const handoff: Handoff = { motivo: 'falhas', avisar: 'sempre' }
-    return { replies: [], autor: 'sistema', handoff, falhas: 'incrementar', audit: 'ia.falha_triagem', runs, budget, ...mascarar }
+    return { replies: [], autor: 'sistema', handoff, falhas: 'incrementar', audit: 'ia.falha_triagem', runs, budget }
   }
 
   const { itens, frustracao, fora_escopo: foraEscopo } = result.data
   if (itens.some((i) => i.servico === 'humano' || i.servico === 'lgpd')) {
     // resposta do sistema: com `ia` a entrega a cancelaria (a conversa já está aguardando humano)
     const handoff: Handoff = { motivo: frustracao ? 'frustracao' : 'pedido', avisar: 'sempre' }
-    return { replies: [], autor: 'sistema', handoff, audit: 'conversa.handoff_triagem', runs, budget, ...mascarar }
+    return { replies: [], autor: 'sistema', handoff, audit: 'conversa.handoff_triagem', runs, budget }
   }
   // cliente irritado com o atendimento: responde o que der e a equipe continua (sem "só consigo ajudar…")
   const frustrado = (d: Decision): Decision => ({
@@ -974,11 +1015,11 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, pending
   if (itens.length === 0 && !foraEscopo && !frustracao) {
     // sem item e sem fora de escopo não é falha: agradecimento/despedida que o pré-filtro não pegou ("ok, até sábado
     // então", "abraço!") ⇒ "Por nada!"; pedido vago ("tenho uma dúvida") ⇒ `cortesia` (com o que a IA ajuda)
-    if (temAgradecimentoOuDespedida(text)) return { replies: ['agradecimento'], autor: 'ia', runs, budget, pendente: null, ...mascarar }
-    return { replies: [], saidas: [await saidaDoModelo(db, ctx, 'cortesia', {})], autor: 'ia', runs, budget, pendente: null, ...mascarar }
+    if (temAgradecimentoOuDespedida(text)) return { replies: ['agradecimento'], autor: 'ia', runs, budget, pendente: null }
+    return { replies: [], saidas: [await saidaDoModelo(db, ctx, 'cortesia', {})], autor: 'ia', runs, budget, pendente: null }
   }
   if (itens.length === 0) {
-    const d: Decision = { replies: ['foraEscopo'], autor: 'ia', falhas: 'incrementar', runs, budget, pendente: null, ...mascarar }
+    const d: Decision = { replies: ['foraEscopo'], autor: 'ia', falhas: 'incrementar', runs, budget, pendente: null }
     return frustracao ? frustrado(d) : d
   }
   try {
@@ -987,7 +1028,7 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, pending
       ? continuarDoPendente(itens, reservaPendente, contato)
       : completarDoPendente(itens.map(semContatoOk), contexto ? pendenteAtual : null, atendimento.s1.unidades)
     const a = await atender(deps, ctx, atendimento, c.itens, now, c.escolhidaId, contato ?? {})
-    const d: Decision = { ...decisaoDe(a, now, perguntaMascarada(text), reservaPendente?.eventoAdiado), runs, budget, ...mascarar }
+    const d: Decision = { ...decisaoDe(a, now, perguntaMascarada(text), reservaPendente?.eventoAdiado), runs, budget }
     return frustracao ? frustrado(d) : d
   } catch (err) {
     await compensate(deps, reservation, spentMicros, ctx.conv.id)
@@ -1025,6 +1066,10 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision, now: Date): P
       else await releaseBudget(tx, d.budget.reservation, ref)
     }
     if (alreadyDone) return 'nothing'
+    // a mensagem que trouxe o número de contato fica guardada mascarada (o número só existe cifrado na reserva)
+    for (const m of d.mascarar ?? []) {
+      await tx.update(messages).set({ texto: m.texto }).where(and(eq(messages.id, m.id), eq(messages.conversationId, conversationId)))
+    }
     if (humanOwns) {
       await tx.update(conversations).set({ processedUpToId: upTo, pendente: null }).where(eq(conversations.id, conversationId))
       return 'human_state'
@@ -1032,10 +1077,6 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision, now: Date): P
 
     // o banco pode mudar a decisão (cancelamento recusado ⇒ a equipe assume): o que vale é o daqui para baixo
     let { autor, handoff, pendente, audit } = d
-    // a mensagem que trouxe o número de contato fica guardada mascarada (o número só existe cifrado na reserva)
-    for (const m of d.mascarar ?? []) {
-      await tx.update(messages).set({ texto: m.texto }).where(and(eq(messages.id, m.id), eq(messages.conversationId, conversationId)))
-    }
     // reservas: na mesma transação da resposta, com a lotação conferida sob a trava da unidade; com humano no controle,
     // nada é gravado (acima). Auditoria sem PII (sem nome, contato, pessoas ou horário).
     let saidas = d.saidas ?? []

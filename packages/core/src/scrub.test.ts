@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { scrubEvent } from './scrub.ts'
+import { scrubEvent, stripRowValues } from './scrub.ts'
 
 describe('scrubEvent', () => {
   it('remove corpo de requisição, usuário e campos sensíveis', () => {
@@ -51,5 +51,23 @@ describe('scrubEvent', () => {
   ])('adversarial: cortar params até o fim da mensagem (%#)', (m) => {
     const ev = scrubEvent({ message: m, exception: { values: [{ value: m }] }, breadcrumbs: [{ message: m }] })
     expect(JSON.stringify(ev)).not.toMatch(/Maria Silva|Rua X/)
+  })
+})
+
+describe('valores de linha nos erros do Postgres (nome do cliente no detail)', () => {
+  const detail = 'Failing row contains (b0f2, f2c4, null, Carlos Souza, 2026-10-05, 61, null, confirmada, ia, f, f, null, (x), 20:00:00, null).'
+  it('stripRowValues tira a linha do "Failing row" e os valores do "Key (...)=(...)"', () => {
+    expect(stripRowValues(detail)).toBe('Failing row contains ([redigido]).')
+    expect(stripRowValues('Key (customer_id, unit_id, data)=(a, b, 2026-10-05) already exists.'))
+      .toBe('Key (customer_id, unit_id, data)=([redigido]) already exists.')
+    expect(stripRowValues('sem linha')).toBe('sem linha')
+  })
+  it('scrubEvent tira a linha da mensagem e o detail dos contexts', () => {
+    const ev = scrubEvent({
+      exception: { values: [{ value: `erro\n${detail}` }] },
+      contexts: { PostgresError: { detail, code: '23514' } },
+    })
+    expect(JSON.stringify(ev)).not.toMatch(/Carlos/)
+    expect(ev.contexts).toMatchObject({ PostgresError: { code: '23514' } })
   })
 })

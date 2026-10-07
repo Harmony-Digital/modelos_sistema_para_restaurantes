@@ -251,6 +251,142 @@ describe('reserva no worker (triage-v7)', () => {
     expect(await minhas()).toMatchObject([{ unitId: ids['Asa Norte'], pessoas: 4 }])
   })
 
+  it.each(['Beleza', 'ok', 'Esquece', 'sim', 'não', 'Tudo bem', 'Desisto', 'Asa Sul', 'asa  sul', '204 sul', 'Casa Teste', 'Quanto custa', 'Combinado', '20h', '4'])(
+    '"%s" ao "Em nome de quem?" não vira nome sem o modelo',
+    async (resposta) => {
+      const { restaurantId, ids } = await setup()
+      await db.update(schema.units).set({ apelidos: ['204 sul'] }).where(eq(schema.units.id, ids['Asa Sul']!))
+      const { llm } = fakeLlm([triagem(res({ data: 'hoje', pessoas: 4, horario: '20h' })), triagem()])
+      const wa = fakeWa()
+      const conv = await receive(restaurantId, 'reserva hoje 4 pessoas 20h')
+      await processConversation(deps(llm, wa), conv)
+      expect(ultimoTexto(wa)).toBe('Em nome de quem fica a reserva?')
+      await receive(restaurantId, resposta)
+      await processConversation(deps(llm, wa), conv)
+      // vai à triagem (ou ao pré-filtro: "ok", "beleza"), nunca vira o nome da reserva
+      expect(ultimoTexto(wa)).not.toBe(PERGUNTA_CONTATO)
+      expect(JSON.stringify((await conversa(conv)).pendente ?? {})).not.toContain(`"nome":"${resposta}"`)
+    },
+  )
+
+  it.each(['Maria', 'carlos souza', 'Maria da Silva', "Joana D'Arc"])('"%s" ao "Em nome de quem?" é nome, sem o modelo', async (resposta) => {
+    const { restaurantId } = await setup()
+    const { llm, calls } = fakeLlm([triagem(res({ data: 'hoje', pessoas: 4, horario: '20h' }))])
+    const wa = fakeWa()
+    const conv = await receive(restaurantId, 'reserva hoje 4 pessoas 20h')
+    await processConversation(deps(llm, wa), conv)
+    await receive(restaurantId, resposta)
+    await processConversation(deps(llm, wa), conv)
+    expect(calls).toHaveLength(1)
+    expect(ultimoTexto(wa)).toBe(PERGUNTA_CONTATO)
+  })
+
+  it('nome vindo da triagem igual a uma unidade ou ao restaurante não vale: pergunta o nome', async () => {
+    const { restaurantId } = await setup(4)
+    const { llm } = fakeLlm([triagem(res({ unidade: 'asa sul', data: 'hoje', pessoas: 4, horario: '20h', nome: 'Asa Norte' }))])
+    const wa = fakeWa()
+    const conv = await receive(restaurantId, 'reserva na asa sul hoje 4 pessoas 20h, asa norte')
+    await processConversation(deps(llm, wa), conv)
+    expect(ultimoTexto(wa)).toBe('Em nome de quem fica a reserva?')
+    const { llm: llm2 } = fakeLlm([triagem(res({ unidade: 'asa sul', data: 'hoje', pessoas: 4, horario: '20h', nome: 'Casa Teste' }))])
+    const conv2 = await receive(restaurantId, 'reserva na asa sul hoje 4 pessoas 20h em nome da casa teste')
+    await processConversation(deps(llm2, wa), conv2)
+    expect(ultimoTexto(wa)).toBe('Em nome de quem fica a reserva?')
+  })
+
+  it.each(['e 15 de outubro?', 'e no 12?', 'pode ser 3 de novembro', 'dia 20', 'e sábado?', 'e na unidade 2?', 'e dia 15/10?'])(
+    '"%s" depois do lotado não vira pessoas sem o modelo',
+    async (resposta) => {
+      const { restaurantId, ids } = await setup()
+      await capacidade(ids['Asa Sul']!, 10)
+      await ocupar(restaurantId, ids['Asa Sul']!, 8)
+      const { llm, calls } = fakeLlm([triagem(res({ data: 'hoje', pessoas: 4, horario: '20h', nome: 'Ana' })), triagem()])
+      const wa = fakeWa()
+      const conv = await receive(restaurantId, 'reserva hoje, 4 pessoas às 20h, em nome de Ana')
+      await processConversation(deps(llm, wa), conv)
+      expect(ultimoTexto(wa)).toContain('está lotada hoje')
+      await receive(restaurantId, resposta)
+      await processConversation(deps(llm, wa), conv)
+      expect(calls).toHaveLength(2)
+    },
+  )
+
+  it.each(['e 15 de outubro?', 'no 12', 'dia 20'])('"%s" ao "Para quantas pessoas?" vai à triagem', async (resposta) => {
+    const { restaurantId } = await setup()
+    const { llm, calls } = fakeLlm([triagem(res({ data: 'hoje' })), triagem()])
+    const wa = fakeWa()
+    const conv = await receive(restaurantId, 'quero reservar para hoje')
+    await processConversation(deps(llm, wa), conv)
+    await receive(restaurantId, resposta)
+    await processConversation(deps(llm, wa), conv)
+    expect(calls).toHaveLength(2)
+  })
+
+  it.each([['15', 15], ['somos 15', 15], ['para 3', 3], ['e para 2?', 2]])('"%s" depois do lotado continua sendo pessoas (%i)', async (resposta, n) => {
+    const { restaurantId, ids } = await setup()
+    await capacidade(ids['Asa Sul']!, 30)
+    await ocupar(restaurantId, ids['Asa Sul']!, 28)
+    const { llm, calls } = fakeLlm([triagem(res({ data: 'hoje', pessoas: 4, horario: '20h', nome: 'Ana' }))])
+    const wa = fakeWa()
+    const conv = await receive(restaurantId, 'reserva hoje, 4 pessoas às 20h, em nome de Ana')
+    await processConversation(deps(llm, wa), conv)
+    await receive(restaurantId, resposta)
+    await processConversation(deps(llm, wa), conv)
+    expect(calls).toHaveLength(1)
+    expect((await conversa(conv)).pendente).toMatchObject({ item: { pessoas: n } })
+  })
+
+  it.each([['20 30', '20:30'], ['20:30', '20:30'], ['às 20h30', '20:30'], ['20h', '20:00']])('"%s" ao "Para que horas?" grava %s', async (resposta, hhmm) => {
+    const { restaurantId } = await setup()
+    const { llm } = fakeLlm([triagem(res({ data: 'hoje', pessoas: 4 })), triagem()])
+    const wa = fakeWa()
+    const conv = await receive(restaurantId, 'reserva hoje 4 pessoas')
+    await processConversation(deps(llm, wa), conv)
+    await receive(restaurantId, resposta)
+    await processConversation(deps(llm, wa), conv)
+    expect((await conversa(conv)).pendente).toMatchObject({ campo: 'nome', item: { horario: hhmm } })
+  })
+
+  it('humano assume com a pergunta de contato pendente: a mensagem com o número fica mascarada mesmo assim', async () => {
+    const { restaurantId } = await setup()
+    const { llm } = fakeLlm([triagem(res({ data: 'hoje' }))])
+    const wa = fakeWa()
+    const conv = await ateOContato(restaurantId, wa, llm)
+    await db.update(schema.conversations).set({ estado: 'humano' }).where(eq(schema.conversations.id, conv))
+    await receive(restaurantId, 'não, usa o (61) 98888-7777')
+    expect(await processConversation(deps(llm, wa), conv)).toBe('human_state')
+    const entradas = await db.select({ texto: schema.messages.texto }).from(schema.messages).where(eq(schema.messages.direcao, 'in'))
+    expect(entradas.map((m) => m.texto).join('\n')).not.toMatch(/98888/)
+  })
+
+  it('sem orçamento com a pergunta de contato pendente: a mensagem longa com o número fica mascarada', async () => {
+    const { restaurantId } = await setup()
+    const { llm } = fakeLlm([triagem(res({ data: 'hoje' }))])
+    const wa = fakeWa()
+    const conv = await ateOContato(restaurantId, wa, llm)
+    await db.update(schema.budgetLimits).set({ limiteUsd: '0.000001' })
+    await receive(restaurantId, 'pode anotar o número do meu marido que é 61 98888-7777 porque esse aqui eu quase não uso')
+    await processConversation(deps(llm, wa), conv)
+    expect((await conversa(conv)).estado).toBe('aguardando_humano')
+    const entradas = await db.select({ texto: schema.messages.texto }).from(schema.messages).where(eq(schema.messages.direcao, 'in'))
+    expect(entradas.map((m) => m.texto).join('\n')).not.toMatch(/98888/)
+  })
+
+  it('erro do banco ao gravar a reserva não leva o nome ao log', async () => {
+    const { restaurantId, ids } = await setup()
+    const { linhas, log } = logCapturado()
+    try {
+      await db.insert(schema.attendanceNotices).values({
+        restaurantId, unitId: ids['Asa Sul']!, data: HOJE, pessoas: 61, horario: '20:00', nome: 'Carlos Souza', origem: 'ia',
+      })
+      expect.unreachable()
+    } catch (err) {
+      log.error({ err }, 'falha ao processar conversa')
+    }
+    expect(linhas.join('\n')).toContain('attendance_pessoas_ck')
+    expect(linhas.join('\n')).not.toMatch(/Carlos|Souza/)
+  })
+
   it('lotado: "e para 2?" responde sem o modelo e cabe nas vagas que sobram', async () => {
     const { restaurantId, ids } = await setup()
     await capacidade(ids['Asa Sul']!, 10)
