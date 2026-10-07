@@ -150,7 +150,7 @@ describe('S2 (reserva) no worker', () => {
     await processConversation(deps(llm, wa), conv)
     await enviar(restaurantId, conv, llm, wa, 'pode sim')
     await enviar(restaurantId, conv, llm, wa, 'na verdade seremos 6 hoje')
-    expect(ultimoTexto(wa)).toBe(feita('Asa Sul, hoje, às 20h, 6 pessoas, em nome de Maria'))
+    expect(ultimoTexto(wa)).toBe('Reserva alterada: unidade Asa Sul, hoje, às 20h, 6 pessoas, em nome de Maria.')
     const lista = await ativos()
     expect(lista).toHaveLength(1)
     expect(lista[0]!.pessoas).toBe(6)

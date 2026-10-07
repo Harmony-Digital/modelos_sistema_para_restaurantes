@@ -20,8 +20,11 @@ describe('schemas do painel', () => {
   })
 
   it('unidade: lotação máxima vazia (sem limite) ou inteiro de 1 a 5000', () => {
-    expect(dadosUnidadeSchema.parse(unidade).capacidadePessoas).toBeNull()
+    // campo ausente (cliente antigo durante o deploy) não mexe na lotação: a DAL trata undefined como "não muda"
+    expect(dadosUnidadeSchema.parse(unidade).capacidadePessoas).toBeUndefined()
     expect(dadosUnidadeSchema.parse({ ...unidade, capacidadePessoas: ' ' }).capacidadePessoas).toBeNull()
+    expect(dadosUnidadeSchema.parse({ ...unidade, capacidadePessoas: '' }).capacidadePessoas).toBeNull()
+    expect(dadosUnidadeSchema.parse({ ...unidade, capacidadePessoas: null }).capacidadePessoas).toBeNull()
     expect(dadosUnidadeSchema.parse({ ...unidade, capacidadePessoas: '150' }).capacidadePessoas).toBe(150)
     expect(dadosUnidadeSchema.parse({ ...unidade, capacidadePessoas: '5000' }).capacidadePessoas).toBe(5000)
     for (const v of ['0', '5001', '1.5', '1,5', 'abc', '-3']) {

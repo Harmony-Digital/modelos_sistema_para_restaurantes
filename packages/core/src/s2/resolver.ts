@@ -1,3 +1,4 @@
+import { ditaComoMudanca } from '../mudanca.ts'
 import { encontrarUnidade } from '../s1/busca.ts'
 import { resolverData } from '../s1/datas.ts'
 import { feriadosNacionais, mapaFeriados } from '../s1/feriados.ts'
@@ -136,7 +137,8 @@ export function diasDaReserva(
   for (const i of itens) {
     if (i.servico !== 'aviso_presenca' || i.tipo === 'cancelar') continue
     if (!i.data) {
-      if (!i.unidade && ativos.length === 1) dias.add(ativos[0]!.data)
+      // mudança sem dia ("troca para a Asa Norte"): o dia da única reserva
+      if ((!i.unidade || ditaComoMudanca(i.tema)) && ativos.length === 1) dias.add(ativos[0]!.data)
       continue
     }
     const d = resolverData(i.data, local.data, feriados)
@@ -217,13 +219,42 @@ export function resolverItensS2(
   const contatoGuardado = rc.pergunta?.item.contato_ok ?? null
   const numero = campoPendente === 'contato_numero' ? rc.numero : undefined
 
+  /** Mudança de dia ou unidade ("muda para domingo") com várias reservas: lista e explica (não adivinha qual). */
+  function qualMudar(): void {
+    validos++
+    const linhas = ativos.map((a) => `• ${nomeDe(a.unitId)} — ${minuscula(rotulo(a.data))}, ${textoPessoas(a.pessoas)}`)
+    trechos.push(m('reserva_qual_mudar', { linhas: linhas.join('\n'), exemplo: exemploCancelar(ativos[0]!) }))
+  }
+
+  /**
+   * "muda minha reserva para domingo", "troca para a Asa Norte" (tema "mudanca" com unidade ou dia): com uma única
+   * reserva ativa, é ela que muda (o que o cliente não disse vem dela); com várias, só quando o lugar dito é o de uma
+   * delas e há algo a mudar. `undefined` = não é mudança de lugar; `null` = ambígua (já respondida com a lista).
+   */
+  function reservaQueMuda(entrada: ItemExtraido, mudaAlgo: boolean): AvisoAtivoS2 | null | undefined {
+    if (!ditaComoMudanca(entrada.tema) || (!entrada.unidade && !entrada.data && !escolhida) || ativos.length === 0) return undefined
+    if (ativos.length === 1) return ativos[0]!
+    const u = escolhida ?? encontrarUnidade(entrada.unidade, unidades)
+    const d = entrada.data ? resolverData(entrada.data, local.data, listaFeriados) : null
+    const doLugar = ativos.filter((a) => (!u || a.unitId === u.id) && (!d?.ok || a.data === d.data))
+    if (mudaAlgo && doLugar.length === 1 && (u || !entrada.unidade) && (d?.ok || !entrada.data)) return doLugar[0]!
+    qualMudar()
+    return null
+  }
+
   function reservar(entrada: ItemExtraido): void {
     // "na verdade seremos 6": sem unidade nem dia, com uma única reserva e algo a mudar (pessoas, horário ou nome), é
     // mudança dessa reserva; sem nada a mudar ("quero fazer uma reserva"), é reserva nova e a coleta pergunta o que falta
     const mudaAlgo = entrada.pessoas !== null || !!normalizarHorario(entrada.horario).hhmm || !!limparNome(entrada.nome)
+    const origem = reservaQueMuda(entrada, mudaAlgo)
+    if (origem === null) return
     const unico = !escolhida && !entrada.unidade && !entrada.data && mudaAlgo && ativos.length === 1 ? ativos[0]! : null
     const doUnico = unico ? (unidades.find((x) => x.id === unico.unitId) ?? null) : null
-    const item = doUnico && unico ? { ...entrada, unidade: doUnico.nome, data: unico.data } : entrada
+    const daOrigem = origem ? (unidades.find((x) => x.id === origem.unitId) ?? null) : null
+    // a mudança completa o lugar que o cliente não disse com o da reserva que muda
+    const item = doUnico && unico ? { ...entrada, unidade: doUnico.nome, data: unico.data }
+      : origem ? { ...entrada, unidade: entrada.unidade ?? (escolhida ? null : (daOrigem?.nome ?? null)), data: entrada.data ?? origem.data }
+        : entrada
     let u: UnidadeS1 | null = doUnico ?? escolhida ?? encontrarUnidade(item.unidade, unidades)
     if (!u) {
       if (unidades.length === 0) {
@@ -253,8 +284,10 @@ export function resolverItensS2(
       perguntar('data', { ...base, data: null }, u.id, `${fechada} ${perguntaData}`)
       return
     }
-    // mudança: a reserva do cliente nessa unidade e dia completa o que ele não repetiu
-    const existente = avisos.find((a) => a.unitId === u.id && a.data === data) ?? null
+    // mudança: a reserva do cliente nessa unidade e dia (ou a que muda de lugar) completa o que ele não repetiu
+    const existente = avisos.find((a) => a.unitId === u.id && a.data === data) ?? origem ?? null
+    // a vaga da própria reserva só conta no mesmo lugar; noutro dia ou unidade ela ocupa uma vaga nova
+    const mesmaVaga = !!existente && existente.unitId === u.id && existente.data === data
     const comData: ItemExtraido = { ...base, data }
 
     const n = item.pessoas ?? existente?.pessoas ?? null
@@ -270,8 +303,8 @@ export function resolverItensS2(
     }
     // lotação antes do resto: não pergunta horário, nome e contato para depois dizer que está cheio.
     // Diminuir nunca bloqueia; aumentar desconta a própria reserva.
-    const livres = livresPara(u.id, data, existente?.pessoas ?? 0)
-    if ((!existente || n > existente.pessoas) && livres !== null && n > livres) {
+    const livres = livresPara(u.id, data, mesmaVaga ? existente.pessoas : 0)
+    if ((!mesmaVaga || n > existente.pessoas) && livres !== null && n > livres) {
       validos++
       respondidos++
       trechos.push(textoLotado(u, data, n, livres)) // nada é gravado
@@ -283,8 +316,8 @@ export function resolverItensS2(
     }
     const comPessoas: ItemExtraido = { ...comData, pessoas: n }
 
-    // horário herdado da reserva já foi aceito antes: não é recusado agora por "já passou"
-    const herdado = !item.horario && !!existente?.horario
+    // horário herdado da reserva já foi aceito antes: não é recusado agora por "já passou" (no mesmo lugar e dia)
+    const herdado = !item.horario && !!existente?.horario && mesmaVaga
     const h = normalizarHorario(item.horario ?? existente?.horario ?? null)
     const turnos = horarioDoDia(u, data, ctx.politicaFeriado, feriados).turnos
     const horarioFora = () => m('reserva_horario_fora', { quando: rotulo(data), unidade: u.nome, turnos: formatarTurnos(turnos) })
@@ -336,9 +369,9 @@ export function resolverItensS2(
     validos++
     respondidos++
     if (avisoContato) trechos.push(avisoContato)
-    const texto = m('reserva_confirmada', {
-      unidade: u.nome, quando: minuscula(rotulo(data)), horario: asHora(hhmm), pessoas: textoPessoas(n), nome, regras: rc.regras,
-    }).trim()
+    // mudança: "Reserva alterada" sem repetir as regras (já foram na reserva feita)
+    const resumo = { unidade: u.nome, quando: minuscula(rotulo(data)), horario: asHora(hhmm), pessoas: textoPessoas(n), nome }
+    const texto = existente ? m('reserva_alterada', resumo) : m('reserva_confirmada', { ...resumo, regras: rc.regras }).trim()
     const acao: AcaoS2 = {
       tipo: 'registrar', unitId: u.id, data, pessoas: n, horario: hhmm, nome, contato, atualiza: existente !== null,
       ...(existente ? { reservaId: existente.id } : {}),

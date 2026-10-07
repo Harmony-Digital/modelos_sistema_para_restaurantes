@@ -469,9 +469,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > l
       "nome": "Ana",
       "pessoas": 6,
       "reservaId": "a1",
-      "texto": "Reserva feita: unidade Asa Sul, sábado (10/10), às 20h, 6 pessoas, em nome de Ana.
-
-Guardamos o lugar por até 15 minutos após o horário marcado.",
+      "texto": "Reserva alterada: unidade Asa Sul, sábado (10/10), às 20h, 6 pessoas, em nome de Ana.",
       "textoSeLotado": "A unidade Asa Sul está lotada no sábado (10/10) para 6 pessoas. Nesse dia, temos vaga para 6 pessoas em: Asa Norte, Lago Sul e Águas Claras. Se preferir, me diga outro dia.",
       "tipo": "registrar",
       "unitId": "u-asa-sul",
@@ -487,9 +485,7 @@ Guardamos o lugar por até 15 minutos após o horário marcado.",
   "perguntarEvento": null,
   "perguntarReserva": null,
   "respondidos": 1,
-  "texto": "Reserva feita: unidade Asa Sul, sábado (10/10), às 20h, 6 pessoas, em nome de Ana.
-
-Guardamos o lugar por até 15 minutos após o horário marcado.",
+  "texto": "Reserva alterada: unidade Asa Sul, sábado (10/10), às 20h, 6 pessoas, em nome de Ana.",
   "validos": 1,
 }
 `;
@@ -924,6 +920,97 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > m
   "respondidos": 0,
   "texto": "Hoje, a unidade Asa Sul não abre. Para qual dia é a reserva? Consigo reservar de hoje até 04/11.",
   "validos": 0,
+}
+`;
+
+exports[`evals S2 — camada 2 (resolução + composição, determinística) > mv01: muda minha reserva para sexta (tem 1 reserva ativa) 1`] = `
+{
+  "acoesS2": [
+    {
+      "atualiza": true,
+      "contato": "manter",
+      "data": "2026-10-09",
+      "horario": "20:00",
+      "nome": "Ana",
+      "pessoas": 4,
+      "reservaId": "a1",
+      "texto": "Reserva alterada: unidade Asa Sul, sexta-feira (09/10), às 20h, 4 pessoas, em nome de Ana.",
+      "textoSeLotado": "A unidade Asa Sul está lotada na sexta-feira (09/10) para 4 pessoas. Nesse dia, temos vaga para 4 pessoas em: Asa Norte, Lago Sul e Águas Claras. Se preferir, me diga outro dia.",
+      "tipo": "registrar",
+      "unitId": "u-asa-sul",
+    },
+  ],
+  "acoesS3": [],
+  "acoesS4": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarReserva": null,
+  "respondidos": 1,
+  "texto": "Reserva alterada: unidade Asa Sul, sexta-feira (09/10), às 20h, 4 pessoas, em nome de Ana.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S2 — camada 2 (resolução + composição, determinística) > mv02: troca minha reserva para a asa norte (lotada) 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "acoesS4": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarReserva": {
+    "campo": "lotado",
+    "item": {
+      "consulta": null,
+      "contato_ok": null,
+      "convidados": null,
+      "data": "2026-10-10",
+      "espaco": null,
+      "horario": "20:00",
+      "nome": "Ana",
+      "pessoas": 4,
+      "servico": "aviso_presenca",
+      "tag": null,
+      "tema": "mudanca",
+      "tipo": "registrar",
+      "tipoEvento": null,
+      "unidade": "Asa Norte",
+    },
+    "tentativasNumero": 0,
+    "unitId": null,
+  },
+  "respondidos": 1,
+  "texto": "A unidade Asa Norte está lotada no sábado (10/10) para 4 pessoas. Nesse dia, temos vaga para 4 pessoas em: Asa Sul, Lago Sul e Águas Claras. Se preferir, me diga outro dia. Na unidade Asa Norte, ainda temos vaga para até 2 pessoas.",
+  "validos": 1,
+}
+`;
+
+exports[`evals S2 — camada 2 (resolução + composição, determinística) > mv03: muda minha reserva para domingo (tem 2 reservas ativas) 1`] = `
+{
+  "acoesS2": [],
+  "acoesS3": [],
+  "acoesS4": [],
+  "handoff": false,
+  "lacunas": [],
+  "lista": null,
+  "localizacoes": [],
+  "pendente": [],
+  "perguntarEvento": null,
+  "perguntarReserva": null,
+  "respondidos": 0,
+  "texto": "Você tem estas reservas:
+• Asa Norte — hoje, 2 pessoas
+• Asa Sul — sábado (10/10), 4 pessoas
+Para mudar o dia ou a unidade, cancele a que não vale (por exemplo: "cancela a reserva de hoje na unidade Asa Norte") e me diga a nova reserva.",
+  "validos": 1,
 }
 `;
 
@@ -2197,9 +2284,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
       "nome": "Ana",
       "pessoas": 5,
       "reservaId": "a1",
-      "texto": "Reserva feita: unidade Asa Sul, sábado (10/10), às 21h, 5 pessoas, em nome de Ana.
-
-Guardamos o lugar por até 15 minutos após o horário marcado.",
+      "texto": "Reserva alterada: unidade Asa Sul, sábado (10/10), às 21h, 5 pessoas, em nome de Ana.",
       "textoSeLotado": "A unidade Asa Sul está lotada no sábado (10/10) para 5 pessoas. Nesse dia, temos vaga para 5 pessoas em: Asa Norte, Lago Sul e Águas Claras. Se preferir, me diga outro dia.",
       "tipo": "registrar",
       "unitId": "u-asa-sul",
@@ -2215,9 +2300,7 @@ Guardamos o lugar por até 15 minutos após o horário marcado.",
   "perguntarEvento": null,
   "perguntarReserva": null,
   "respondidos": 1,
-  "texto": "Reserva feita: unidade Asa Sul, sábado (10/10), às 21h, 5 pessoas, em nome de Ana.
-
-Guardamos o lugar por até 15 minutos após o horário marcado.",
+  "texto": "Reserva alterada: unidade Asa Sul, sábado (10/10), às 21h, 5 pessoas, em nome de Ana.",
   "validos": 1,
 }
 `;
@@ -2356,9 +2439,7 @@ exports[`evals S2 — camada 2 (resolução + composição, determinística) > r
       "nome": "Ana",
       "pessoas": 6,
       "reservaId": "a1",
-      "texto": "Reserva feita: unidade Asa Sul, sábado (10/10), às 20h, 6 pessoas, em nome de Ana.
-
-Guardamos o lugar por até 15 minutos após o horário marcado.",
+      "texto": "Reserva alterada: unidade Asa Sul, sábado (10/10), às 20h, 6 pessoas, em nome de Ana.",
       "textoSeLotado": "A unidade Asa Sul está lotada no sábado (10/10) para 6 pessoas. Nesse dia, temos vaga para 6 pessoas em: Asa Norte, Lago Sul e Águas Claras. Se preferir, me diga outro dia.",
       "tipo": "registrar",
       "unitId": "u-asa-sul",
@@ -2374,9 +2455,7 @@ Guardamos o lugar por até 15 minutos após o horário marcado.",
   "perguntarEvento": null,
   "perguntarReserva": null,
   "respondidos": 1,
-  "texto": "Reserva feita: unidade Asa Sul, sábado (10/10), às 20h, 6 pessoas, em nome de Ana.
-
-Guardamos o lugar por até 15 minutos após o horário marcado.",
+  "texto": "Reserva alterada: unidade Asa Sul, sábado (10/10), às 20h, 6 pessoas, em nome de Ana.",
   "validos": 1,
 }
 `;

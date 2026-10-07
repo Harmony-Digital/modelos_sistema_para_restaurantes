@@ -38,7 +38,7 @@ export async function criarReservaAction(input: ReservaForm): Promise<ActionResu
   const erros = validarAvisoNaUnidade(unidade, v.data, v.horario, restaurante.politicaFeriado, agoraLocal(new Date(), restaurante.timezone))
   if (erros) return { ok: false, fieldErrors: erros }
   const r = await criarAvisoPainel(getDb(), s.claims, {
-    unitId: v.unitId, data: v.data, pessoas: v.pessoas, horarioAprox: null, horario: v.horario, nome: v.nome,
+    unitId: v.unitId, data: v.data, pessoas: v.pessoas, horario: v.horario, nome: v.nome,
     contatoCifrado: v.contato === null ? null : encryptPhone(v.contato, env().phoneKey),
   })
   if (!r.ok) {

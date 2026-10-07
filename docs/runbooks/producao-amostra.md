@@ -206,7 +206,7 @@ scripts/producao/verificar.sh --bootstrap .env.production-bootstrap
 ```
 
 **Saída esperada:** o drizzle-kit aplica as migrations sem erro; o script mostra
-`OK migrations aplicadas: 48 de 48 (até 0047_marca_bucket_config)`, `OK bucket cardapio existe e é privado`,
+`OK migrations aplicadas: 49 de 49 (até 0048_resumo_titular_reservas)`, `OK bucket cardapio existe e é privado`,
 `OK bucket importacoes existe e é privado`, `OK bucket marca existe, é público e aceita até 1 MB`, `OK role web_app existe com login`, `OK role worker_app existe com login`.
 **Se falhar:** erro de `MAINTAIN` → o banco não é PG 17 (passo 1); falha no meio → rode o mesmo comando de novo
 (o drizzle aplica só as que faltam) e, se repetir, pare e relate a mensagem do drizzle-kit. Nunca edite uma migration.
@@ -234,14 +234,16 @@ importação que estava sendo lida durante a troca de versão continua do últim
 (padrão desligado), a função `app.modo_demonstracao()`, a métrica "tempo até assumir" e as policies de leitura e
 atualização de `event_requests`. Nenhum tipo é recriado e o worker não muda: não é preciso parar o worker para elas.
 
-**Reserva com lotação e logo (migrations 0045–0047, 07/10/2026):** **pare o worker antes.** A 0045 renomeia os valores
+**Reserva com lotação e logo (migrations 0045–0048, 07/10/2026):** **pare o worker antes.** A 0045 renomeia os valores
 do status da reserva (`attendance_status`: `ativo` → `confirmada`, `cancelado` → `cancelada`, mais `nao_veio`): o worker
 antigo grava e lê `'ativo'` e quebra com ela aplicada; o worker novo exige a 0045 (colunas `horario`, `contato_cifrado`)
 e a 0046 (`app.travar_unidade_reserva`, a trava da lotação). A 0046 também cria o bucket público `marca` e as policies
-de gravação no prefixo do próprio restaurante; a 0047 fixa o limite de 1 MB e os tipos do bucket. Ordem, numa janela só:
+de gravação no prefixo do próprio restaurante; a 0047 fixa o limite de 1 MB e os tipos do bucket; a 0048 só recria
+`app.resumo_titular` (a exportação do titular passa a trazer nome, horário e se há telefone de contato da reserva).
+Ordem, numa janela só:
 
 1. parar o worker (`… docker compose … stop worker`, como acima);
-2. `pnpm db:migrate` (0045–0047) e `scripts/producao/verificar.sh --bootstrap …` (48 de 48 e o bucket `marca`);
+2. `pnpm db:migrate` (0045–0048) e `scripts/producao/verificar.sh --bootstrap …` (49 de 49 e o bucket `marca`);
 3. subir o **worker novo** (passo 8, `up -d`) e conferir `worker iniciado`;
 4. publicar a **web** logo em seguida (Vercel pelo Git, passo 5): o painel publicado antes também lê o status antigo.
 

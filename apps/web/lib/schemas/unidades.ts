@@ -30,8 +30,10 @@ export const dadosUnidadeSchema = z.object({
     .union([z.string(), z.number(), z.null()])
     .optional()
     .transform((v, ctx) => {
+      // ausente = não muda (a DAL omite a coluna); vazio = sem limite
+      if (v === undefined) return undefined
       const t = typeof v === 'string' ? v.trim() : v
-      if (t === undefined || t === null || t === '') return null
+      if (t === null || t === '') return null
       const n = typeof t === 'number' ? t : /^\d{1,4}$/.test(t) ? Number(t) : NaN
       if (!Number.isInteger(n) || n < 1 || n > CAPACIDADE_MAXIMA) {
         ctx.addIssue({ code: 'custom', message: MSG_CAPACIDADE })

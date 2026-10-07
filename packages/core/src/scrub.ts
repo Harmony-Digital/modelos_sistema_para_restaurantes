@@ -34,12 +34,14 @@ export function stripStackParams(stack: string, originalMessages: string[]): str
 
 /**
  * Erros do Postgres trazem a linha ("Failing row contains (…)") ou a chave ("Key (…)=(…)") com os valores, como o nome
- * do cliente numa reserva: tira os valores e mantém o resto (constraint, colunas).
+ * do cliente numa reserva: tira os valores e mantém o resto (constraint, colunas). Os valores podem ter parênteses
+ * desbalanceados ("Carlos :)"), então a redação vai até o fim da linha; da chave, só o final conhecido fica.
  */
 export function stripRowValues(s: string): string {
   return s
-    .replace(/(Failing row contains )\((?:[^()]|\([^()]*\))*\)/g, '$1([redigido])')
-    .replace(/(Key \([^)]*\))=\((?:[^()]|\([^()]*\))*\)/g, '$1=([redigido])')
+    .replace(/(Failing row contains )\(.*$/gm, '$1([redigido]).')
+    .replace(/(Key \([^)\n]*\))=\(.*?\)( already exists\.| is not present in table "[^"\n]*"\.)?$/gm, '$1=([redigido])$2')
+    .replace(/(Key \([^)\n]*\))=\((?!\[redigido\]\)).*$/gm, '$1=([redigido])')
 }
 
 const mask = (s: string) => redactPii(stripRowValues(stripQueryParams(s)))

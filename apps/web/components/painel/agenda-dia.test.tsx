@@ -275,6 +275,10 @@ describe('AgendaDia: reservas', () => {
     expect(screen.queryByRole('button', { name: 'Nova reserva' })).not.toBeInTheDocument()
     rerender(<AgendaDia {...base} dia="2026-11-20" />)
     expect(screen.queryByRole('button', { name: 'Nova reserva' })).not.toBeInTheDocument()
+    // atendente não marca quem não veio: o aviso não promete isso
+    rerender(<AgendaDia {...base} dia="2026-10-04" podeEditar={false} />)
+    expect(screen.getByText('Dia passado: só consulta.')).toBeInTheDocument()
+    expect(screen.queryByText(/marcar quem não veio/)).not.toBeInTheDocument()
   })
 
   it('Nova reserva abre o formulário com o dia escolhido', async () => {

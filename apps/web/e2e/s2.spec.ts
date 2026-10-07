@@ -191,13 +191,14 @@ test('equipe marca "Não veio" e a vaga volta na lotação do dia', async ({ pag
 test('painel: nova reserva aparece na agenda, com a lotação, e sai ao cancelar', async ({ page }) => {
   await getSql()`update units set capacidade_pessoas = 50 where id = ${unitId}`
   await entrarComoGestor(page)
-  await previsaoDaUnidade(page)
-  await expect(page.getByText('Nada na agenda para hoje')).toBeVisible()
+  // amanhã (fuso do restaurante): um horário de hoje pode já ter passado, a qualquer hora em que o teste rode
+  const [{ amanha }] = await getSql()`select ((now() at time zone 'America/Sao_Paulo')::date + 1)::text as amanha` as [{ amanha: string }]
+  await page.goto(`/agenda?unidade=${unitId}&dia=${amanha}`)
+  await expect(page.getByText(`Nada na agenda para ${amanha.slice(8, 10)}/${amanha.slice(5, 7)}/${amanha.slice(0, 4)}`)).toBeVisible()
   await expect(page.getByRole('list', { name: 'Lotação do dia' })).toContainText('0/50')
   await page.getByRole('button', { name: 'Nova reserva' }).click()
   await page.getByLabel(/^Pessoas/).fill('6')
-  // a unidade abre 00:00–23:59: o último minuto do dia ainda não passou quando o teste roda
-  await page.getByLabel(/^Horário/).fill('23:58')
+  await page.getByLabel(/^Horário/).fill('20:00')
   await page.getByLabel(/^Nome/).fill(NOME_PAINEL)
   await page.getByRole('button', { name: 'Salvar reserva' }).click()
   await expect(page.getByText('Reserva anotada.')).toBeVisible()
@@ -216,7 +217,7 @@ test('painel: nova reserva aparece na agenda, com a lotação, e sai ao cancelar
   await expect(page.getByRole('list', { name: 'Lotação do dia' })).toContainText('0/50')
 
   const [a] = await getSql()`select status, origem, simulado, horario from attendance_notices where nome = ${NOME_PAINEL}`
-  expect(a).toEqual({ status: 'cancelada', origem: 'painel', simulado: false, horario: '23:58:00' })
+  expect(a).toEqual({ status: 'cancelada', origem: 'painel', simulado: false, horario: '20:00:00' })
 })
 
 test('atendente vê a agenda, sem "Nova reserva" nem mudar a situação', async ({ page }) => {

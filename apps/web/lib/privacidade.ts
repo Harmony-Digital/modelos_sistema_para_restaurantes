@@ -1,4 +1,4 @@
-import type { DataIso } from '@atd/core/s1'
+import { formatarHora, type DataIso } from '@atd/core/s1'
 import { rotuloTipoEvento, type TipoEvento } from '@atd/core/s3'
 import type { DadoRetencao, PedidoTitular, ResumoTitular, StatusDsr, StatusPedido, TipoDsr } from '@atd/db'
 import { ROTULO_STATUS } from '@/lib/eventos'
@@ -73,7 +73,7 @@ const ROTULO_STATUS_AVISO: Record<string, string> = { confirmada: 'Confirmada', 
 const maiuscula = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`
 
-/** Texto entregue ao titular (copiar/baixar). Nunca inclui telefone nem notas internas. */
+/** Texto entregue ao titular (copiar/baixar). Nunca inclui número de telefone nem notas internas. */
 export function textoResumo(r: ResumoTitular, timeZone: string): string {
   const linhas = [
     'Resumo dos seus dados pessoais',
@@ -89,7 +89,13 @@ export function textoResumo(r: ResumoTitular, timeZone: string): string {
   else {
     linhas.push('Reservas:')
     for (const a of r.avisos) {
-      linhas.push(`- ${dataBr(a.data as DataIso)} · ${a.unidade} · ${plural(a.pessoas, 'pessoa', 'pessoas')} · ${ROTULO_STATUS_AVISO[a.status] ?? a.status}`)
+      // o número de contato nunca entra (só sob clique, auditado): só se foi informado
+      const partes = [
+        dataBr(a.data as DataIso), a.horario ? formatarHora(a.horario) : null, a.unidade, plural(a.pessoas, 'pessoa', 'pessoas'),
+        a.nome ? `em nome de ${a.nome}` : null, ROTULO_STATUS_AVISO[a.status] ?? a.status,
+        `telefone de contato informado: ${a.contatoInformado ? 'sim' : 'não'}`,
+      ]
+      linhas.push(`- ${partes.filter((x): x is string => x !== null).join(' · ')}`)
     }
   }
   linhas.push('')

@@ -49,6 +49,7 @@ export const reservaSchema = (hoje: DataIso) => {
       .string()
       .trim()
       .min(1, 'Informe o horário, como 20:00.')
+      // no Zod 4 o refine roda mesmo depois do min(1): o '' evita uma segunda mensagem no campo vazio
       .refine((v) => v === '' || /^([01]\d|2[0-3]):[0-5]\d$/.test(v), 'Use o formato 24h HH:mm, como 20:00.'),
     nome: z.string().trim().min(1, 'Informe o nome da reserva.').max(60, 'Use no máximo 60 caracteres.'),
     contato: z

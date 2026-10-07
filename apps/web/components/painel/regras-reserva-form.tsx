@@ -53,7 +53,7 @@ export function RegrasReservaForm(props: { inicial: string; padrao: string; acao
         <Button
           type="button"
           variant="outline"
-          disabled={texto === props.padrao}
+          disabled={texto.trim() === props.padrao.trim()}
           onClick={() => form.setValue('texto', props.padrao, { shouldDirty: true, shouldValidate: true })}
         >
           <RotateCcw aria-hidden="true" className="size-4" /> Restaurar padrão

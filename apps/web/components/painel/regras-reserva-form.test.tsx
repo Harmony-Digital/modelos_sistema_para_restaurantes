@@ -46,6 +46,11 @@ describe('RegrasReservaForm', () => {
     expect(screen.getByRole('button', { name: 'Restaurar padrão' })).toBeDisabled()
   })
 
+  it('igual ao padrão a menos de espaços nas pontas (o salvar apara): Restaurar padrão fica desativado', () => {
+    render(<RegrasReservaForm inicial={`  ${PADRAO}\n`} padrao={PADRAO} acao={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Restaurar padrão' })).toBeDisabled()
+  })
+
   it('erro do servidor aparece no campo', async () => {
     const user = userEvent.setup()
     const acao = vi.fn().mockResolvedValue({ ok: false, fieldErrors: { texto: 'Use de 1 a 600 caracteres.' } })

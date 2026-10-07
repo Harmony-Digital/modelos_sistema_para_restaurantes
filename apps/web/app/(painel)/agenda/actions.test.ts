@@ -54,7 +54,7 @@ describe('reservas: actions', () => {
   it('cria a reserva com nome e horário, sem contato (null), e revalida', async () => {
     expect(await criarReservaAction(form())).toEqual({ ok: true, data: { id: 'a1' } })
     expect(criarAvisoPainel).toHaveBeenCalledWith('db', { sub: 'u' }, {
-      unitId: U, data: '2026-10-06', pessoas: 4, horarioAprox: null, horario: '20:00', nome: 'Ana', contatoCifrado: null,
+      unitId: U, data: '2026-10-06', pessoas: 4, horario: '20:00', nome: 'Ana', contatoCifrado: null,
     })
     expect(revalidatePath).toHaveBeenCalledWith('/agenda')
     expect(revalidatePath).toHaveBeenCalledWith('/')

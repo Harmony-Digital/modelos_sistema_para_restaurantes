@@ -15,6 +15,14 @@ describe('redactPii — mascara', () => {
     ['tel 61 9 9999-8888', 'tel [TELEFONE]'],
     ['tel 99999 8888', 'tel [TELEFONE]'],
     ['tel 99999-8888', 'tel [TELEFONE]'],
+    // telefone com pontos (M7): também nunca chega ao LLM
+    ['liga no 61.99999.8888', 'liga no [TELEFONE]'],
+    ['tel (61) 99999.8888', 'tel [TELEFONE]'],
+    ['tel 61.9.9999.8888', 'tel [TELEFONE]'],
+    ['tel +55.61.99999.8888', 'tel [TELEFONE]'],
+    ['tel 99999.8888', 'tel [TELEFONE]'],
+    ['tel.61999998888', 'tel.[TELEFONE]'],
+    ['ligue 61 99999-8888.', 'ligue [TELEFONE].'],
     ['cpf 529 982 247 25', 'cpf [CPF]'],
     ['rg 12.345.678-9', 'rg [RG]'],
     ['rg 12.345.678-X', 'rg [RG]'],
@@ -38,6 +46,9 @@ describe('redactPii — preserva o que não é PII', () => {
     'R$ 1.234,56',
     'pedido 2026',
     '19:30 até 23:00',
+    'evento dia 12.10.2026',
+    'R$ 1.234.567,89',
+    'versão 1.2.3',
   ])('%s', (input) => {
     expect(redactPii(input)).toBe(input)
   })

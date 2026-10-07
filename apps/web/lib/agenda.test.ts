@@ -172,6 +172,7 @@ describe('agenda: reservas', () => {
     expect(acoesDaReserva('cancelada', '2026-10-06', hoje)).toEqual(['confirmada'])
     expect(acoesDaReserva('cancelada', '2026-10-04', hoje)).toEqual(['nao_veio'])
     expect(acoesDaReserva('nao_veio', hoje, hoje)).toEqual(['confirmada', 'cancelada'])
-    expect(acoesDaReserva('nao_veio', '2026-10-04', hoje)).toEqual([])
+    // "não veio" marcado por engano num dia passado volta a Confirmada (a DAL confere a lotação)
+    expect(acoesDaReserva('nao_veio', '2026-10-04', hoje)).toEqual(['confirmada'])
   })
 })

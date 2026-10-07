@@ -36,6 +36,13 @@ export function linksTelefone(telefone: string): { tel: string; wa: string } {
   return { tel: `tel:+${digitos}`, wa: `https://wa.me/${digitos}` }
 }
 
+/** Número para ler na tela: brasileiro com máscara ("+55 (61) 99999-8888"); outro país, só com o "+". */
+export function telefoneLegivel(telefone: string): string {
+  const d = telefone.replace(/\D/g, '')
+  const br = /^55(\d{2})(\d{4,5})(\d{4})$/.exec(d)
+  return br ? `+55 (${br[1]}) ${br[2]}-${br[3]}` : `+${d}`
+}
+
 export type MembroTela = { id: string; nome: string; todas: boolean; unidades: string[] }
 
 /** Quem pode ser responsável por um pedido: acessa todas as unidades ou tem a do pedido (mesma regra da DAL). */

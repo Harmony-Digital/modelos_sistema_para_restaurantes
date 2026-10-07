@@ -48,6 +48,11 @@ export const MODELOS_S1 = {
     texto: 'Reserva feita: unidade {unidade}, {quando}, {horario}, {pessoas}, em nome de {nome}.\n\n{regras}',
     variaveis: ['unidade', 'quando', 'horario', 'pessoas', 'nome', 'regras'],
   },
+  // mudança de uma reserva existente (pessoas, horário, nome, dia ou unidade): resumo sem as regras (já enviadas)
+  reserva_alterada: {
+    texto: 'Reserva alterada: unidade {unidade}, {quando}, {horario}, {pessoas}, em nome de {nome}.',
+    variaveis: ['unidade', 'quando', 'horario', 'pessoas', 'nome'],
+  },
   reserva_lotada: { texto: 'A unidade {unidade} está lotada {quando} para {pessoas}.', variaveis: ['unidade', 'quando', 'pessoas'] },
   reserva_lotada_outras_unidades: { texto: 'Nesse dia, temos vaga para {pessoas} em: {unidades}.', variaveis: ['pessoas', 'unidades'] },
   reserva_lotada_outro_dia: { texto: 'Se preferir, me diga outro dia.', variaveis: [] },
@@ -66,6 +71,16 @@ export const MODELOS_S1 = {
   reserva_qual_cancelar: {
     texto: 'Você tem estas reservas:\n{linhas}\nPara cancelar, mande por exemplo: "{exemplo}".',
     variaveis: ['linhas', 'exemplo'],
+  },
+  // "muda para domingo" com várias reservas ativas: não adivinha qual mudar
+  reserva_qual_mudar: {
+    texto: 'Você tem estas reservas:\n{linhas}\nPara mudar o dia ou a unidade, cancele a que não vale (por exemplo: "{exemplo}") e me diga a nova reserva.',
+    variaveis: ['linhas', 'exemplo'],
+  },
+  // mudar para unidade/dia onde o cliente já tem outra reserva (o banco recusa): nada muda
+  reserva_ja_existe: {
+    texto: 'Você já tem outra reserva nessa unidade e nesse dia, então não mudei nada. Se quiser, cancele uma delas e me diga o que mudar.',
+    variaveis: [],
   },
   // S3 — eventos (Etapa 04). Nunca "reservado"/"confirmado": a confirmação é sempre humana.
   evento_registrado: {

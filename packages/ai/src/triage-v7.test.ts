@@ -91,6 +91,13 @@ describe('prompt da v7', () => {
     // acima de 60 o número é extraído (o código manda para evento)
     expect(system).toContain('"somos 80" = 80')
   })
+  it('ensina a mudança da reserva (dia e unidade) com tema "mudanca"', () => {
+    expect(system).toMatch(/Em aviso_presenca, tipo registrar, "mudanca" quando o cliente quer MUDAR uma reserva que já fez/)
+    const exemplo = (frase: string) => system.split('\n').find((l) => l.startsWith(`"${frase}" →`))
+    expect(exemplo('muda minha reserva para domingo')).toContain('"servico":"aviso_presenca","tipo":"registrar","unidade":null,"data":"domingo","tema":"mudanca"')
+    expect(exemplo('troca minha reserva para a asa norte')).toContain('"unidade":"asa norte","data":null,"tema":"mudanca"')
+    expect(exemplo('na verdade vamos ser 6 no sábado')).toContain('"tema":"mudanca","pessoas":6')
+  })
   it('tudo que a v6 ensinava continua', () => {
     for (const t of TIPOS_S4) expect(system).toContain(`- ${t}:`)
     for (const t of TAGS_CARDAPIO) expect(system).toContain(t)

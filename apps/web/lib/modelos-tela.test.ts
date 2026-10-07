@@ -22,6 +22,10 @@ describe('modelos na tela', () => {
     }
     expect(previaModelo('reserva_confirmada', MODELOS_S1.reserva_confirmada.texto, unidade))
       .toMatch(/^Reserva feita: unidade Lago Sul, domingo \(11\/10\), às 20h, 4 pessoas, em nome de Ana Souza\.\n\nSua reserva está confirmada!/)
+    expect(previaModelo('reserva_alterada', MODELOS_S1.reserva_alterada.texto, unidade))
+      .toBe('Reserva alterada: unidade Lago Sul, domingo (11/10), às 20h, 4 pessoas, em nome de Ana Souza.')
+    expect(previaModelo('reserva_qual_mudar', MODELOS_S1.reserva_qual_mudar.texto, unidade))
+      .toContain('• Lago Sul — hoje, 2 pessoas')
     expect(previaModelo('reserva_lotada', MODELOS_S1.reserva_lotada.texto, unidade))
       .toBe('A unidade Lago Sul está lotada no domingo (11/10) para 4 pessoas.')
     expect(previaModelo('reserva_qual_cancelar', MODELOS_S1.reserva_qual_cancelar.texto, unidade))

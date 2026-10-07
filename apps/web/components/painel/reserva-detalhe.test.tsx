@@ -43,12 +43,12 @@ describe('ReservaDetalhe', () => {
     expect(screen.getByText('Cada consulta ao contato fica registrada.')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Ver contato' }))
     expect(revelarContatoReservaAction).toHaveBeenCalledWith(R1)
-    expect(await screen.findByText('+5561999998888')).toBeInTheDocument()
+    expect(await screen.findByText('+55 (61) 99999-8888')).toBeInTheDocument()
     expect(screen.getByText('Número informado pelo cliente')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Ligar' })).toHaveAttribute('href', 'tel:+5561999998888')
     expect(screen.getByRole('link', { name: 'Abrir no WhatsApp' })).toHaveAttribute('href', 'https://wa.me/5561999998888')
     await user.click(screen.getByRole('button', { name: 'Ocultar contato' }))
-    expect(screen.queryByText('+5561999998888')).not.toBeInTheDocument()
+    expect(screen.queryByText('+55 (61) 99999-8888')).not.toBeInTheDocument()
   })
 
   it('contato do WhatsApp diz de onde veio; sem contato, sem botão; falha vira aviso', async () => {
@@ -57,6 +57,8 @@ describe('ReservaDetalhe', () => {
     const { unmount } = render(<ReservaDetalhe {...base} reserva={reserva()} />)
     await user.click(screen.getByRole('button', { name: 'Ver contato' }))
     expect(await screen.findByText('WhatsApp de onde o cliente reservou')).toBeInTheDocument()
+    // o WhatsApp vem cru do banco ("5561…"): aparece com máscara
+    expect(screen.getByText('+55 (61) 98888-7777')).toBeInTheDocument()
     unmount()
     render(<ReservaDetalhe {...base} reserva={reserva({ id: crypto.randomUUID(), temContato: false })} />)
     expect(screen.queryByRole('button', { name: 'Ver contato' })).not.toBeInTheDocument()

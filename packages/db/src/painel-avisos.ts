@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import { agoraLocal, decryptPhone } from '@atd/core'
 import { ocupadasNoDia, registrarReserva, travarUnidade, vagasSeNaoCouber } from './avisos.ts'
 import type { Db } from './client.ts'
@@ -118,16 +118,13 @@ export function totalPrevistoHoje(db: Db, claims: JwtClaims, agora: Date = new D
 }
 
 /**
- * Cria a reserva pelo painel (dono/gerente da unidade), passando pela lotação do dia com a unidade travada (só reservas
- * reais contam: o painel cria `simulado = false`). Sem `horario`/`nome` grava como o aviso antigo (Task 5 exige ambos).
+ * Cria a reserva pelo painel (dono/gerente da unidade), com nome e horário, passando pela lotação do dia com a unidade
+ * travada (só reservas reais contam: o painel cria `simulado = false`).
  */
 export function criarAvisoPainel(
   db: Db,
   claims: JwtClaims,
-  p: {
-    unitId: string; data: string; pessoas: number; horarioAprox: string | null; nome: string | null
-    horario?: string | null; contatoCifrado?: string | null
-  },
+  p: { unitId: string; data: string; pessoas: number; horario: string; nome: string; contatoCifrado?: string | null },
 ): Promise<ResultadoReservaPainel<{ id: string }>> {
   return semPermissaoVira<ResultadoReservaPainel<{ id: string }>, never>(() => withUserContext(db, claims, async (tx): Promise<ResultadoReservaPainel<{ id: string }>> => {
     if (!(await exigirPapel(tx, GESTAO))) return falha('sem_permissao')
@@ -137,65 +134,27 @@ export function criarAvisoPainel(
     // unidade fora do acesso do usuário: a trava não acha a linha, porque o FOR UPDATE do authenticated passa pela policy
     // `gestao_write` de units (0016: restaurante, papel dono/gerente e acesso à unidade) ⇒ sem permissão, antes de
     // qualquer conta de lotação (a capacidade de outra unidade nunca vaza)
-    const unidade = await travarUnidade(tx, restaurantId, p.unitId)
-    if (!unidade) return falha('sem_permissao')
-    let id: string
-    if (p.horario && p.nome) {
-      const r = await registrarReserva(tx, {
-        restaurantId, unitId: p.unitId, customerId: null, data: p.data, pessoas: p.pessoas, horario: p.horario, nome: p.nome,
-        contatoCifrado: p.contatoCifrado ?? null, simulado: false, origem: 'painel', criadoPor: claims.sub,
-      })
-      if (!r.ok && r.motivo === 'lotado') return { ok: false, erro: 'lotado', vagas: r.vagas }
-      if (!r.ok) throw new Error(r.motivo) // sem cliente nem reservaId: só pode ser lotado
-      id = r.id
-    } else {
-      const ocupadas = await ocupadasNoDia(tx, { restaurantId, unitId: p.unitId, data: p.data, simulado: false })
-      const vagas = vagasSeNaoCouber(unidade.capacidade, ocupadas, p.pessoas)
-      if (vagas !== null) return { ok: false, erro: 'lotado', vagas }
-      // a policy de insert recusa (42501) unidade fora do acesso do usuário. SQL explícito: authenticated só tem
-      // INSERT nas colunas do formulário (0022/0046) e o insert do Drizzle lista todas as colunas da tabela, com DEFAULT
-      const [a] = await tx.execute<{ id: string }>(sql`
-        insert into public.attendance_notices (restaurant_id, unit_id, data, pessoas, horario_aprox, horario, nome, contato_cifrado, origem, criado_por)
-        values (${restaurantId}, ${p.unitId}, ${p.data}, ${p.pessoas}, ${p.horarioAprox}, ${p.horario ?? null}, ${p.nome},
-                ${p.contatoCifrado ?? null}, 'painel', ${claims.sub})
-        returning id`)
-      id = a!.id
-    }
-    await registrarAuditoria(tx, claims, {
-      restaurantId, acao: 'aviso.criado_painel', entidade: 'attendance_notice', entidadeId: id,
-      diff: { unitId: p.unitId, data: p.data, pessoas: p.pessoas, horarioAprox: p.horarioAprox, horario: p.horario ?? null },
+    if (!(await travarUnidade(tx, restaurantId, p.unitId))) return falha('sem_permissao')
+    const r = await registrarReserva(tx, {
+      restaurantId, unitId: p.unitId, customerId: null, data: p.data, pessoas: p.pessoas, horario: p.horario, nome: p.nome,
+      contatoCifrado: p.contatoCifrado ?? null, simulado: false, origem: 'painel', criadoPor: claims.sub,
     })
-    return ok({ id })
-  }))
-}
-
-/** Cancela aviso ativo de hoje em diante (fuso do restaurante); dia passado é só consulta. */
-export function cancelarAvisoPainel(db: Db, claims: JwtClaims, avisoId: string, agora: Date = new Date()): Promise<ResultadoPainel> {
-  return semPermissaoVira(() => withUserContext(db, claims, async (tx) => {
-    // UPDATE que a policy filtra não dá erro: o papel é conferido antes
-    if (!(await exigirPapel(tx, GESTAO))) return falha('sem_permissao')
-    const [rest] = await tx.select({ tz: restaurants.timezone }).from(restaurants)
-    const hoje = agoraLocal(agora, rest?.tz ?? FUSO_PADRAO).data
-    const r = await tx
-      .update(attendanceNotices)
-      .set({ status: 'cancelada', updatedAt: sql`now()` })
-      .where(and(eq(attendanceNotices.id, avisoId), eq(attendanceNotices.status, 'confirmada'), gte(attendanceNotices.data, hoje)))
-      .returning({ restaurantId: attendanceNotices.restaurantId, unitId: attendanceNotices.unitId, data: attendanceNotices.data })
-    const a = r[0]
-    if (!a) return falha('nao_encontrada')
+    if (!r.ok && r.motivo === 'lotado') return { ok: false, erro: 'lotado', vagas: r.vagas }
+    if (!r.ok) throw new Error(r.motivo) // sem cliente nem reservaId: só pode ser lotado
     await registrarAuditoria(tx, claims, {
-      restaurantId: a.restaurantId, acao: 'aviso.cancelado_painel', entidade: 'attendance_notice', entidadeId: avisoId,
-      diff: { unitId: a.unitId, data: a.data },
+      restaurantId, acao: 'aviso.criado_painel', entidade: 'attendance_notice', entidadeId: r.id,
+      diff: { unitId: p.unitId, data: p.data, pessoas: p.pessoas, horario: p.horario },
     })
-    return ok(null)
+    return ok({ id: r.id })
   }))
 }
 
 /**
  * Muda o status da reserva (dono/gerente da unidade, auditado `reserva.status` sem PII). `cancelada` e `nao_veio` liberam a
  * vaga na hora; reconfirmar passa pela lotação com a unidade travada (só reservas com o mesmo `simulado`). Confirmar e
- * cancelar valem de hoje em diante (fuso do restaurante); "não veio" só no dia ou depois. Simulada só com o modo
- * demonstração ligado.
+ * cancelar valem de hoje em diante (fuso do restaurante); "não veio" só no dia ou depois, e um "não veio" marcado por
+ * engano volta a Confirmada mesmo num dia passado (pela lotação). Simulada só com o modo demonstração ligado.
+ * Travas na mesma ordem do worker: a unidade antes da linha da reserva (ordem oposta faria deadlock).
  */
 export function mudarStatusReserva(
   db: Db,
@@ -208,24 +167,39 @@ export function mudarStatusReserva(
     () => withUserContext(db, claims, async (tx): Promise<ResultadoReservaPainel> => {
       // UPDATE que a policy filtra não dá erro: o papel é conferido antes
       if (!(await exigirPapel(tx, GESTAO))) return falha('sem_permissao')
-      const [atual] = await tx
-        .select({
-          restaurantId: attendanceNotices.restaurantId, unitId: attendanceNotices.unitId, data: attendanceNotices.data,
-          pessoas: attendanceNotices.pessoas, status: attendanceNotices.status, simulado: attendanceNotices.simulado,
-        })
-        .from(attendanceNotices)
-        .where(and(eq(attendanceNotices.id, reservaId), filtroSimulacao(attendanceNotices.simulado, await lerModoDemonstracao(tx))))
-        .for('update') // RLS de update: só a unidade de quem pede
+      const modo = await lerModoDemonstracao(tx)
+      const ler = (travar: boolean) => {
+        const q = tx
+          .select({
+            restaurantId: attendanceNotices.restaurantId, unitId: attendanceNotices.unitId, data: attendanceNotices.data,
+            pessoas: attendanceNotices.pessoas, status: attendanceNotices.status, simulado: attendanceNotices.simulado,
+          })
+          .from(attendanceNotices)
+          .where(and(eq(attendanceNotices.id, reservaId), filtroSimulacao(attendanceNotices.simulado, modo)))
+        return travar ? q.for('update') : q // RLS de update: só a unidade de quem pede
+      }
+      // reconfirmar: a unidade é travada antes da reserva (a unidade vem de uma leitura sem trava)
+      let unidade: { unitId: string; capacidade: number | null } | null = null
+      if (status === 'confirmada') {
+        const [antes] = await ler(false)
+        if (!antes) return falha('nao_encontrada')
+        const t = await travarUnidade(tx, antes.restaurantId, antes.unitId)
+        if (!t) return falha('nao_encontrada')
+        unidade = { unitId: antes.unitId, capacidade: t.capacidade }
+      }
+      const [atual] = await ler(true)
       if (!atual) return falha('nao_encontrada')
       if (atual.status === status) return ok(null)
       const [rest] = await tx.select({ tz: restaurants.timezone }).from(restaurants)
       const hoje = agoraLocal(agora, rest?.tz ?? FUSO_PADRAO).data
-      if (status === 'nao_veio' ? atual.data > hoje : atual.data < hoje) return { ok: false, erro: 'transicao_invalida' }
+      const desfazNaoVeio = status === 'confirmada' && atual.status === 'nao_veio'
+      if (!desfazNaoVeio && (status === 'nao_veio' ? atual.data > hoje : atual.data < hoje)) return { ok: false, erro: 'transicao_invalida' }
       if (status === 'confirmada') {
-        const unidade = await travarUnidade(tx, atual.restaurantId, atual.unitId)
-        if (!unidade) return falha('nao_encontrada')
+        // a reserva mudou de unidade entre as leituras (o worker a moveu): trava a nova também
+        const t = unidade?.unitId === atual.unitId ? unidade : await travarUnidade(tx, atual.restaurantId, atual.unitId)
+        if (!t) return falha('nao_encontrada')
         const ocupadas = await ocupadasNoDia(tx, { ...atual, excluirId: reservaId })
-        const vagas = vagasSeNaoCouber(unidade.capacidade, ocupadas, atual.pessoas)
+        const vagas = vagasSeNaoCouber(t.capacidade, ocupadas, atual.pessoas)
         if (vagas !== null) return { ok: false, erro: 'lotado', vagas }
       }
       await tx.update(attendanceNotices).set({ status, updatedAt: sql`now()` }).where(eq(attendanceNotices.id, reservaId))

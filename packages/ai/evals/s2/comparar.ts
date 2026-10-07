@@ -1,5 +1,5 @@
 import {
-  agoraLocal, encontrarUnidade, feriadosNacionais, normalizarHorario, resolverData,
+  agoraLocal, ditaComoMudanca, encontrarUnidade, feriadosNacionais, normalizarHorario, resolverData,
   type ContextoS1, type ItemExtraido,
 } from '@atd/core'
 import { chaveItem, horasInventadas } from '../s1/comparar.ts'
@@ -44,11 +44,11 @@ type ItemComReserva = ItemExtraido & { nome?: string | null; contato_ok?: boolea
 const nomeChave = (n: string | null | undefined) =>
   (n ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim() || '-'
 
-/** Chave da triage-v7: a do S2 mais, na reserva, o nome (sem acento nem caixa) e a resposta do contato. */
+/** Chave da triage-v7: a do S2 mais, na reserva, o nome (sem acento nem caixa), a resposta do contato e se é mudança. */
 export function chaveItemReserva(i: ItemComReserva, ctx: ContextoS1, agora: Date): string {
   const k = chaveItemS2(i, ctx, agora)
   if (i.servico !== 'aviso_presenca' || i.tipo === 'cancelar') return k
-  return `${k}|${nomeChave(i.nome)}|${i.contato_ok ?? '-'}`
+  return `${k}|${nomeChave(i.nome)}|${i.contato_ok ?? '-'}|${ditaComoMudanca(i.tema) ? 'muda' : 'nova'}`
 }
 
 export function extracaoCorretaReserva(esperado: readonly ItemComReserva[], obtido: readonly ItemComReserva[], ctx: ContextoS1, agora: Date): boolean {

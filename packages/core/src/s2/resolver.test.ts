@@ -132,7 +132,8 @@ describe('resolverS2 — reservar', () => {
   it('reserva da mesma unidade e dia: atualiza; outro dia: reserva nova', () => {
     const avisos: AvisoAtivoS2[] = [{ id: 'a1', unitId: 'u-asa-sul', data: '2026-10-10', pessoas: 2, horarioAprox: null, horario: '20:00', nome: 'Ana' }]
     const r = s2([reg({ unidade: 'asa sul', data: 'sábado', pessoas: 4 })], CONTEXTO, SEG_14H, avisos)
-    expect(r.acoes).toEqual([registrar('u-asa-sul', '2026-10-10', 4, '20:00', FEITA_AS_SAB, { contato: 'manter', atualiza: true, reservaId: 'a1' })])
+    const alterada = 'Reserva alterada: unidade Asa Sul, sábado (10/10), às 20h, 4 pessoas, em nome de Ana.'
+    expect(r.acoes).toEqual([registrar('u-asa-sul', '2026-10-10', 4, '20:00', alterada, { contato: 'manter', atualiza: true, reservaId: 'a1' })])
     const outro = s2([res({ unidade: 'asa sul', data: 'domingo', pessoas: 4, horario: '13h' })], CONTEXTO, SEG_14H, avisos)
     expect(outro.acoes[0]).toMatchObject({ atualiza: false, data: '2026-10-11' })
   })

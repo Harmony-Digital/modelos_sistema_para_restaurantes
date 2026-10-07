@@ -170,7 +170,7 @@ const itemV5Schema = z.object({
   tipo: z.enum([...TIPOS_S1, ...TIPOS_S2, ...TIPOS_S3, ...TIPOS_S4]).nullable(),
   unidade: cortar(120),
   data: cortar(60),
-  tema: cortar(120), // em evento, "mudanca" = o cliente quer mudar um pedido (o core reconhece com ditaComoMudanca)
+  tema: cortar(120), // em evento (e na reserva da v7), "mudanca" = o cliente quer mudar o que já pediu (o core reconhece com ditaComoMudanca)
   pessoas: contagem(1000),
   horario: cortar(40),
   convidados: contagem(10000),

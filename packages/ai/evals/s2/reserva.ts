@@ -8,14 +8,14 @@ import type { ItemTriagemV7, PendenteTriagem } from '../../src/triage.ts'
  */
 export type ItemV7 = ItemTriagemV7
 export type RotuloReserva =
-  | 'cabe' | 'lotado' | 'mesa' | 'contato_sem_pergunta' | 'intencao' | 'mudar' | 'nome' | 'contato_sim' | 'contato_nao' | 'numero_novo' | 'cancelar' | 'mais_de_60' | 'nao_e_reserva'
+  | 'cabe' | 'lotado' | 'mesa' | 'contato_sem_pergunta' | 'intencao' | 'mudar' | 'mudar_lugar' | 'outra_reserva' | 'nome' | 'contato_sim' | 'contato_nao' | 'numero_novo' | 'cancelar' | 'mais_de_60' | 'nao_e_reserva'
 export type CasoReserva = { id: string; rotulo: RotuloReserva; mensagem: string; agora: string; pendente?: PendenteTriagem; itens: ItemV7[] }
 
 const nulos = {
   unidade: null, data: null, tema: null, pessoas: null, horario: null, nome: null, contato_ok: null,
   convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null,
 }
-type Extra = Partial<Pick<ItemV7, 'unidade' | 'data' | 'pessoas' | 'horario' | 'nome' | 'contato_ok'>>
+type Extra = Partial<Pick<ItemV7, 'unidade' | 'data' | 'tema' | 'pessoas' | 'horario' | 'nome' | 'contato_ok'>>
 const reg = (extra: Extra = {}): ItemV7 => ({ servico: 'aviso_presenca', tipo: 'registrar', ...nulos, ...extra })
 const can = (extra: Pick<Extra, 'unidade' | 'data'> = {}): ItemV7 => ({ servico: 'aviso_presenca', tipo: 'cancelar', ...nulos, ...extra })
 const info = (tema: string, data: string | null = null): ItemV7 => ({ servico: 'horario_unidades', tipo: 'info', ...nulos, data, tema })
@@ -69,9 +69,15 @@ export const CASOS_RESERVA: CasoReserva[] = [
     { pergunta: PERGUNTA_CONTATO, conhecido: conhecido({ nome: 'Ana' }) }),
   c('rv17', 'numero_novo', 'melhor no +55 61 99999-8888 que é do meu marido', [reg({ ...andamento, nome: 'Ana', contato_ok: false })],
     { pergunta: PERGUNTA_CONTATO, conhecido: conhecido({ nome: 'Ana' }) }),
-  // ---- mudar uma reserva que já existe (o código atualiza)
-  c('rv18', 'mudar', 'na verdade vamos ser 6 no sábado', [reg({ data: 'sábado', pessoas: 6 })]),
-  c('rv19', 'mudar', 'muda minha reserva de sábado para as 21h', [reg({ data: 'sábado', horario: '21h' })]),
+  // ---- mudar uma reserva que já existe (tema "mudanca": o código muda a reserva, sem criar outra)
+  c('rv18', 'mudar', 'na verdade vamos ser 6 no sábado', [reg({ data: 'sábado', pessoas: 6, tema: 'mudanca' })]),
+  c('rv19', 'mudar', 'muda minha reserva de sábado para as 21h', [reg({ data: 'sábado', horario: '21h', tema: 'mudanca' })]),
+  // ---- mudar o dia ou a unidade: a data e a unidade são as NOVAS
+  c('rv30', 'mudar_lugar', 'muda minha reserva para domingo', [reg({ data: 'domingo', tema: 'mudanca' })]),
+  c('rv31', 'mudar_lugar', 'troca minha reserva para a asa norte', [reg({ unidade: 'asa norte', tema: 'mudanca' })]),
+  c('rv32', 'mudar_lugar', 'dá pra passar a reserva de sábado para domingo?', [reg({ data: 'domingo', tema: 'mudanca' })]),
+  // ---- outra reserva de quem já tem uma não é mudança
+  c('rv33', 'outra_reserva', 'domingo também vou na asa sul, em 3, às 13h', [reg({ unidade: 'asa sul', data: 'domingo', pessoas: 3, horario: '13h' })]),
   // ---- cancelar
   c('rv20', 'cancelar', 'cancela minha reserva de sábado', [can({ data: 'sábado' })]),
   c('rv21', 'cancelar', 'não vou mais, pode cancelar', [can()]),

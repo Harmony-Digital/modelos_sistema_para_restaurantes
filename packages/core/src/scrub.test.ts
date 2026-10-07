@@ -62,6 +62,17 @@ describe('valores de linha nos erros do Postgres (nome do cliente no detail)', (
       .toBe('Key (customer_id, unit_id, data)=([redigido]) already exists.')
     expect(stripRowValues('sem linha')).toBe('sem linha')
   })
+  it('parênteses desbalanceados no nome ("Carlos :)", "Ana (") não deixam valor para trás', () => {
+    for (const nome of ['Carlos :)', 'Ana (', 'Bia ((x', 'Caio ) já', 'Duda ")']) {
+      const linha = `Failing row contains (b0f2, f2c4, ${nome} Souza, 2026-10-05, 61, (x), 20:00:00).\nproxima linha`
+      expect(stripRowValues(linha), nome).toBe('Failing row contains ([redigido]).\nproxima linha')
+      const chave = `Key (customer_id, nome)=(a, ${nome} Souza) already exists.\noutra`
+      expect(stripRowValues(chave), nome).toBe('Key (customer_id, nome)=([redigido]) already exists.\noutra')
+      expect(stripRowValues(`Key (nome)=(${nome} Souza) is not present in table "units".`))
+        .toBe('Key (nome)=([redigido]) is not present in table "units".')
+      expect(stripRowValues(`Key (nome)=(${nome} Souza)`)).toBe('Key (nome)=([redigido])')
+    }
+  })
   it('scrubEvent tira a linha da mensagem e o detail dos contexts', () => {
     const ev = scrubEvent({
       exception: { values: [{ value: `erro\n${detail}` }] },

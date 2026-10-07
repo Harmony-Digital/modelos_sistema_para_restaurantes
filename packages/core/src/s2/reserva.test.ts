@@ -28,6 +28,7 @@ const respostaNumero = (valor: string | null, tentativas: number): Partial<Conte
 const completo = (extra: Partial<ItemExtraido> = {}) =>
   reg({ unidade: 'asa sul', data: 'sábado', pessoas: 4, horario: '20h', nome: 'Ana Souza', contato_ok: true, ...extra })
 const CONFIRMADA_AS = `Reserva feita: unidade Asa Sul, sábado (10/10), às 20h, 4 pessoas, em nome de Ana Souza.\n\n${REGRAS}`
+const ALTERADA_AS = 'Reserva alterada: unidade Asa Sul, sábado (10/10), às 20h, 4 pessoas, em nome de Ana Souza.'
 const PERGUNTA_DATA = 'Para qual dia é a reserva? Consigo reservar de hoje até 04/11.'
 const LOTADA_AS = 'A unidade Asa Sul está lotada no sábado (10/10) para 4 pessoas.'
 const OUTRO_DIA = 'Se preferir, me diga outro dia.'
@@ -319,7 +320,7 @@ describe('reserva — mudança', () => {
   it('diminuir nunca bloqueia, mesmo com a unidade acima da lotação', () => {
     const r = resolverS2([reg({ pessoas: 3 })], CONTEXTO, SEG_14H, [ativa], undefined, rc({ [SAB]: { 'u-asa-sul': { ocupadas: 160, capacidade: 150 } } }))
     expect(r.acoes).toEqual([registrar({
-      pessoas: 3, contato: 'manter', atualiza: true, reservaId: 'r1', texto: CONFIRMADA_AS.replace('4 pessoas', '3 pessoas'),
+      pessoas: 3, contato: 'manter', atualiza: true, reservaId: 'r1', texto: ALTERADA_AS.replace('4 pessoas', '3 pessoas'),
     })])
   })
 
@@ -327,7 +328,7 @@ describe('reserva — mudança', () => {
     const vagas = rc({ [SAB]: { 'u-asa-sul': { ocupadas: 148, capacidade: 150 } } }) // 4 delas são da própria
     const r = resolverS2([reg({ unidade: 'asa sul', data: 'sábado', pessoas: 6 })], CONTEXTO, SEG_14H, [ativa], undefined, vagas)
     expect(r.acoes).toEqual([registrar({
-      pessoas: 6, contato: 'manter', atualiza: true, reservaId: 'r1', texto: CONFIRMADA_AS.replace('4 pessoas', '6 pessoas'),
+      pessoas: 6, contato: 'manter', atualiza: true, reservaId: 'r1', texto: ALTERADA_AS.replace('4 pessoas', '6 pessoas'),
     })])
     const lotado = resolverS2([reg({ pessoas: 7 })], CONTEXTO, SEG_14H, [ativa], undefined, vagas)
     expect(lotado.acoes).toEqual([])
@@ -337,7 +338,7 @@ describe('reserva — mudança', () => {
   it('mudar o horário mantém o resto', () => {
     const r = resolverS2([reg({ horario: '21h' })], CONTEXTO, SEG_14H, [ativa], undefined, rc())
     expect(r.acoes).toEqual([registrar({
-      horario: '21:00', contato: 'manter', atualiza: true, reservaId: 'r1', texto: CONFIRMADA_AS.replace('às 20h', 'às 21h'),
+      horario: '21:00', contato: 'manter', atualiza: true, reservaId: 'r1', texto: ALTERADA_AS.replace('às 20h', 'às 21h'),
     })])
   })
 
@@ -355,7 +356,7 @@ describe('reserva — mudança', () => {
   it('nome novo sem unidade nem dia também é mudança da única reserva', () => {
     const r = resolverS2([reg({ nome: 'Bia Lima' })], CONTEXTO, SEG_14H, [ativa], undefined, rc())
     expect(r.acoes).toEqual([registrar({
-      nome: 'Bia Lima', contato: 'manter', atualiza: true, reservaId: 'r1', texto: CONFIRMADA_AS.replace('Ana Souza', 'Bia Lima'),
+      nome: 'Bia Lima', contato: 'manter', atualiza: true, reservaId: 'r1', texto: ALTERADA_AS.replace('Ana Souza', 'Bia Lima'),
     })])
   })
 
@@ -363,6 +364,98 @@ describe('reserva — mudança', () => {
     const antigo = reservaAtiva({ horario: null, nome: null, horarioAprox: 'à noite' })
     const r = resolverS2([reg({ pessoas: 5 })], CONTEXTO, SEG_14H, [antigo], undefined, rc())
     expect(r.perguntarReserva).toMatchObject({ campo: 'horario', item: { pessoas: 5, data: SAB, unidade: 'Asa Sul' } })
+  })
+})
+
+describe('reserva — mudar o dia ou a unidade (tema "mudanca" da triagem)', () => {
+  const ativa = reservaAtiva()
+  const muda = (extra: Partial<ItemExtraido>) => reg({ tema: 'mudanca', ...extra })
+  const SEX = '2026-10-09'
+
+  it('"muda minha reserva para sexta": move a reserva (mesmo id), sem criar outra e sem repetir as regras', () => {
+    const r = resolverS2([muda({ data: 'sexta' })], CONTEXTO, SEG_14H, [ativa], undefined, rc())
+    const texto = 'Reserva alterada: unidade Asa Sul, sexta-feira (09/10), às 20h, 4 pessoas, em nome de Ana Souza.'
+    expect(r.acoes).toEqual([registrar({ data: SEX, contato: 'manter', atualiza: true, reservaId: 'r1', texto })])
+    expect(r.texto).toBe(texto)
+    expect(r.texto).not.toContain(REGRAS)
+    expect(r.perguntarReserva).toBeNull()
+  })
+
+  it('"troca para a Asa Norte": mesma data, unidade nova', () => {
+    const r = resolverS2([muda({ unidade: 'asa norte' })], CONTEXTO, SEG_14H, [ativa], undefined, rc())
+    expect(r.acoes).toEqual([registrar({
+      unitId: 'u-asa-norte', contato: 'manter', atualiza: true, reservaId: 'r1',
+      texto: ALTERADA_AS.replace('Asa Sul', 'Asa Norte'),
+    })])
+  })
+
+  it('lotação do destino: a própria reserva não desconta (é outra unidade/dia) e nada é gravado se não couber', () => {
+    // destino com 3 vagas e a reserva tem 4: lotado (a vaga atual da própria não conta no destino)
+    const cheia = rc({ [SAB]: { 'u-asa-norte': { ocupadas: 97, capacidade: 100 } } })
+    const r = resolverS2([muda({ unidade: 'asa norte' })], CONTEXTO, SEG_14H, [ativa], undefined, cheia)
+    expect(r.acoes).toEqual([])
+    expect(r.texto).toContain('A unidade Asa Norte está lotada no sábado (10/10) para 4 pessoas.')
+    // a reserva guardada continua sendo mudança: "e na Lago Sul?" move a mesma reserva
+    const p = r.perguntarReserva!
+    expect(p).toMatchObject({ campo: 'lotado', item: { tema: 'mudanca', unidade: 'Asa Norte', pessoas: 4 } })
+    const c = resolverS2([continuarReserva(p, reg({ unidade: 'lago sul' }))], CONTEXTO, SEG_14H, [ativa], undefined, rc({}, { pergunta: p }))
+    expect(c.acoes).toEqual([])
+    // Lago Sul só abre no almoço: pergunta o horário, ainda como mudança
+    expect(c.perguntarReserva).toMatchObject({ campo: 'horario', item: { tema: 'mudanca', unidade: 'Lago Sul' } })
+    const h = resolverS2([continuarReserva(c.perguntarReserva!, reg({ horario: '13h' }))], CONTEXTO, SEG_14H, [ativa], undefined,
+      rc({}, { pergunta: c.perguntarReserva! }))
+    expect(h.acoes).toEqual([registrar({
+      unitId: 'u-lago-sul', horario: '13:00', contato: 'manter', atualiza: true, reservaId: 'r1',
+      texto: ALTERADA_AS.replace('Asa Sul', 'Lago Sul').replace('às 20h', 'às 13h'),
+    })])
+  })
+
+  it('cabe no destino mesmo com a unidade atual cheia', () => {
+    const vagas = rc({ [SEX]: { 'u-asa-sul': { ocupadas: 96, capacidade: 100 } }, [SAB]: { 'u-asa-sul': { ocupadas: 200, capacidade: 100 } } })
+    const r = resolverS2([muda({ data: 'sexta' })], CONTEXTO, SEG_14H, [ativa], undefined, vagas)
+    expect(r.acoes).toMatchObject([{ data: SEX, reservaId: 'r1' }])
+  })
+
+  it('horário herdado fora do dia novo: pergunta o horário (domingo a Asa Sul fecha às 16h)', () => {
+    const r = resolverS2([muda({ data: 'domingo' })], CONTEXTO, SEG_14H, [ativa], undefined, rc())
+    expect(r.acoes).toEqual([])
+    expect(r.perguntarReserva).toMatchObject({ campo: 'horario', item: { tema: 'mudanca', data: '2026-10-11' } })
+  })
+
+  it('horário herdado que já passou hoje não vale no dia novo', () => {
+    const r = resolverS2([muda({ data: 'hoje', unidade: 'asa norte' })], CONTEXTO, new Date('2026-10-05T21:30:00-03:00'), [ativa], undefined, rc())
+    expect(r.acoes).toEqual([])
+    expect(r.perguntarReserva).toMatchObject({ campo: 'horario' })
+  })
+
+  it('"muda para 6 no sábado" com a reserva no sábado: só muda as pessoas', () => {
+    const r = resolverS2([muda({ data: 'sábado', pessoas: 6 })], CONTEXTO, SEG_14H, [ativa], undefined, rc())
+    expect(r.acoes).toEqual([registrar({
+      pessoas: 6, contato: 'manter', atualiza: true, reservaId: 'r1', texto: ALTERADA_AS.replace('4 pessoas', '6 pessoas'),
+    })])
+  })
+
+  it('várias reservas: não adivinha qual mudar; lista e explica (nada é gravado)', () => {
+    const duas = [ativa, reservaAtiva({ id: 'r2', unitId: 'u-asa-norte', data: '2026-10-05', pessoas: 2 })]
+    const r = resolverS2([muda({ data: 'domingo' })], CONTEXTO, SEG_14H, duas, undefined, rc())
+    expect(r.acoes).toEqual([])
+    expect(r.texto).toBe('Você tem estas reservas:\n• Asa Norte — hoje, 2 pessoas\n• Asa Sul — sábado (10/10), 4 pessoas\n'
+      + 'Para mudar o dia ou a unidade, cancele a que não vale (por exemplo: "cancela a reserva de hoje na unidade Asa Norte") e me diga a nova reserva.')
+    expect([r.validos, r.respondidos]).toEqual([1, 0])
+    // com o lugar de uma delas e algo a mudar, é a mudança dessa
+    const s = resolverS2([muda({ unidade: 'asa sul', data: 'sábado', horario: '21h' })], CONTEXTO, SEG_14H, duas, undefined, rc())
+    expect(s.acoes).toMatchObject([{ reservaId: 'r1', horario: '21:00', atualiza: true }])
+  })
+
+  it('sem "mudanca", outro dia continua sendo outra reserva', () => {
+    const r = resolverS2([reg({ data: 'sexta', contato_ok: true })], CONTEXTO, SEG_14H, [ativa], undefined, rc())
+    expect(r.acoes).toEqual([])
+    expect(r.perguntarReserva).toMatchObject({ campo: 'unidade' })
+  })
+
+  it('diasDaReserva lê o dia da reserva que muda de unidade', () => {
+    expect(diasDaReserva([muda({ unidade: 'asa norte' })], CONTEXTO, SEG_14H, [ativa])).toEqual([SAB])
+    expect(diasDaReserva([muda({ data: 'sexta' })], CONTEXTO, SEG_14H, [ativa])).toEqual([SEX])
   })
 })
 

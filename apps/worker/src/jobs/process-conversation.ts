@@ -2,7 +2,7 @@ import { and, asc, count, eq, gt, gte, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import {
   agoraLocal, capturarTelefone, continuarReserva, decryptPhone, diasDaReserva, encontrarUnidade, encryptPhone, escolhaDeUnidade,
-  ESPACO_QUALQUER, itemDoPedidoNaUnidade, MAX_NOME_RESERVA, normalizarHorario, normalizeText, normalizeWaId, lerPessoas,
+  ESPACO_QUALQUER, itemDoPedidoNaUnidade, MAX_NOME_RESERVA, mesmoTelefone, normalizarHorario, normalizeText, normalizeWaId, lerPessoas,
   normalizarTipoEvento, prefilter, redactPii, temAgradecimentoOuDespedida, renderModelo, renderReply, resolverAtendimento, resolverS4, retomarPerguntaEvento,
   rotuloTipoEvento, SERVICOS, TAGS_CARDAPIO, TIPOS_S1, TIPOS_S2, TIPOS_S3, TIPOS_S4, unidadesOrdenadas, validarModelo,
   type AcaoS2, type AcaoS3, type AcaoS4, type ChaveModelo, type ContextoAtendimentoS4, type ContextoReserva, type ContextoS1,
@@ -361,7 +361,7 @@ function lerPendente(v: unknown): Pendente | null {
 }
 
 /** Contexto do S1 + avisos, espaços de evento e pedidos do cliente de hoje (relógio da conversa) em diante. */
-async function carregarAtendimento(deps: ProcessDeps, ctx: Ctx, now: Date) {
+async function lerAtendimento(deps: ProcessDeps, ctx: Ctx, now: Date) {
   const s1 = await carregarContextoS1(deps.db, ctx.restaurant.id, now)
   const doCliente = { restaurantId: ctx.restaurant.id, customerId: ctx.customer.id, aPartirDe: agoraLocal(now, s1.timezone).data }
   const avisos = await avisosAtivosDoCliente(deps.db, doCliente)
@@ -370,7 +370,21 @@ async function carregarAtendimento(deps: ProcessDeps, ctx: Ctx, now: Date) {
   return { s1, avisos, s3: { espacos, pedidos } }
 }
 
-type Atendimento = Awaited<ReturnType<typeof carregarAtendimento>>
+type Atendimento = Awaited<ReturnType<typeof lerAtendimento>>
+
+/**
+ * Uma leitura por processamento (`ctx` é carregado a cada `processConversation`): a resposta curta que não serviu e cai
+ * na triagem reaproveita o que já leu. Nada é gravado entre as duas (a decisão só grava no commit).
+ */
+const atendimentoDoCtx = new WeakMap<Ctx, Promise<Atendimento>>()
+function carregarAtendimento(deps: ProcessDeps, ctx: Ctx, now: Date): Promise<Atendimento> {
+  let a = atendimentoDoCtx.get(ctx)
+  if (!a) {
+    a = lerAtendimento(deps, ctx, now)
+    atendimentoDoCtx.set(ctx, a)
+  }
+  return a
+}
 
 type DadosS4 = {
   contexto: ContextoAtendimentoS4
@@ -443,7 +457,8 @@ function midiasS4(acoes: readonly AcaoS4[], dados: DadosS4 | undefined, s1: Cont
 /**
  * Ação da reserva como o worker a executa no commit: o contato já cifrado (`undefined` = mantém o da reserva; null = o
  * próprio WhatsApp) — o número em claro não passa daqui. `seLotado`: pendente gravado quando o banco recusa por
- * lotação (corrida), para "e no domingo?" continuar; `textoSeIndisponivel`: a reserva mudou de estado no meio.
+ * lotação (corrida), para "e no domingo?" continuar; `textoSeIndisponivel`: a reserva mudou de estado no meio;
+ * `textoSeJaExiste`: a mudança de dia/unidade iria para onde o cliente já tem outra reserva.
  */
 type AcaoReserva =
   | Exclude<AcaoS2, { tipo: 'registrar' }>
@@ -451,6 +466,7 @@ type AcaoReserva =
     contatoCifrado: string | null | undefined
     seLotado: ReservaGravada
     textoSeIndisponivel: string
+    textoSeJaExiste: string
   })
 
 /** O que a mensagem responde da reserva pendente: a pergunta e o número capturado do texto bruto. */
@@ -506,12 +522,16 @@ function acaoDoWorker(a: AcaoS2, phoneKey: Buffer, s1: ContextoS1, now: Date): A
   const { contato, ...resto } = a
   const contatoCifrado = contato === 'manter' ? undefined : contato === 'whatsapp' ? null : encryptPhone(contato.numero, phoneKey)
   const unidade = s1.unidades.find((u) => u.id === a.unitId)?.nome ?? null
-  const item = { ...ITEM_RESERVA, unidade, data: a.data, pessoas: a.pessoas, horario: a.horario, nome: a.nome }
+  // mudança (reservaId): a continuação do lotado segue mudando a mesma reserva
+  const item = { ...ITEM_RESERVA, unidade, data: a.data, pessoas: a.pessoas, horario: a.horario, nome: a.nome, tema: a.reservaId ? 'mudanca' : null }
   const seLotado: ReservaGravada = {
     tipo: 'reserva', campo: 'lotado', pergunta: '', perguntaEnviada: a.textoSeLotado.slice(0, MAX_PERGUNTA_ENVIADA), item, unitId: null,
     tentativasNumero: 0, expiraEm: new Date(now.getTime() + PENDENTE_MIN * 60_000).toISOString(),
   }
-  return { ...resto, contatoCifrado, seLotado, textoSeIndisponivel: renderModelo('reserva_indisponivel', {}, s1.modelos) }
+  return {
+    ...resto, contatoCifrado, seLotado, textoSeIndisponivel: renderModelo('reserva_indisponivel', {}, s1.modelos),
+    textoSeJaExiste: renderModelo('reserva_ja_existe', {}, s1.modelos),
+  }
 }
 
 /**
@@ -696,7 +716,7 @@ function contatoDaResposta(p: PendenteReserva, textoBruto: string, proprio: () =
   const valor = capturarTelefone(textoBruto)
   const tentativas = p.campo === 'contato_numero' ? p.tentativasNumero : 0
   // o telefone do cliente só é decifrado aqui, com a pergunta de contato e um número na resposta
-  if (valor && valor === proprio()) return { pergunta: { ...pergunta, campo: 'contato' }, contatoOk: true, capturou: true }
+  if (valor && mesmoTelefone(valor, proprio())) return { pergunta: { ...pergunta, campo: 'contato' }, contatoOk: true, capturou: true }
   if (valor) {
     return {
       pergunta: { ...pergunta, campo: 'contato_numero', item: { ...p.item, contato_ok: false } },
@@ -1094,8 +1114,11 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision, now: Date): P
           // corrida nas últimas vagas: a resposta vira a de lotado e a reserva fica guardada para a continuação
           saidas = trocarTrecho(saidas, a.texto, a.textoSeLotado)
           if (!pendente && !handoff) pendente = a.seLotado
+        } else if (r.motivo === 'ja_existe') {
+          // a mudança de dia/unidade iria para onde o cliente já tem outra reserva: nada muda
+          saidas = trocarTrecho(saidas, a.texto, a.textoSeJaExiste)
         } else {
-          // a reserva mudada foi cancelada (ou "não veio") no meio, ou o destino já tem outra: nada muda
+          // a reserva mudada foi cancelada (ou "não veio") no meio: nada muda
           saidas = trocarTrecho(saidas, a.texto, a.textoSeIndisponivel)
         }
       } else {

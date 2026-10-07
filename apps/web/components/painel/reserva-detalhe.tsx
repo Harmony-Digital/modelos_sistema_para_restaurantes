@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Numero } from '@/components/ui/numero'
 import { chamarAcao } from '@/lib/action-result'
 import { acoesDaReserva, ehHorarioHHMM, horaDaReserva, horarioDoAviso, ROTULO_STATUS_RESERVA } from '@/lib/agenda'
-import { linksTelefone } from '@/lib/eventos'
+import { linksTelefone, telefoneLegivel } from '@/lib/eventos'
 import { dataBr } from '@/lib/previsao'
 import { SeloSimulacao } from './selo-simulacao'
 import { SeloStatusReserva } from './selo-status'
@@ -49,7 +49,7 @@ function Contato({ reservaId }: { reservaId: string }) {
   return (
     <div className="flex flex-col gap-2">
       <p className="flex flex-col gap-0.5">
-        <span className="font-medium text-foreground">{contato.telefone}</span>
+        <span className="font-medium text-foreground">{telefoneLegivel(contato.telefone)}</span>
         <span className="text-sm text-muted-foreground">{ORIGEM_CONTATO[contato.origem]}</span>
       </p>
       <div className="flex flex-wrap gap-2">

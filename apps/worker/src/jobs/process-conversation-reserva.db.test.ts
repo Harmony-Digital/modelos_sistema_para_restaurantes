@@ -13,11 +13,15 @@ import { comMidiaProibida, storageProibido } from './midia-fake.ts'
 import { processConversation, type ProcessDeps } from './process-conversation.ts'
 
 // corrida simulada: algo acontece no banco depois que o worker leu a ocupação e antes do commit
-const injecao = vi.hoisted(() => ({ aposLerOcupacao: null as null | (() => Promise<void>) }))
+const injecao = vi.hoisted(() => ({ aposLerOcupacao: null as null | (() => Promise<void>), leiturasDeReservas: 0 }))
 vi.mock('@atd/db', async (importOriginal) => {
   const orig = await importOriginal<typeof DbModule>()
   return {
     ...orig,
+    avisosAtivosDoCliente: (...args: Parameters<typeof orig.avisosAtivosDoCliente>) => {
+      injecao.leiturasDeReservas++
+      return orig.avisosAtivosDoCliente(...args)
+    },
     ocupacaoDoDia: async (...args: Parameters<typeof orig.ocupacaoDoDia>) => {
       const r = await orig.ocupacaoDoDia(...args)
       const depois = injecao.aposLerOcupacao
@@ -198,7 +202,10 @@ describe('reserva no worker (triage-v7)', () => {
       await processConversation(deps(llm, wa), conv)
     }
     await receive(restaurantId, 'acho que lá pelas oito da noite fica bom pra gente')
+    injecao.leiturasDeReservas = 0
     await processConversation(deps(llm, wa), conv)
+    // a resposta curta não serviu e foi à triagem: as reservas do cliente são lidas uma vez só
+    expect(injecao.leiturasDeReservas).toBe(1)
     expect(calls).toHaveLength(2)
     expect(calls[1]).toContain('<pergunta_pendente>\nPara que horas é a reserva?')
     expect(calls[1]).toContain('"pessoas":4')
@@ -510,6 +517,17 @@ describe('reserva no worker (triage-v7)', () => {
     expect(await minhas()).toMatchObject([{ contatoCifrado: null }])
   })
 
+  it('wa_id antigo sem o nono dígito: o cliente que digita o próprio celular com o 9 não vira "número informado"', async () => {
+    const { restaurantId } = await setup()
+    const { llm } = fakeLlm([triagem(res({ data: 'hoje' }))])
+    const wa = fakeWa()
+    const conv = await ateOContato(restaurantId, wa, llm)
+    await db.update(schema.customers).set({ telefoneCifrado: encryptPhone('556199998888', phoneKey) })
+    await receive(restaurantId, 'pode ligar no 61 99999-8888')
+    await processConversation(deps(llm, wa), conv)
+    expect(await minhas()).toMatchObject([{ contatoCifrado: null }])
+  })
+
   it('"somos 80" ao "Para quantas pessoas?": segue como pedido de evento com o número real', async () => {
     const { restaurantId, ids } = await setup()
     const { llm, calls } = fakeLlm([triagem(res({ data: 'sábado' }))])
@@ -554,7 +572,7 @@ describe('reserva no worker (triage-v7)', () => {
     await processConversation(deps(llm, wa), conv)
     await receive(restaurantId, 'na verdade seremos 2')
     await processConversation(deps(llm, wa), conv)
-    expect(ultimoTexto(wa)).toBe(confirmada('Asa Sul, hoje, às 20h, 2 pessoas, em nome de Carlos Souza'))
+    expect(ultimoTexto(wa)).toBe('Reserva alterada: unidade Asa Sul, hoje, às 20h, 2 pessoas, em nome de Carlos Souza.')
     await receive(restaurantId, 'não vou mais, pode cancelar')
     await processConversation(deps(llm, wa), conv)
     expect(ultimoTexto(wa)).toBe('Pronto, cancelei sua reserva: Asa Sul, hoje.')
@@ -562,6 +580,68 @@ describe('reserva no worker (triage-v7)', () => {
     const audit = await auditReserva()
     expect(audit.map((a) => a.acao)).toEqual(['reserva.registrada', 'reserva.atualizada', 'reserva.cancelada'])
     expect(audit.every((a) => a.diff === null)).toBe(true)
+  })
+
+  it('"muda minha reserva para amanhã": a mesma reserva muda de dia (sem segunda reserva) e a resposta diz "Reserva alterada"', async () => {
+    const { restaurantId, ids } = await setup()
+    const { llm } = fakeLlm([triagem(res({ data: 'hoje' })), triagem(res({ tema: 'mudanca', data: 'amanhã' }))])
+    const wa = fakeWa()
+    const conv = await ateOContato(restaurantId, wa, llm)
+    await receive(restaurantId, 'sim')
+    await processConversation(deps(llm, wa), conv)
+    const [antes] = await minhas()
+    // amanhã tem lotação e ocupação de outra pessoa, mas cabe (a vaga de hoje não conta lá)
+    await capacidade(ids['Asa Sul']!, 10)
+    await db.insert(schema.attendanceNotices).values({
+      restaurantId, unitId: ids['Asa Sul']!, data: '2026-10-06', pessoas: 6, horario: '19:00', nome: 'Outra pessoa', origem: 'painel',
+    })
+    await receive(restaurantId, 'muda minha reserva para amanhã')
+    await processConversation(deps(llm, wa), conv)
+    expect(ultimoTexto(wa)).toBe('Reserva alterada: unidade Asa Sul, amanhã, às 20h, 4 pessoas, em nome de Carlos Souza.')
+    expect(await minhas()).toMatchObject([{ id: antes!.id, status: 'confirmada', data: '2026-10-06', pessoas: 4, nome: 'Carlos Souza' }])
+    expect((await auditReserva()).map((a) => a.acao)).toEqual(['reserva.registrada', 'reserva.atualizada'])
+  })
+
+  it('"troca para a Asa Norte" lotada: nada muda e a oferta segue como mudança; "e na Lago Sul?" move a mesma reserva', async () => {
+    const { restaurantId, ids } = await setup(4)
+    const { llm } = fakeLlm([
+      triagem(res({ unidade: 'asa sul', data: 'hoje' })), triagem(res({ tema: 'mudanca', unidade: 'asa norte' })), triagem(res({ unidade: 'lago sul' })),
+    ])
+    const wa = fakeWa()
+    const conv = await ateOContato(restaurantId, wa, llm)
+    await receive(restaurantId, 'sim')
+    await processConversation(deps(llm, wa), conv)
+    const [antes] = await minhas()
+    await capacidade(ids['Asa Norte']!, 5)
+    await ocupar(restaurantId, ids['Asa Norte']!, 2)
+    await receive(restaurantId, 'troca minha reserva para a asa norte')
+    await processConversation(deps(llm, wa), conv)
+    expect(ultimoTexto(wa)).toContain('A unidade Asa Norte está lotada hoje para 4 pessoas.')
+    expect(await minhas()).toMatchObject([{ id: antes!.id, unitId: ids['Asa Sul'], data: HOJE }])
+    await receive(restaurantId, 'e na lago sul?')
+    await processConversation(deps(llm, wa), conv)
+    expect(ultimoTexto(wa)).toBe('Reserva alterada: unidade Lago Sul, hoje, às 20h, 4 pessoas, em nome de Carlos Souza.')
+    expect(await minhas()).toMatchObject([{ id: antes!.id, unitId: ids['Lago Sul'], data: HOJE, status: 'confirmada' }])
+  })
+
+  it('mudança de dia para onde o cliente já tem outra reserva (corrida): nada muda e a resposta diz isso', async () => {
+    const { restaurantId, ids } = await setup()
+    const { llm } = fakeLlm([triagem(res({ data: 'hoje' })), triagem(res({ tema: 'mudanca', data: 'amanhã' }))])
+    const wa = fakeWa()
+    const conv = await ateOContato(restaurantId, wa, llm)
+    await receive(restaurantId, 'sim')
+    await processConversation(deps(llm, wa), conv)
+    const [antes] = await minhas()
+    injecao.aposLerOcupacao = async () => {
+      await db.insert(schema.attendanceNotices).values({
+        restaurantId, unitId: ids['Asa Sul']!, customerId: antes!.customerId, data: '2026-10-06', pessoas: 2, horario: '19:00', nome: 'Carlos', origem: 'ia',
+      })
+    }
+    await receive(restaurantId, 'muda minha reserva para amanhã')
+    await processConversation(deps(llm, wa), conv)
+    expect(ultimoTexto(wa)).toBe('Você já tem outra reserva nessa unidade e nesse dia, então não mudei nada. Se quiser, cancele uma delas e me diga o que mudar.')
+    expect((await minhas()).find((r) => r.id === antes!.id)).toMatchObject({ data: HOJE, status: 'confirmada' })
+    expect((await auditReserva()).map((a) => a.acao)).toEqual(['reserva.registrada'])
   })
 
   it('pendente "pessoas" antigo (gravado antes da reserva) continua: "4" segue para o horário sem o modelo', async () => {

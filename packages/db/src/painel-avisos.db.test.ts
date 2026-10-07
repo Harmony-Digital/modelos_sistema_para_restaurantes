@@ -1,10 +1,10 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { encryptPhone } from '@atd/core'
-import { eq } from 'drizzle-orm'
+import { eq, sql as dsql } from 'drizzle-orm'
 import { getTestDb, resetDb, seedRestaurant, seedStaff } from './test-utils.ts'
 import type { JwtClaims } from './rls.ts'
 import {
-  cancelarAvisoPainel, criarAvisoPainel, mudarStatusReserva, previsaoDoDia, revelarContatoReserva, totalPrevistoHoje,
+  criarAvisoPainel, mudarStatusReserva, previsaoDoDia, revelarContatoReserva, totalPrevistoHoje,
 } from './painel-avisos.ts'
 import { attendanceNotices, auditLog, customers, restaurants, staff, units } from './schema/index.ts'
 import { TELEFONE_SIMULADO } from './simulador.ts'
@@ -28,7 +28,7 @@ async function cenario() {
   return { restaurantId, u1, u2: u2!.id, dono, gerenteU1, atendente }
 }
 const aviso = (unitId: string, o: Record<string, unknown> = {}) =>
-  ({ unitId, data: DIA, pessoas: 3, horarioAprox: null, nome: null, ...o }) as Parameters<typeof criarAvisoPainel>[2]
+  ({ unitId, data: DIA, pessoas: 3, horario: '20:00', nome: 'Ana', ...o }) as Parameters<typeof criarAvisoPainel>[2]
 
 describe('painel de avisos', () => {
   it('previsaoDoDia: totais só de ativos e não simulados, ordem do S1, incluirCancelados', async () => {
@@ -103,7 +103,7 @@ describe('painel de avisos', () => {
   it('criar: dono e gerente ok, audit sem nome, origem painel, customer nulo', async () => {
     const c = await cenario()
     for (const [quem, unit] of [[c.dono, c.u2], [c.gerenteU1, c.u1]] as const) {
-      const r = await criarAvisoPainel(db, as(quem), aviso(unit, { nome: 'Sr. João', horarioAprox: '20h' }))
+      const r = await criarAvisoPainel(db, as(quem), aviso(unit, { nome: 'Sr. João' }))
       expect(r.ok).toBe(true)
       const id = r.ok ? r.valor.id : ''
       const [a] = await db.select().from(attendanceNotices).where(eq(attendanceNotices.id, id))
@@ -122,37 +122,10 @@ describe('painel de avisos', () => {
     expect(await db.select().from(attendanceNotices)).toHaveLength(0)
   })
 
-  it('cancelar: audita; atendente ⇒ sem_permissao; inexistente ou já cancelado ⇒ nao_encontrada; outra unidade não cancela', async () => {
-    const c = await cenario()
-    const r = await criarAvisoPainel(db, as(c.dono), aviso(c.u2))
-    const id = r.ok ? r.valor.id : ''
-    expect(await cancelarAvisoPainel(db, as(c.atendente), id, ANTES)).toEqual({ ok: false, erro: 'sem_permissao' })
-    expect(await cancelarAvisoPainel(db, as(c.gerenteU1), id, ANTES)).toEqual({ ok: false, erro: 'nao_encontrada' })
-    expect(await cancelarAvisoPainel(db, as(c.dono), id, ANTES)).toEqual({ ok: true, valor: null })
-    const [a] = await db.select().from(attendanceNotices).where(eq(attendanceNotices.id, id))
-    expect(a!.status).toBe('cancelada')
-    const logs = await db.select().from(auditLog).where(eq(auditLog.entidadeId, id))
-    expect(logs.map((l) => l.acao).sort()).toEqual(['aviso.cancelado_painel', 'aviso.criado_painel'])
-    expect(await cancelarAvisoPainel(db, as(c.dono), id, ANTES)).toEqual({ ok: false, erro: 'nao_encontrada' })
-    expect(await cancelarAvisoPainel(db, as(c.dono), '00000000-0000-4000-8000-000000000000', ANTES)).toEqual({ ok: false, erro: 'nao_encontrada' })
-  })
-
-  it('cancelar: aviso de dia passado (fuso do restaurante) não é cancelado', async () => {
-    const c = await cenario()
-    const r = await criarAvisoPainel(db, as(c.dono), aviso(c.u2))
-    const id = r.ok ? r.valor.id : ''
-    // 11/10 02:00 UTC = 10/10 23:00 em São Paulo: ainda é o dia do aviso
-    expect(await cancelarAvisoPainel(db, as(c.dono), id, new Date('2026-10-11T03:00:00Z'))).toEqual({ ok: false, erro: 'nao_encontrada' })
-    const [a] = await db.select().from(attendanceNotices).where(eq(attendanceNotices.id, id))
-    expect(a!.status).toBe('confirmada')
-    expect(await cancelarAvisoPainel(db, as(c.dono), id, new Date('2026-10-11T02:00:00Z'))).toEqual({ ok: true, valor: null })
-  })
-
   it('criar: gerente restrito em outra unidade recebe sem_permissao antes da lotação (não descobre a capacidade)', async () => {
     const c = await cenario()
     await db.update(units).set({ capacidadePessoas: 2 }).where(eq(units.id, c.u2))
     expect(await criarAvisoPainel(db, as(c.gerenteU1), aviso(c.u2, { pessoas: 5 }))).toEqual({ ok: false, erro: 'sem_permissao' })
-    expect(await criarAvisoPainel(db, as(c.gerenteU1), aviso(c.u2, { pessoas: 5, horario: '20:00', nome: 'Ana' }))).toEqual({ ok: false, erro: 'sem_permissao' })
   })
 
   it('criar: passa pela lotação da unidade (reservas reais) e grava horário e contato', async () => {
@@ -211,7 +184,53 @@ describe('mudarStatusReserva', () => {
     const depois = new Date('2026-10-12T15:00:00Z')
     expect(await mudarStatusReserva(db, as(c.dono), c.id, 'cancelada', depois)).toEqual({ ok: false, erro: 'transicao_invalida' })
     expect(await mudarStatusReserva(db, as(c.dono), c.id, 'nao_veio', depois)).toEqual({ ok: true, valor: null })
+    expect(await mudarStatusReserva(db, as(c.dono), c.id, 'cancelada', depois)).toEqual({ ok: false, erro: 'transicao_invalida' })
+  })
+
+  it('"não veio" marcado por engano num dia passado volta a Confirmada, passando pela lotação', async () => {
+    const c = await comReserva({ status: 'nao_veio' })
+    const depois = new Date('2026-10-12T15:00:00Z')
+    await db.update(units).set({ capacidadePessoas: 10 }).where(eq(units.id, c.u1))
+    await db.insert(attendanceNotices).values({ restaurantId: c.restaurantId, unitId: c.u1, data: DIA, pessoas: 8, origem: 'painel' })
+    expect(await mudarStatusReserva(db, as(c.dono), c.id, 'confirmada', depois)).toEqual({ ok: false, erro: 'lotado', vagas: 2 })
+    expect(await status(c.id)).toBe('nao_veio')
+    await db.update(units).set({ capacidadePessoas: 12 }).where(eq(units.id, c.u1))
+    expect(await mudarStatusReserva(db, as(c.dono), c.id, 'confirmada', depois)).toEqual({ ok: true, valor: null })
+    expect(await status(c.id)).toBe('confirmada')
+    // cancelada num dia passado continua só consulta
+    await db.update(attendanceNotices).set({ status: 'cancelada' }).where(eq(attendanceNotices.id, c.id))
     expect(await mudarStatusReserva(db, as(c.dono), c.id, 'confirmada', depois)).toEqual({ ok: false, erro: 'transicao_invalida' })
+  })
+
+  it('reconfirmar trava a unidade antes da reserva (mesma ordem do worker: sem deadlock)', async () => {
+    const c = await comReserva({ status: 'cancelada' })
+    // outra transação (o worker) segura a unidade
+    let soltar!: () => void
+    const segura = new Promise<void>((r) => { soltar = r })
+    let travou!: () => void
+    const travada = new Promise<void>((r) => { travou = r })
+    const worker = db.transaction(async (tx) => {
+      await tx.select({ id: units.id }).from(units).where(eq(units.id, c.u1)).for('update')
+      travou()
+      await segura
+    })
+    await travada
+    const painel = mudarStatusReserva(db, as(c.dono), c.id, 'confirmada', ANTES_DO_DIA)
+    let livre: boolean
+    try {
+      await new Promise((r) => setTimeout(r, 300))
+      // enquanto o painel espera a unidade, a linha da reserva continua livre (o worker poderia travá-la sem deadlock)
+      livre = await db.transaction(async (tx) => {
+        await tx.execute(dsql`set local lock_timeout = '200ms'`)
+        await tx.select({ id: attendanceNotices.id }).from(attendanceNotices).where(eq(attendanceNotices.id, c.id)).for('update')
+        return true
+      }).catch(() => false)
+    } finally {
+      soltar()
+    }
+    await worker
+    expect(await painel).toEqual({ ok: true, valor: null })
+    expect(livre).toBe(true)
   })
 
   it('atendente ⇒ sem_permissao; gerente de outra unidade ou inexistente ⇒ nao_encontrada', async () => {

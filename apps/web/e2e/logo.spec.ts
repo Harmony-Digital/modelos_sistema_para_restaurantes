@@ -9,11 +9,15 @@ const SUFIXO = Date.now().toString(36)
 const UNIDADE = `E2E Logo ${SUFIXO}`
 
 let inicial: LogoInicial | undefined
+/** Objetos que já estavam no bucket (a logo da homologação, restos de outra execução): o teste olha só os novos. */
+let jaNoBucket: string[] = []
+const novosNoBucket = async () => (await objetosDaMarca(inicial!.restaurantId)).filter((o) => !jaNoBucket.includes(o))
 let unitId = ''
 let nomeRestaurante = ''
 
 test.beforeAll(async () => {
   inicial = await lerLogoInicial()
+  jaNoBucket = await objetosDaMarca(inicial.restaurantId)
   // o teste parte de "sem logo" (a inicial volta no afterAll)
   await getSql()`update restaurants set logo_path = null where id = ${inicial.restaurantId}`
   const [r] = await getSql()`select nome from restaurants where id = ${inicial.restaurantId}`
@@ -38,13 +42,13 @@ test('logo: arquivo .png que é SVG é recusado; enviada aparece no topo e no lo
   // SVG com extensão .png: conferido pelos bytes no servidor, nada vai ao Storage nem ao banco
   await enviarLogo(page, { name: 'logo.png', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>') })
   await expect(page.getByText('Envie a logo em PNG, JPG ou WebP (SVG não é aceito).')).toBeVisible()
-  expect(await objetosDaMarca(inicial!.restaurantId)).toEqual([])
+  expect(await novosNoBucket()).toEqual([])
 
   await enviarLogo(page, { name: 'logo.png', buffer: pngDeTeste(400, 200) })
   await expect(page.getByText('Logo enviada')).toBeVisible()
   const [r] = await getSql()`select logo_path from restaurants where id = ${inicial!.restaurantId}`
   expect(r!.logo_path).toMatch(new RegExp(`^${inicial!.restaurantId}/logo-[0-9a-f]{64}\\.png$`))
-  expect(await objetosDaMarca(inicial!.restaurantId)).toEqual([r!.logo_path])
+  expect(await novosNoBucket()).toEqual([r!.logo_path])
 
   // topo do celular: logo de 24 px ao lado do nome, na mesma linha do título
   await logoNoQuadro(barra.locator('img'), 24, { largura: 400, altura: 200 })
@@ -79,7 +83,7 @@ test('logo: arquivo .png que é SVG é recusado; enviada aparece no topo e no lo
   await expect(barra.locator('img')).toHaveCount(0)
   const [depois] = await getSql()`select logo_path from restaurants where id = ${inicial!.restaurantId}`
   expect(depois!.logo_path).toBeNull()
-  await expect.poll(() => objetosDaMarca(inicial!.restaurantId)).toEqual([])
+  await expect.poll(novosNoBucket).toEqual([])
   await anonimo.goto('/login')
   await expect(anonimo.getByRole('heading', { name: 'Atendimento IA' }).or(anonimo.getByText('Atendimento IA'))).toBeVisible()
   await expect(anonimo.locator('img')).toHaveCount(0)

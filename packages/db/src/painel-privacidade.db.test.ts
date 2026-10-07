@@ -34,7 +34,7 @@ async function cenario() {
   await db.insert(messages).values([1, 2, 3].map((i) => ({
     restaurantId, conversationId: cv!.id, direcao: 'in' as const, autor: 'cliente' as const, tipo: 'texto' as const, texto: `msg ${i}`,
   })))
-  await db.insert(attendanceNotices).values({ restaurantId, unitId, customerId: cli!.id, nome: 'Maria', data: '2026-10-10', pessoas: 4, origem: 'ia' })
+  await db.insert(attendanceNotices).values({ restaurantId, unitId, customerId: cli!.id, nome: 'Maria', data: '2026-10-10', pessoas: 4, horario: '20:00', origem: 'ia' })
   await db.insert(eventRequests).values({
     restaurantId, unitId, customerId: cli!.id, nome: 'Maria', data: '2026-11-20', convidados: 40, tipo: 'aniversario',
     notasInternas: 'cliente difícil', status: 'confirmado',
@@ -69,6 +69,11 @@ describe('fila do titular', () => {
 describe('acesso', () => {
   it('resumo completo sem telefone nem notas internas; auditado sem PII', async () => {
     const c = await cenario()
+    // reserva com outro nome e um telefone de contato informado (cifrado): o resumo diz que existe, sem o número
+    await db.insert(attendanceNotices).values({
+      restaurantId: c.restaurantId, unitId: c.unitId, customerId: c.cli.id, nome: 'Maria Souza', data: '2026-10-11', pessoas: 2,
+      horario: '13:30', contatoCifrado: encryptPhone('5561977776666', KEY), status: 'cancelada', origem: 'ia',
+    })
     const r = await resumoAcessoTitular(db, as(c.gerente), c.acesso.id)
     expect(r).toEqual({
       pedidoId: c.acesso.id,
@@ -77,7 +82,10 @@ describe('acesso', () => {
       ultimaInteracao: '2026-10-05T12:00:00Z',
       conversas: 1,
       mensagens: 3,
-      avisos: [{ data: '2026-10-10', pessoas: 4, status: 'confirmada', unidade: 'Asa Sul' }],
+      avisos: [
+        { data: '2026-10-10', pessoas: 4, status: 'confirmada', unidade: 'Asa Sul', nome: 'Maria', horario: '20:00', contatoInformado: false },
+        { data: '2026-10-11', pessoas: 2, status: 'cancelada', unidade: 'Asa Sul', nome: 'Maria Souza', horario: '13:30', contatoInformado: true },
+      ],
       eventos: [{ data: '2026-11-20', convidados: 40, tipo: 'aniversario', status: 'confirmado', unidade: 'Asa Sul' }],
       pedidos: [
         { tipo: 'correcao', status: 'concluido', criadoEm: '2026-09-01T12:00:00Z' },
@@ -87,6 +95,7 @@ describe('acesso', () => {
     })
     expect(JSON.stringify(r)).not.toContain('difícil')
     expect(JSON.stringify(r)).not.toContain(TELEFONE)
+    expect(JSON.stringify(r)).not.toContain('77776666')
     const [log] = await logs('lgpd.resumo_gerado')
     expect(log).toMatchObject({ entidade: 'data_subject_request', entidadeId: c.acesso.id, diff: null })
   })

@@ -32,7 +32,8 @@ export const ROTULOS_MODELO: Record<ChaveModelo, { titulo: string; quando: strin
   reserva_contato_invalido_whatsapp: { titulo: 'Número não entendido de novo', quando: 'Na segunda tentativa sem número válido, a reserva usa o número do WhatsApp e a IA avisa.' },
   reserva_horario_fora: { titulo: 'Horário da reserva fora do funcionamento', quando: 'O horário pedido está fora do funcionamento do dia (ou o cliente disse algo como "à noite").' },
   reserva_horario_passado: { titulo: 'Horário da reserva já passou', quando: 'A reserva é para hoje num horário que já passou.' },
-  reserva_confirmada: { titulo: 'Reserva feita', quando: 'A reserva coube na lotação e foi gravada (ou mudada): resumo seguido das regras da reserva.' },
+  reserva_confirmada: { titulo: 'Reserva feita', quando: 'A reserva coube na lotação e foi gravada: resumo seguido das regras da reserva.' },
+  reserva_alterada: { titulo: 'Reserva alterada', quando: 'O cliente mudou a reserva que já tinha (pessoas, horário, nome, dia ou unidade) e coube na lotação: resumo, sem repetir as regras.' },
   reserva_lotada: { titulo: 'Unidade lotada', quando: 'Não há vaga para o grupo na unidade e no dia pedidos; nada é gravado.' },
   reserva_lotada_outras_unidades: { titulo: 'Lotada: outras unidades com vaga', quando: 'Junto da unidade lotada: até 3 outras unidades com vaga para o grupo no mesmo dia.' },
   reserva_lotada_outro_dia: { titulo: 'Lotada: sugerir outro dia', quando: 'Junto da unidade lotada: o cliente pode escolher outro dia.' },
@@ -41,6 +42,8 @@ export const ROTULOS_MODELO: Record<ChaveModelo, { titulo: string; quando: strin
   reserva_cancelada: { titulo: 'Reserva cancelada', quando: 'O cliente pede para cancelar a reserva.' },
   reserva_nao_encontrada: { titulo: 'Nenhuma reserva para cancelar', quando: 'O cliente pede para cancelar, mas não tem reserva.' },
   reserva_indisponivel: { titulo: 'Reserva não está mais ativa', quando: 'O cliente quis mudar uma reserva que a equipe cancelou ou marcou "não veio" no meio da conversa: nada é mudado.' },
+  reserva_qual_mudar: { titulo: 'Qual reserva mudar', quando: 'O cliente quer mudar o dia ou a unidade e tem várias reservas: a IA lista e pede para cancelar a que não vale. {exemplo} é uma frase de cancelamento com a primeira reserva da lista.' },
+  reserva_ja_existe: { titulo: 'Já tem reserva no destino', quando: 'O cliente quis mudar a reserva para uma unidade e um dia onde já tem outra reserva: nada é mudado.' },
   reserva_qual_cancelar: { titulo: 'Qual reserva cancelar', quando: 'O cliente tem várias reservas e não disse qual cancelar. {exemplo} é uma frase de cancelamento com a primeira reserva da lista.' },
   // eventos (Etapa 04)
   evento_registrado: { titulo: 'Pedido de evento recebido', quando: 'O cliente pede um evento e o pedido é registrado para a equipe.' },
@@ -81,6 +84,7 @@ const LINHAS: Partial<Record<ChaveModelo, (nome: string, endereco: string) => st
   endereco_varias: (n, e) => `• ${n}: ${e}\n• Outra unidade: …`,
   lista_unidades: (n) => `• ${n}\n• Outra unidade`,
   reserva_qual_cancelar: (n) => `• ${n} — hoje, 2 pessoas\n• Outra unidade — domingo (11/10), 4 pessoas`,
+  reserva_qual_mudar: (n) => `• ${n} — hoje, 2 pessoas\n• Outra unidade — domingo (11/10), 4 pessoas`,
   evento_espacos: (n) => `• Salão (${n}) — 20 a 80 pessoas.\n• Varanda (${n}) — 10 a 30 pessoas.`,
   evento_qual_cancelar: (n) => `• ${n} — sábado (10/10), 40 convidados, aniversário\n• Outra unidade — sexta-feira (20/11), 25 convidados, evento corporativo`,
 }
@@ -88,7 +92,7 @@ const LINHAS: Partial<Record<ChaveModelo, (nome: string, endereco: string) => st
 // {quando} no início da frase ("Domingo (11/10), a unidade…") ou no meio ("Reserva feita: …, domingo (11/10)")
 const QUANDO_INICIO: readonly ChaveModelo[] = ['horario_dia', 'horario_dia_fechado', 'horario_varias', 'reserva_horario_fora']
 const QUANDO_MEIO: readonly ChaveModelo[] = [
-  'evento_registrado', 'evento_ja_registrado', 'evento_cancelado', 'reserva_confirmada', 'reserva_cancelada',
+  'evento_registrado', 'evento_ja_registrado', 'evento_cancelado', 'reserva_confirmada', 'reserva_alterada', 'reserva_cancelada',
 ]
 
 export function exemploDeVariaveis(chave: ChaveModelo, u: UnidadeExemplo | null): Record<string, string> {

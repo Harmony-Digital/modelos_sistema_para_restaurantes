@@ -112,7 +112,7 @@ export function AgendaDia(props: {
   const lotacao = props.unidades.filter((u) => props.unidade === null || u.unitId === props.unidade)
   const mostrarUnidade = props.unidade === null && props.unidades.length > 1
   const opcoes = props.unidades.map((u) => ({ id: u.unitId, nome: u.unidade }))
-  const fecharPedido = () => router.push(href(), { scroll: false })
+  const fecharDetalhe = () => router.push(href(), { scroll: false })
   const detalheAberto = pedido !== null || aberta !== null
 
   const secoes = (
@@ -234,7 +234,11 @@ export function AgendaDia(props: {
           </p>
         )}
       </div>
-      {passado && <p className="text-sm text-muted-foreground">Dia passado: só consulta (e marcar quem não veio).</p>}
+      {passado && (
+        <p className="text-sm text-muted-foreground">
+          {props.podeEditar ? 'Dia passado: só consulta (e marcar quem não veio).' : 'Dia passado: só consulta.'}
+        </p>
+      )}
 
       {filtroUnidade}
 
@@ -328,13 +332,13 @@ export function AgendaDia(props: {
 
   const aoSalvarPedido = () => {
     if (largo) router.refresh()
-    else fecharPedido()
+    else fecharDetalhe()
   }
   // confirmada (ou com "mostrar cancelados"): a reserva continua aberta e só recarrega (dá para ver e desfazer); cancelada
   // ou "não veio" com os cancelados ocultos sai da linha do tempo, então o detalhe fecha junto
-  const aoMudarReserva = (status: StatusReserva) => {
+  const aoMudarStatusReserva = (status: StatusReserva) => {
     if (status === 'confirmada' || props.cancelados) router.refresh()
-    else fecharPedido()
+    else fecharDetalhe()
   }
   const detalheReserva = aberta && (
     <ReservaDetalhe
@@ -344,7 +348,7 @@ export function AgendaDia(props: {
       dia={props.dia}
       hoje={props.hoje}
       podeEditar={props.podeEditar}
-      onMudou={aoMudarReserva}
+      onMudou={aoMudarStatusReserva}
     />
   )
   const DESCRICAO_RESERVA = 'Situação e contato da reserva. Mudar aqui não avisa o cliente.'
@@ -389,7 +393,7 @@ export function AgendaDia(props: {
       {largo === false && (
         <FolhaFormulario
           aberto={pedido !== null}
-          onAbertoChange={(a) => !a && fecharPedido()}
+          onAbertoChange={(a) => !a && fecharDetalhe()}
           titulo="Pedido de evento"
           descricao="Entre em contato com o cliente. A IA não confirma nada: a decisão é da equipe."
         >
@@ -398,7 +402,7 @@ export function AgendaDia(props: {
       )}
 
       {largo === false && (
-        <FolhaFormulario aberto={aberta !== null} onAbertoChange={(a) => !a && fecharPedido()} titulo="Reserva" descricao={DESCRICAO_RESERVA}>
+        <FolhaFormulario aberto={aberta !== null} onAbertoChange={(a) => !a && fecharDetalhe()} titulo="Reserva" descricao={DESCRICAO_RESERVA}>
           {detalheReserva}
         </FolhaFormulario>
       )}

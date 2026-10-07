@@ -5,8 +5,9 @@ const CPF_FORMATTED = /(?<!\d)\d{3}\.\d{3}\.\d{3}-\d{2}(?!\d)/g
 const CPF_SPACED = /(?<!\d)\d{3} \d{3} \d{3} \d{2}(?!\d)/g
 const ELEVEN_DIGITS = /(?<!\d)\d{11}(?!\d)/g
 const RG = /(?<![\d.])\d{2}\.\d{3}\.\d{3}-[\dXx](?![\w])/g
+// separadores: espaço, hífen ou ponto ("61.99999.8888"); não começa nem termina no meio de um número maior com pontos
 const PHONE =
-  /(?<!\d)(?:(?:\+?55[\s-]?)?\(?\d{2}\)?[\s-]?(?:9[\s-]?)?\d{4}[\s-]?\d{4}|9\d{4}[\s-]?\d{4})(?!\d)/g
+  /(?<!\d|\d\.)(?:(?:\+?55[\s.-]?)?\(?\d{2}\)?[\s.-]?(?:9[\s.-]?)?\d{4}[\s.-]?\d{4}|9\d{4}[\s.-]?\d{4})(?!\d|\.\d)/g
 
 function luhnOk(digits: string): boolean {
   let sum = 0

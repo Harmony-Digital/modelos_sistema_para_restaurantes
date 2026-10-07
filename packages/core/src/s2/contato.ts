@@ -25,7 +25,18 @@ function e164(trecho: string): string | null {
  */
 export function capturarTelefone(textoBruto: string): string | null {
   // "061 99999-8888", "(061) …": o 0 de longa distância antes do DDD sai antes da regra da redação
-  const semZero = textoBruto.replace(/(?<![\d+])(\(?)0(?=\d{2}\)?[\s-]?\d{4,5})/g, '$1')
+  const semZero = textoBruto.replace(/(?<![\d+]|\d\.)(\(?)0(?=\d{2}\)?[\s.-]?\d{4,5})/g, '$1')
   const validos = new Set(trechosDeTelefone(semZero).map(e164).filter((n): n is string => n !== null))
   return validos.size === 1 ? [...validos][0]! : null
+}
+
+/** Celular brasileiro no formato antigo do WhatsApp (sem o nono dígito: `+55DD[6-9]NNNNNNN`) ganha o 9. */
+const comNonoDigito = (e164: string) => e164.replace(/^\+55(\d{2})([6-9]\d{7})$/, '+55$19$2')
+
+/**
+ * O número informado é o próprio WhatsApp do cliente? O `wa_id` de contas antigas vem sem o nono dígito
+ * ("556199998888"), e o cliente digita com ele: os dois são o mesmo celular.
+ */
+export function mesmoTelefone(a: string, b: string | null): boolean {
+  return b !== null && comNonoDigito(a) === comNonoDigito(b)
 }

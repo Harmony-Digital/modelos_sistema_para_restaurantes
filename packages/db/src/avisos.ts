@@ -38,42 +38,6 @@ export function avisosAtivosDoCliente(
     .orderBy(asc(attendanceNotices.data), asc(attendanceNotices.createdAt))
 }
 
-export type GravarAviso = {
-  restaurantId: string
-  customerId: string
-  unitId: string
-  data: string
-  pessoas: number
-  horarioAprox: string | null
-  nome: string | null
-  simulado: boolean
-}
-
-/**
- * Caminho antigo do S2 (sem lotação, horário livre): fica até o worker passar para `registrarReserva` (Task 4).
- * Uma reserva confirmada por cliente/unidade/dia: o segundo registro atualiza (atomicamente, mesmo em corrida). */
-export async function registrarAviso(tx: Tx, a: GravarAviso): Promise<{ id: string; atualizado: boolean }> {
-  const [r] = await tx
-    .insert(attendanceNotices)
-    .values({
-      restaurantId: a.restaurantId, customerId: a.customerId, unitId: a.unitId, data: a.data, pessoas: a.pessoas,
-      horarioAprox: a.horarioAprox, nome: a.nome, origem: 'ia', simulado: a.simulado,
-    })
-    .onConflictDoUpdate({
-      target: [attendanceNotices.customerId, attendanceNotices.unitId, attendanceNotices.data],
-      targetWhere: sql`status = 'confirmada'`,
-      set: {
-        pessoas: a.pessoas,
-        horarioAprox: a.horarioAprox,
-        nome: sql`coalesce(excluded.nome, ${attendanceNotices.nome})`,
-        updatedAt: sql`now()`,
-      },
-    })
-    // xmax <> 0 ⇒ a linha já existia (foi atualizada)
-    .returning({ id: attendanceNotices.id, atualizado: sql<boolean>`(xmax <> 0)` })
-  return r!
-}
-
 /** Cancela só aviso ativo do próprio cliente; `false` se não houver (outro cliente, já cancelado, inexistente). */
 export async function cancelarAvisoDoCliente(
   tx: Tx,

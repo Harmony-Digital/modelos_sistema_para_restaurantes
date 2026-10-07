@@ -141,10 +141,12 @@ const ORDEM_STATUS_RESERVA: readonly StatusReserva[] = ['confirmada', 'cancelada
 
 /**
  * Para quais situações a reserva pode ir no painel (mesma regra da DAL `mudarStatusReserva`): Confirmada e Cancelada de
- * hoje em diante; Não veio só no dia da reserva ou depois; nunca a situação atual.
+ * hoje em diante; Não veio só no dia da reserva ou depois; um Não veio volta a Confirmada mesmo num dia passado (engano);
+ * nunca a situação atual.
  */
 export function acoesDaReserva(atual: StatusReserva, data: DataIso, hoje: DataIso): StatusReserva[] {
-  return ORDEM_STATUS_RESERVA.filter((s) => s !== atual && (s === 'nao_veio' ? data <= hoje : data >= hoje))
+  return ORDEM_STATUS_RESERVA.filter((s) => s !== atual
+    && (s === 'nao_veio' ? data <= hoje : data >= hoje || (s === 'confirmada' && atual === 'nao_veio')))
 }
 
 /**

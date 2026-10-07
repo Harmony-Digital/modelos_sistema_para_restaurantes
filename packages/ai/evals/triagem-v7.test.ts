@@ -59,7 +59,7 @@ describe('"tem mesa pra N?" vira reserva só na v7', () => {
 
 describe('gabarito da reserva (triage-v7)', () => {
   it('cobre os casos da spec, com ids únicos', () => {
-    const exigidos: RotuloReserva[] = ['cabe', 'lotado', 'mesa', 'contato_sim', 'contato_nao', 'contato_sem_pergunta', 'numero_novo', 'nome', 'cancelar', 'mais_de_60', 'mudar', 'intencao', 'nao_e_reserva']
+    const exigidos: RotuloReserva[] = ['cabe', 'lotado', 'mesa', 'contato_sim', 'contato_nao', 'contato_sem_pergunta', 'numero_novo', 'nome', 'cancelar', 'mais_de_60', 'mudar', 'mudar_lugar', 'outra_reserva', 'intencao', 'nao_e_reserva']
     const rotulos = new Set(CASOS_RESERVA.map((c) => c.rotulo))
     for (const r of exigidos) expect(rotulos, r).toContain(r)
     expect(new Set(CASOS_RESERVA.map((c) => c.id)).size).toBe(CASOS_RESERVA.length)
@@ -118,6 +118,10 @@ describe('comparação da camada 1 com nome e contato', () => {
   })
   it('nome diferente, nome ausente ou contato diferente mudam a extração', () => {
     for (const outro of [{ nome: 'Bia' }, { nome: null }, { contato_ok: true }, { contato_ok: false }]) expect(k({ ...base, ...outro })).not.toBe(k(base))
+  })
+  it('mudança da reserva (tema "mudanca") é distinta de reserva nova', () => {
+    expect(k({ ...base, tema: 'mudanca' })).not.toBe(k(base))
+    expect(k({ ...base, tema: 'mudança' })).toBe(k({ ...base, tema: 'mudanca' }))
   })
   it('fora da reserva a chave é a do S2', () => {
     const can = CASOS_RESERVA.find((c) => c.id === 'rv20')!.itens[0]!

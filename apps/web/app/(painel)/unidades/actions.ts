@@ -56,7 +56,8 @@ export async function salvarDadosUnidadeAction(id: string | null, input: DadosUn
     lat: coords?.lat ?? null,
     lng: coords?.lng ?? null,
     ativo: d.ativo,
-    capacidadePessoas: d.capacidadePessoas,
+    // ausente = não muda a lotação (a DAL omite a coluna)
+    ...(d.capacidadePessoas === undefined ? {} : { capacidadePessoas: d.capacidadePessoas }),
   })
   if (r.ok) revalidarUnidade(r.valor.id)
   if (!r.ok && r.erro === 'capacidade_invalida') return { ok: false, fieldErrors: { capacidadePessoas: MSG_LOTACAO } }
