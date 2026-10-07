@@ -76,7 +76,7 @@ async function perguntar(page: Page, texto: string) {
   await page.keyboard.press('Enter')
 }
 
-const previsaoDaUnidade = (page: Page) => page.goto(`/agenda?aba=previsao&unidade=${unitId}`)
+const previsaoDaUnidade = (page: Page) => page.goto(`/agenda?unidade=${unitId}`)
 
 test('simulador anota o aviso, mas a previsão de hoje não mostra aviso simulado', async ({ page }) => {
   await entrarComoGestor(page)
@@ -89,7 +89,7 @@ test('simulador anota o aviso, mas a previsão de hoje não mostra aviso simulad
 
   await previsaoDaUnidade(page)
   await expect(page.getByRole('heading', { level: 1, name: 'Agenda' })).toBeVisible()
-  await expect(page.getByText('Nenhum aviso para hoje')).toBeVisible()
+  await expect(page.getByText('Nada na agenda para hoje')).toBeVisible()
   await expect(page.getByText('4 pessoas')).toHaveCount(0)
 })
 
@@ -109,22 +109,22 @@ test('sem pessoas, pergunta "Para quantas pessoas?" e anota com a resposta sem c
 test('painel: novo aviso aparece na previsão e some ao cancelar', async ({ page }) => {
   await entrarComoGestor(page)
   await previsaoDaUnidade(page)
-  await expect(page.getByText('Nenhum aviso para hoje')).toBeVisible()
+  await expect(page.getByText('Nada na agenda para hoje')).toBeVisible()
   await page.getByRole('button', { name: 'Novo aviso' }).click()
   await page.getByLabel(/^Pessoas/).fill('6')
   await page.getByLabel(/^Nome/).fill(NOME_PAINEL)
   await page.getByRole('button', { name: 'Anotar aviso' }).click()
   await expect(page.getByText('Aviso anotado.')).toBeVisible()
 
-  const secao = page.getByRole('region', { name: UNIDADE })
+  const secao = page.getByRole('list', { name: 'Linha do tempo do dia' })
   await expect(secao.getByRole('listitem').filter({ hasText: NOME_PAINEL })).toContainText('6 pessoas')
-  await expect(secao).toContainText('6 pessoas · 1 aviso')
+  await expect(page.getByTestId('resumo-do-dia')).toContainText('6 pessoas · 1 aviso')
 
   await secao.getByRole('button', { name: `Cancelar aviso de ${NOME_PAINEL}, 6 pessoas` }).click()
   await page.getByRole('button', { name: 'Cancelar aviso', exact: true }).click()
   await expect(page.getByText('Aviso cancelado.')).toBeVisible()
   await expect(page.getByText(NOME_PAINEL)).toHaveCount(0)
-  await expect(page.getByText('Nenhum aviso para hoje')).toBeVisible()
+  await expect(page.getByText('Nada na agenda para hoje')).toBeVisible()
 
   const [a] = await getSql()`select status, origem, simulado from attendance_notices where nome = ${NOME_PAINEL}`
   expect(a).toEqual({ status: 'cancelado', origem: 'painel', simulado: false })

@@ -79,7 +79,7 @@ export default async function InicioPage() {
             rotulo="Eventos novos"
             valor={String(pedidosNovos)}
             dica={pedidosNovos === 1 ? 'pedido esperando a equipe' : 'pedidos esperando a equipe'}
-            href="/agenda?aba=eventos"
+            href="/agenda"
           />
           {g && (
             <>

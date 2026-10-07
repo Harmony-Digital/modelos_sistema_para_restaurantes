@@ -96,15 +96,19 @@ test('modo demonstração: aviso e pedido de evento do simulador aparecem no pai
   await perguntar(page, `quero fazer um aniversário para 40 pessoas na ${UNIDADE} dia amanhã`)
   await expect(simulador(page).getByText(/^Recebemos seu pedido/)).toBeVisible({ timeout: 20_000 })
 
+  // endereço antigo da Previsão redireciona para a Agenda do dia
   await page.goto(`/agenda?aba=previsao&unidade=${unitId}`)
-  const aviso = page.getByRole('region', { name: UNIDADE }).getByRole('listitem').filter({ hasText: '4 pessoas' })
+  await expect(page).toHaveURL(new RegExp(`/agenda\\?unidade=${unitId}$`))
+  const aviso = page.getByRole('list', { name: 'Linha do tempo do dia' }).getByRole('listitem').filter({ hasText: '4 pessoas' })
   await expect(aviso).toContainText('Simulação')
 
-  await page.goto(`/agenda?aba=eventos&unidade=${unitId}`)
-  const pedido = page.getByRole('button', { name: /40 convidados/ })
+  await page.goto(`/agenda?unidade=${unitId}`)
+  const pendente = page.getByRole('region', { name: 'Pedidos para responder em outros dias' }).getByRole('link')
+  await expect(pendente).toContainText('Simulação')
+  await pendente.click()
+  const pedido = page.getByRole('list', { name: 'Linha do tempo do dia' }).getByRole('link', { name: /40 convidados/ })
   await expect(pedido).toContainText('Simulação')
-  await pedido.click()
-  const detalhe = page.getByRole('dialog')
+  const detalhe = page.getByRole('dialog', { name: 'Pedido de evento' }).or(page.getByRole('complementary', { name: 'Pedido de evento' }))
   await expect(detalhe).toContainText('Simulação')
   await expect(detalhe.getByRole('button', { name: /telefone/i })).toHaveCount(0)
 
