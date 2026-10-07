@@ -206,7 +206,7 @@ scripts/producao/verificar.sh --bootstrap .env.production-bootstrap
 ```
 
 **Saída esperada:** o drizzle-kit aplica as migrations sem erro; o script mostra
-`OK migrations aplicadas: 43 de 43 (até 0042_…)`, `OK bucket cardapio existe e é privado`,
+`OK migrations aplicadas: 45 de 45 (até 0044_…)`, `OK bucket cardapio existe e é privado`,
 `OK bucket importacoes existe e é privado`, `OK role web_app existe com login`, `OK role worker_app existe com login`.
 **Se falhar:** erro de `MAINTAIN` → o banco não é PG 17 (passo 1); falha no meio → rode o mesmo comando de novo
 (o drizzle aplica só as que faltam) e, se repetir, pare e relate a mensagem do drizzle-kit. Nunca edite uma migration.
@@ -229,6 +229,10 @@ Enquanto o worker está parado, as mensagens ficam na fila e são respondidas qu
 `document.ingest` já existente para o prazo de **420 s** por job (`boss.updateQueue`; o `createQueue` não muda fila que
 já existe). Não há variável nova: a leitura de informações, horários e espaços usa os mesmos `AI_INGEST_MODELS`. Uma
 importação que estava sendo lida durante a troca de versão continua do último lote salvo quando o worker volta.
+
+**Modo demonstração (migrations 0043–0044, 07/10/2026):** só acrescentam a coluna `restaurants.modo_demonstracao`
+(padrão desligado), a função `app.modo_demonstracao()`, a métrica "tempo até assumir" e as policies de leitura e
+atualização de `event_requests`. Nenhum tipo é recriado e o worker não muda: não é preciso parar o worker para elas.
 
 ## Passo 3 — Senhas dos roles e URLs de conexão
 
@@ -435,7 +439,7 @@ scripts/producao/verificar.sh --bootstrap .env.production-bootstrap --vercel .en
 **Saída esperada:** só `OK` (e `AVISO` apenas se você usou outra porta de propósito) e `Resultado: 0 falha(s)`;
 código de saída 0. O script confere: arquivos `600` e fora do git; variáveis obrigatórias e proibidas por destino;
 chaves de 32 bytes iguais nos dois destinos; `NEXT_PUBLIC_LIMITE_UPLOAD_MB=4`; `AI_PROVIDER=openai` e `OPENAI_API_KEY` no worker (sem `OPENROUTER_API_KEY`) e ausência de `OPENROUTER_DEV_SEM_ZDR`;
-login real como `web_app`/`worker_app`; Postgres 17; 43 migrations; buckets privados; roles com login; restaurante,
+login real como `web_app`/`worker_app`; Postgres 17; 45 migrations; buckets privados; roles com login; restaurante,
 dono, limites de gasto e demo; `RESTAURANT_ID` igual ao do banco; cadastro público desligado; Data API sem `public`;
 chave de serviço lendo o Storage; `/login` 200 e webhook recusando POST sem assinatura.
 **Se falhar:** cada `FALHA` traz a correção depois do `—`. Corrigiu variável da Vercel → cadastre de novo (passo 5) e redeploy.
@@ -520,7 +524,8 @@ Rode e anote cada item. 🔑 O humano faz os itens de navegador (ou acompanha vo
 | 5 | Handoff em tempo real | no simulador: "quero falar com um atendente"; com Conversas aberta em outra aba, a conversa aparece **sem recarregar** | "apareceu em N s sem recarregar" |
 | 6 | Importar CSV | Conteúdo → Cardápio → sub-aba Importar → CSV pequeno (2 itens) → revisar → aprovar | itens novos visíveis no cardápio |
 | 7 | Gerente restrito | ver abaixo (convite pelo painel) | gerente vê só a unidade dele em Unidades/Agenda/Conversas |
-| 8 | Gastos | Início → Gastos mostra o gasto do dia (> US$ 0 após o item 4; o simulador conta na linha **Simulação**, fora do total dos clientes); Mais → **Gastos e limites** mostra os limites padrão (IA 2/dia e 40/mês; Simulação 1/dia e 10/mês; WhatsApp 1/dia e 20/mês) — o dono ajusta ali, pelo painel, se quiser | valor exibido e limites conferidos |
+| 8 | Modo demonstração ligado | 🔑 o **dono**, logado, vai em **Mais → Restaurante** e liga **Modo demonstração** (toast "Modo demonstração ligado"). Depois, no simulador: "vou hoje na Asa Sul com 4 pessoas à noite" e "quero fazer um aniversário para 30 pessoas na Asa Sul"; em **Agenda → Previsão** e **Agenda → Eventos** os dois aparecem com o selo **Simulação**, e o Início passa a contá-los. Faça isto **antes de apresentar**: com o modo desligado, o painel esconde tudo o que nasce no simulador | "modo ligado; aviso e pedido com o selo Simulação" |
+| 9 | Gastos | Início → Gastos mostra o gasto do dia (> US$ 0 após o item 4; o simulador conta na linha **Simulação**, fora do total dos clientes); Mais → **Gastos e limites** mostra os limites padrão (IA 2/dia e 40/mês; Simulação 1/dia e 10/mês; WhatsApp 1/dia e 20/mês) — o dono ajusta ali, pelo painel, se quiser | valor exibido e limites conferidos |
 
 Gerente restrito (pelo painel, Etapa 08): 🔑 o **dono**, logado, vai em **Mais → Equipe → Convidar**: nome
 "Gerente Asa Sul", o e-mail do gerente (passo 0), papel **Gerente**, desliga **Todas as unidades** e marca só
@@ -546,11 +551,11 @@ convite** no painel.
 ```
 Amostra publicada.
 - Painel: https://<domínio> (Vercel, região gru1, deploy <id/URL do deploy>)
-- Supabase: projeto <ref> em sa-east-1, Postgres <versão>, 43 migrations, buckets privados
+- Supabase: projeto <ref> em sa-east-1, Postgres <versão>, 45 migrations, buckets privados
 - Worker: VPS <host>, imagem <tag>, status running, "worker iniciado" às <hora>
 - IA: OpenAI direto (`AI_PROVIDER=openai`, `store: false`, retenção padrão de 30 dias aceita pelo time); triagem gpt-4.1-mini; cardápio gpt-4.1-mini → gpt-4.1 (smoke:ia:prod: <resultado>; eval:prod: <resultado>)
 - verificar.sh: 0 falha(s) em <data/hora>
-- Checklist: TOTP ok · IA Online · S1/S2/S3/S4 ok · handoff em tempo real em <N> s · CSV ok · gerente restrito ok · Gastos US$ <x>
+- Checklist: TOTP ok · IA Online · S1/S2/S3/S4 ok · handoff em tempo real em <N> s · CSV ok · gerente restrito ok · modo demonstração ligado · Gastos US$ <x>
 - Segredos: só em .env.production-bootstrap, .env.vercel-producao, .env.worker-producao (chmod 600, fora do git)
   e no /opt/atendimento/.env do VPS. Guardar PHONE_ENC_KEY e WA_ID_PEPPER no cofre.
 - Pendências: <nenhuma | lista>
