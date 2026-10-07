@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/app/(painel)/actions', () => ({ setTheme: vi.fn(), signOut: vi.fn() }))
 
+import { EVENTO_ABRIR_BUSCA } from './abrir-busca'
 import { AcoesBarra, ShellProvider } from './acoes-barra'
 import { TopBar } from './top-bar'
 
@@ -11,10 +12,16 @@ describe('AcoesBarra (barra superior no desktop)', () => {
     const { container } = render(<AcoesBarra />)
     expect(container).toBeEmptyDOMElement()
   })
-  it('busca rápida desabilitada até a paleta existir, tema oposto ao atual e conta com Sair; só a partir de lg', () => {
+  it('busca rápida abre a paleta (Ctrl+K), tema oposto ao atual e conta com Sair; só a partir de lg', () => {
     render(<ShellProvider valor={{ tema: 'escuro', papel: 'gerente' }}><AcoesBarra /></ShellProvider>)
     const busca = screen.getByRole('button', { name: /Busca rápida/ })
-    expect(busca).toBeDisabled()
+    expect(busca).toBeEnabled()
+    expect(busca).toHaveAttribute('aria-keyshortcuts', 'Control+K Meta+K')
+    const ouvir = vi.fn()
+    window.addEventListener(EVENTO_ABRIR_BUSCA, ouvir)
+    fireEvent.click(busca)
+    window.removeEventListener(EVENTO_ABRIR_BUSCA, ouvir)
+    expect(ouvir).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('button', { name: 'Usar tema claro' })).toHaveAttribute('type', 'submit')
     expect(document.querySelector('input[name="tema"]')).toHaveValue('claro')
     expect(screen.getByRole('link', { name: 'Conta e ajustes (Gerente)' })).toHaveAttribute('href', '/ajustes')

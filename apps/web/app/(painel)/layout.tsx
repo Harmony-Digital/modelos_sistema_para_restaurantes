@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm'
 import { cookies } from 'next/headers'
 import { Avisos } from '@/components/conversas/avisos'
 import { FaixaAlertaGastos } from '@/components/painel/alerta-gastos'
+import { BuscaRapida } from '@/components/shell/busca-rapida'
 import { AppShell } from '@/components/shell/app-shell'
 import { topicosInbox } from '@/lib/conversas'
 import { SimulatorLauncher } from '@/components/simulator/launcher'
@@ -16,6 +17,7 @@ import {
   abrirSimuladorAction, buscarSimuladorAction, detalhesSimuladorAction, enviarSimuladorAction, novoClienteSimuladorAction,
   relogioSimuladorAction,
 } from './simulador-actions'
+import { buscarNoPainelAction } from './busca-actions'
 
 const acoes = {
   abrir: abrirSimuladorAction,
@@ -53,6 +55,7 @@ export default async function PainelLayout({ children }: { children: React.React
       tema={parseTema(jar.get(THEME_COOKIE)?.value)}
       menu={parseMenu(jar.get(MENU_COOKIE)?.value)}
       floating={simulador}
+      busca={<BuscaRapida papel={session.role} buscar={buscarNoPainelAction} />}
       avisos={avisos}
       aguardando={aguardando}
       faixa={faixa}

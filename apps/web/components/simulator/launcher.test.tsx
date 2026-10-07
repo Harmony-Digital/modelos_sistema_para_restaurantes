@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MensagemTela, RespostaSimulador } from '@/lib/simulador-tela'
 let caminho = '/'
 vi.mock('next/navigation', async (orig) => ({ ...(await orig<typeof Navegacao>()), usePathname: () => caminho }))
@@ -62,6 +62,18 @@ describe('SimulatorLauncher', () => {
     caminho = '/gestao/gastos'
     rerender(<SimulatorLauncher restaurante="Casa Teste" timezone="America/Sao_Paulo" acoes={acoes} />)
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Simulador de WhatsApp' })).toBeNull())
+  })
+
+  it('Shift+S abre a folha (< lg), mas não com o foco num campo de texto', async () => {
+    const user = userEvent.setup()
+    render(<><input aria-label="Nome" /><SimulatorLauncher restaurante="Casa Teste" timezone="America/Sao_Paulo" acoes={acoesFalsas()} /></>)
+    await user.click(screen.getByRole('textbox', { name: 'Nome' }))
+    await user.keyboard('{Shift>}S{/Shift}')
+    expect(screen.queryByRole('dialog', { name: 'Simulador de WhatsApp' })).toBeNull()
+    expect(screen.getByRole('textbox', { name: 'Nome' })).toHaveValue('S')
+    await user.click(document.body)
+    await user.keyboard('{Shift>}S{/Shift}')
+    await screen.findByRole('dialog', { name: 'Simulador de WhatsApp' }, { timeout: 5000 })
   })
 
   it('o item Simulador do menu abre o simulador sem navegar', async () => {
@@ -201,5 +213,92 @@ describe('SimulatorLauncher', () => {
     expect(await within(painel).findByText('Não foi possível carregar os detalhes.')).toBeInTheDocument()
     await user.click(within(painel).getByRole('button', { name: 'Tentar de novo' }))
     await waitFor(() => expect(acoes.detalhes).toHaveBeenCalledTimes(2))
+  })
+})
+
+describe('SimulatorLauncher — flutuante (≥ lg)', () => {
+  const original = window.matchMedia
+  beforeAll(async () => {
+    await import('./simulador-flutuante')
+  })
+  beforeEach(() => {
+    caminho = '/'
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(min-width: 1024px)', media: query, onchange: null,
+      addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia
+  })
+  afterEach(() => { window.matchMedia = original })
+
+  const painel = () => screen.queryByRole('dialog', { name: 'Simulador de WhatsApp' })
+
+  it('abre ancorado no canto, não modal (a tela continua usável), com foco na mensagem e sem o botão flutuante', async () => {
+    const user = userEvent.setup()
+    render(<><button type="button">Da página</button><SimulatorLauncher restaurante="Casa Teste" timezone="America/Sao_Paulo" acoes={acoesFalsas()} /></>)
+    await user.click(screen.getByRole('button', { name: 'Abrir simulador de WhatsApp' }))
+    const p = await screen.findByRole('dialog', { name: 'Simulador de WhatsApp' }, { timeout: 5000 })
+    expect(p).toHaveAttribute('aria-modal', 'false')
+    expect(p.className).toContain('fixed')
+    expect(p.className).toContain('right-4')
+    await waitFor(() => expect(within(p).getByRole('textbox', { name: 'Mensagem' })).toHaveFocus())
+    expect(screen.queryByRole('button', { name: 'Abrir simulador de WhatsApp' })).toBeNull()
+    // não modal: o resto da página continua acessível
+    expect(screen.getByRole('button', { name: 'Da página' })).toBeInTheDocument()
+  })
+
+  it('sobrevive à navegação entre telas, mantendo a conversa', async () => {
+    const acoes = acoesFalsas({ abrir: vi.fn(async () => ({ ok: true as const, data: resp([msg(1, 'in', 'conversa em andamento')]) })) })
+    const user = userEvent.setup()
+    const { rerender } = render(<SimulatorLauncher restaurante="Casa Teste" timezone="America/Sao_Paulo" acoes={acoes} />)
+    await user.click(screen.getByRole('button', { name: 'Abrir simulador de WhatsApp' }))
+    expect(await screen.findByText('conversa em andamento', undefined, { timeout: 5000 })).toBeInTheDocument()
+    caminho = '/conversas'
+    rerender(<SimulatorLauncher restaurante="Casa Teste" timezone="America/Sao_Paulo" acoes={acoes} />)
+    expect(painel()).not.toBeNull()
+    expect(screen.getByText('conversa em andamento')).toBeInTheDocument()
+    expect(acoes.abrir).toHaveBeenCalledTimes(1)
+  })
+
+  it('minimiza e restaura pelo botão, por Esc e por Shift+S; minimizado não consulta o servidor', async () => {
+    const acoes = acoesFalsas()
+    const user = userEvent.setup()
+    render(<SimulatorLauncher restaurante="Casa Teste" timezone="America/Sao_Paulo" acoes={acoes} />)
+    await user.click(screen.getByRole('button', { name: 'Abrir simulador de WhatsApp' }))
+    await screen.findByRole('dialog', { name: 'Simulador de WhatsApp' }, { timeout: 5000 })
+    await waitFor(() => expect(acoes.abrir).toHaveBeenCalled())
+    await user.click(screen.getByRole('button', { name: 'Minimizar simulador' }))
+    expect(painel()).toBeNull() // escondido (hidden), não desmontado
+    const restaurar = screen.getByRole('button', { name: 'Restaurar simulador' })
+    await waitFor(() => expect(restaurar).toHaveFocus())
+    await new Promise((r) => setTimeout(r, 50))
+    const antes = vi.mocked(acoes.buscar).mock.calls.length + vi.mocked(acoes.abrir).mock.calls.length
+    await new Promise((r) => setTimeout(r, 1300))
+    expect(vi.mocked(acoes.buscar).mock.calls.length + vi.mocked(acoes.abrir).mock.calls.length).toBe(antes)
+    // Shift+S restaura; Esc dentro do painel minimiza; Shift+S fora de campo de texto minimiza
+    await user.keyboard('{Shift>}S{/Shift}')
+    expect(painel()).not.toBeNull()
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Mensagem' })).toHaveFocus())
+    await user.keyboard('{Shift>}S{/Shift}') // no campo de mensagem é digitação
+    expect(screen.getByRole('textbox', { name: 'Mensagem' })).toHaveValue('S')
+    await user.keyboard('{Escape}')
+    expect(painel()).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Restaurar simulador' }))
+    expect(painel()).not.toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Minimizar simulador' }))
+    await user.keyboard('{Shift>}S{/Shift}')
+    expect(painel()).not.toBeNull()
+    screen.getByRole('button', { name: 'Minimizar simulador' }).focus()
+    await user.keyboard('{Shift>}S{/Shift}')
+    expect(painel()).toBeNull()
+  })
+
+  it('fechar volta ao botão flutuante com o foco nele', async () => {
+    const user = userEvent.setup()
+    render(<SimulatorLauncher restaurante="Casa Teste" timezone="America/Sao_Paulo" acoes={acoesFalsas()} />)
+    await user.click(screen.getByRole('button', { name: 'Abrir simulador de WhatsApp' }))
+    await screen.findByRole('dialog', { name: 'Simulador de WhatsApp' }, { timeout: 5000 })
+    await user.click(screen.getByRole('button', { name: 'Fechar simulador' }))
+    expect(painel()).toBeNull()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Abrir simulador de WhatsApp' })).toHaveFocus())
   })
 })

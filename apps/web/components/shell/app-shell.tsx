@@ -13,6 +13,8 @@ export function AppShell(props: {
   tema: Tema
   menu: EstadoMenu
   floating?: React.ReactNode
+  /** Paleta de busca rápida (Ctrl/Cmd+K), aberta também pelo botão da barra superior. */
+  busca?: React.ReactNode
   avisos?: React.ReactNode
   aguardando?: number
   /** Faixa de alertas (ex.: gastos): no topo abaixo de lg; abaixo da barra superior (TopBar) a partir de lg. */
@@ -28,6 +30,7 @@ export function AppShell(props: {
           {props.children}
         </div>
         {props.floating}
+        {props.busca}
         {props.avisos}
         <BottomNav papel={props.papel} aguardando={aguardando} />
       </div>

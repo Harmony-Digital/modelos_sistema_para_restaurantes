@@ -5,6 +5,7 @@ import { createContext, useContext } from 'react'
 import { setTheme, signOut } from '@/app/(painel)/actions'
 import type { StaffRole } from '@/lib/access'
 import type { Tema } from '@/lib/theme'
+import { abrirBusca } from './abrir-busca'
 
 /** `faixa`: alertas do painel (ex.: gastos), mostrados abaixo da barra superior a partir de lg. */
 type ValorShell = { tema: Tema; papel: StaffRole; faixa?: React.ReactNode }
@@ -36,12 +37,11 @@ export function AcoesBarra() {
   const outro: Tema = shell.tema === 'escuro' ? 'claro' : 'escuro'
   return (
     <div role="group" aria-label="Ações do painel" className="hidden shrink-0 items-center gap-1 lg:flex">
-      {/* a paleta de busca rápida (Ctrl+K) chega numa etapa seguinte */}
       <button
         type="button"
-        disabled
-        title="Busca rápida (em breve)"
-        className="mr-2 flex h-9 w-56 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm text-muted-foreground disabled:cursor-not-allowed disabled:opacity-70"
+        onClick={abrirBusca}
+        aria-keyshortcuts="Control+K Meta+K"
+        className="mr-2 flex h-9 w-56 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
       >
         <Search aria-hidden="true" className="size-4" />
         <span>Busca rápida</span>
