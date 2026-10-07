@@ -60,7 +60,7 @@ Também servem os exemplos dos evals, em `packages/ai/evals/ingestao/exemplos/`:
 3. **Ler arquivos** ⇒ "Lendo os arquivos…" ("Lendo o cardápio…" no cardápio). Com lotes aparece **"Lendo 1 de 2"**. A revisão abre sozinha quando termina. Você pode sair da tela; a leitura continua no worker.
 4. **Quem vê:**
    - O dono e o gerente com acesso a todas as unidades fazem tudo.
-   - O gerente restrito a algumas unidades vê só a **planilha CSV** do cardápio: envia e revisa, mas não confirma.
+   - O gerente restrito a algumas unidades vê só o **Cardápio** (sem o seletor): envia PDF, fotos e a planilha CSV, nos modos Completo e Só preços, lê e revisa, mas **não confirma**. A tela avisa "Você envia e revisa; quem confirma é o dono ou gerente com acesso a todas as unidades." Na revisão não aparece **Confirmar importação**; o dono confirma depois.
    - O atendente não vê a aba.
 
 ## 4. Informações
@@ -95,7 +95,8 @@ Também servem os exemplos dos evals, em `packages/ai/evals/ingestao/exemplos/`:
 3. Na revisão, a **Picanha na brasa** aparece **uma vez só**, com o aviso "Preços diferentes nos arquivos: R$ 92,90 e R$ 94,90. Confira o preço." Corrija o preço antes de confirmar.
 4. Os itens que já existem mostram **Atualiza** e o que muda. Os novos mostram **Novo**.
 5. O mesmo nome em duas categorias diferentes mostra "Também aparece em X. Se for o mesmo item, desmarque “Incluir” em um deles."
-6. **Confirmar importação** ⇒ "Cardápio atualizado: N novos, M atualizados".
+6. **Arquivo para enviar aos clientes** (como na Etapa 05): marque **Usar um dos arquivos como cardápio para enviar aos clientes** (com um arquivo só: "Usar este arquivo…"), escolha o **Arquivo** (o PDF vem escolhido) e em **Vale para** a unidade ou "Todas as unidades".
+7. **Confirmar importação** ⇒ "Cardápio atualizado: N novos, M atualizados". Com a opção do passo 6, o arquivo aparece em **Cardápio → Arquivos** como "Cardápio importado em dd/mm/aaaa", e "manda o cardápio" no simulador envia esse arquivo.
 
 ## 8. Cardápio — Só preços
 Faça este passo **antes** do 7.2, ou rode o `demo:s1` de novo, para os preços do demo ainda estarem antigos.
@@ -117,9 +118,13 @@ Faça este passo **antes** do 7.2, ou rode o `demo:s1` de novo, para os preços 
 - **Mais de 10 arquivos** ⇒ "Escolha no máximo 10 arquivos." Um arquivo acima do limite é recusado antes de enviar.
 - **Clique duplo em Confirmar**, ou dois gestores confirmando juntos ⇒ aplica uma vez só. O segundo vê "Essa importação já foi aplicada".
 - **Worker cai no meio da leitura:** pare o worker (Ctrl+C) durante "Lendo 1 de 2" e suba de novo.
-  - A leitura continua do lote em que parou, sem reler nem cobrar de novo os lotes já lidos. Pode levar **até ~7 minutos**: é o prazo para considerar a leitura anterior abandonada.
-  - Se a tela mostrar "A leitura está demorando", **recarregue a página**.
-- **Sem saldo de IA** no meio ⇒ a importação para com erro de limite. O que já foi lido fica guardado e nada vai para o cadastro.
+  - A leitura continua do lote em que parou, sem reler os lotes já lidos. O lote interrompido é lido de novo e a leitura interrompida conta no gasto pela estimativa (US$ 0,10), porque ela pode ter sido cobrada.
+  - Pode levar **de 8 a 9 minutos**: o prazo para considerar a leitura anterior abandonada (7 minutos) mais a espera da fila.
+  - A tela espera **10 minutos sem nenhuma mudança** antes de dizer "A leitura não avança há alguns minutos." Nesse caso, toque em **Tentar de novo**: a leitura continua de onde parou.
+- **Fila fora do ar ao ler** (por exemplo, o worker parado por muito tempo) ⇒ "Recebemos os arquivos, mas não foi possível começar a leitura agora." Toque de novo em **Ler arquivos**, em **Tentar de novo** na tela de leitura, ou envie os mesmos arquivos de novo: a leitura é reenfileirada. O worker também reenfileira as importações paradas quando sobe.
+- **Sem saldo de IA** no meio ⇒ a importação para com erro de limite e nada vai para o cadastro. Não há como continuar dessa importação: descarte-a e envie de novo depois de ajustar o limite (os lotes são lidos de novo).
+- **PDF com senha** ⇒ "Um dos PDFs está protegido por senha: salve uma cópia sem senha ou envie fotos." **PDF com mais de 200 páginas** ⇒ "Arquivos grandes demais: envie até 200 páginas por importação."
+- **Arquivo recusado no envio** (tipo errado, falha do armazenamento): a lista da importação mostra "Alguns arquivos não foram enviados:" com o nome de cada um. Se nenhum entrou, a importação vazia é descartada e o aviso fica no formulário.
 - **Auditoria:** cada confirmação grava `importacao.aplicada` só com o alvo, o modo e as contagens, **sem** o conteúdo do documento.
 
 ## 10. Testes automáticos
@@ -144,9 +149,8 @@ O `s4.spec.ts` continua cobrindo a planilha CSV e o PDF de uma página.
 Com crédito, os evals de leitura por alvo rodam com `pnpm --filter @atd/ai eval:ingestao --alvo todos`. A meta é ≥ 90% por alvo, e nenhuma "instrução" do documento pode ser obedecida.
 
 ## 11. Pendências (não bloqueiam a homologação local)
-- **Gerente restrito:** voltar a enviar PDF e foto do cardápio para revisão, sem confirmar, como na Etapa 05. Entra na onda de correções da revisão final.
 - **Evals com modelo real** (`eval:ingestao --alvo todos`): dependem de crédito.
 - **Arquivos órfãos no Storage:** a limpeza por job do worker fica para depois. Hoje a sobra é rara, porque os nomes são pelo conteúdo.
 - **Nomes dos arquivos:** depois de recarregar, a lista mostra "Arquivo 1, 2…", porque o banco não guarda o nome original.
-- **Tela da leitura:** desiste aos 5 minutos sem lote novo. Depois de uma queda do worker, recarregue.
+- **Continuar uma leitura que deu erro** (por exemplo, sem saldo no lote 30 de 40): hoje é preciso enviar de novo e todos os lotes são relidos.
 - **Unidades por documento** e **CSV para os novos alvos:** fora desta etapa.

@@ -78,8 +78,11 @@ test.afterAll(async () => {
   const sql = getSql()
   const doTeste = sql`split_part(cu.wa_id_hash, ':', 2) in (select id::text from auth.users where email like '%@teste.local')`
   // arquivos do Storage (cardápio enviado e importações) antes das linhas que guardam o caminho
+  // o arquivo de envio vindo da importação (I3) é a cópia de um arquivo dela no bucket `cardapio`
+  const daImportacao = sql`select replace(f.storage_path, 'importacoes/', 'cardapio/') from knowledge_document_files f
+    join knowledge_documents k on k.id = f.importacao_id where k.enviado_por in (select id from auth.users where email like '%@teste.local')`
   const caminhos = await sql<{ storage_path: string }[]>`
-    select storage_path from menu_files where titulo like ${'%' + SUFIXO + '%'}
+    select storage_path from menu_files where titulo like ${'%' + SUFIXO + '%'} or storage_path in (${daImportacao})
     union all
     select storage_path from knowledge_documents
      where storage_path is not null and enviado_por in (select id from auth.users where email like '%@teste.local')
@@ -90,7 +93,7 @@ test.afterAll(async () => {
     const [bucket, ...resto] = storage_path.split('/')
     await getAdmin().storage.from(bucket!).remove([resto.join('/')])
   }
-  await sql`delete from menu_files where titulo like ${'%' + SUFIXO + '%'}`
+  await sql`delete from menu_files where titulo like ${'%' + SUFIXO + '%'} or storage_path in (${daImportacao})`
   await sql`delete from knowledge_documents where enviado_por in (select id from auth.users where email like '%@teste.local')`
   // itens e exceções saem junto com a categoria (on delete cascade)
   await sql`delete from menu_categories where nome like ${'%' + SUFIXO + '%'}`
@@ -216,7 +219,7 @@ test('importar CSV: revisão com itens novos, confirmar e os itens aparecem no c
   ])
 })
 
-test('importar PDF: lista de arquivos, "Lendo o cardápio…", revisão com o rascunho da IA, editar e confirmar', async ({ page }) => {
+test('importar PDF: lista de arquivos, "Lendo o cardápio…", revisão com o rascunho da IA, editar, usar como arquivo de envio e confirmar', async ({ page }) => {
   await entrarComoGestor(page)
   // o endereço antigo (Cardápio → Importar) leva à aba Importar
   await page.goto('/conteudo?aba=cardapio&sub=importar')
@@ -239,11 +242,16 @@ test('importar PDF: lista de arquivos, "Lendo o cardápio…", revisão com o ra
   // a revisão corrige o preço antes de virar dado oficial
   await moqueca.getByLabel(/^Preço/).fill('12490')
   expect(await getSql()`select 1 from menu_categories where nome = ${CATEGORIA_PDF}`).toHaveLength(0)
-  // vários arquivos: sem a opção de arquivo de envio (o arquivo de envio fica em Cardápio → Arquivos)
-  await expect(page.getByLabel('Usar este arquivo como cardápio para enviar aos clientes')).toHaveCount(0)
+  // como na Etapa 05: o arquivo importado vira o cardápio para enviar aos clientes (I3)
+  await page.getByLabel('Usar este arquivo como cardápio para enviar aos clientes').check()
+  await expect(page.getByLabel(/^Vale para/)).toHaveValue('')
 
   await confirmar.click()
   await expect(page.getByRole('status').filter({ hasText: 'Cardápio atualizado: 2 novos, 0 atualizados' })).toBeVisible()
+  const envio = await getSql()`select m.titulo, m.unit_id, m.mime, m.ativo from menu_files m
+    where m.storage_path in (select replace(f.storage_path, 'importacoes/', 'cardapio/') from knowledge_document_files f
+      join knowledge_documents k on k.id = f.importacao_id where k.enviado_por in (select id from auth.users where email like '%@teste.local'))`
+  expect(envio).toEqual([{ titulo: expect.stringMatching(/^Cardápio importado em /), unit_id: null, mime: 'application/pdf', ativo: true }])
   const itens = await getSql()`select i.nome, i.preco_centavos from menu_items i
     join menu_categories c on c.id = i.category_id where c.nome = ${CATEGORIA_PDF} order by i.preco_centavos nulls last`
   expect(itens).toEqual([

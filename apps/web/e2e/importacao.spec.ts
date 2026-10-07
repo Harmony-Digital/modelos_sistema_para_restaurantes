@@ -63,6 +63,9 @@ const itemLido = (nome: string, precoCentavos: number | null) => ({ nome, descri
 let worker: ChildProcess | undefined
 let falso: Awaited<ReturnType<typeof iniciarOpenRouterFalso>> | undefined
 
+// em ordem e parando no primeiro erro: "só preços" usa os itens que o teste do cardápio criou
+test.describe.configure({ mode: 'serial' })
+
 test.beforeAll(async () => {
   const sql = getSql()
   const [r] = await sql`select id from restaurants limit 1`
