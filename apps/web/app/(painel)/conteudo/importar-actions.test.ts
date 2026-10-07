@@ -7,27 +7,22 @@ const criarImportacao = vi.fn()
 const lerImportacao = vi.fn()
 const aplicarRascunho = vi.fn()
 const rejeitarImportacao = vi.fn()
-const enfileirar = vi.fn()
-const enqueueIngest = vi.fn(() => enfileirar)
-const upload = vi.fn()
 const copy = vi.fn()
-const from = vi.fn(() => ({ upload, copy }))
+const from = vi.fn(() => ({ copy }))
 const revalidatePath = vi.fn()
 // o pacote `server-only` lança fora do bundle de servidor do Next (upload-arquivo.ts o importa)
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/dal', () => ({ requireStaff }))
 vi.mock('@/lib/server/db', () => ({ getDb: () => 'db' }))
-vi.mock('@/lib/server/boss', () => ({ getBoss: async () => 'boss' }))
 vi.mock('@/lib/supabase/server', () => ({ createClient: async () => ({ storage: { from } }) }))
 vi.mock('next/cache', () => ({ revalidatePath }))
-vi.mock('@atd/db', () => ({ criarImportacao, lerImportacao, aplicarRascunho, rejeitarImportacao, enqueueIngest }))
+vi.mock('@atd/db', () => ({ criarImportacao, lerImportacao, aplicarRascunho, rejeitarImportacao }))
 
 const A = await import('./importar-actions')
 
 const REST = '00000000-0000-4000-8000-0000000000aa'
 const ID = '00000000-0000-4000-8000-000000000011'
 const UNI = '00000000-0000-4000-8000-000000000002'
-const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]
 const fdCom = (f: File | string | null) => {
   const fd = new FormData()
   if (f !== null) fd.set('arquivo', f)
@@ -60,7 +55,6 @@ describe('importarCsvAction', () => {
       storagePath: null, mime: 'text/csv', tamanho: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'), origem: 'csv',
       draft: { categorias: [{ nome: 'Carnes', itens: [{ nome: 'Picanha', descricao: null, precoCentavos: 8990, tags: ['sem_gluten'], outrosNomes: [], unidade: null, incluir: true }] }] },
     })
-    expect(enfileirar).not.toHaveBeenCalled()
   })
   it('o modelo para baixar é lido sem erros', async () => {
     criarImportacao.mockResolvedValue({ ok: true, valor: { id: ID } })
@@ -94,56 +88,16 @@ describe('importarCsvAction', () => {
   })
 })
 
-describe('importarArquivoAction', () => {
-  it('foto vai ao bucket importacoes, cria a importação e enfileira a leitura', async () => {
-    upload.mockResolvedValue({ error: null })
-    criarImportacao.mockResolvedValue({ ok: true, valor: { id: ID } })
-    lerImportacao.mockResolvedValue({ id: ID, status: 'enviado' })
-    expect(await A.importarArquivoAction(fdCom(bin(PNG)))).toEqual({ ok: true, data: { id: ID, status: 'enviado' } })
-    const sha = createHash('sha256').update(Uint8Array.from(PNG)).digest('hex')
-    expect(from).toHaveBeenCalledWith('importacoes')
-    expect(upload).toHaveBeenCalledWith(`${REST}/${sha}.png`, expect.anything(), { contentType: 'image/png', upsert: false })
-    expect(criarImportacao).toHaveBeenCalledWith('db', { sub: 'u' }, {
-      storagePath: `importacoes/${REST}/${sha}.png`, mime: 'image/png', tamanho: PNG.length, sha256: sha, origem: 'arquivo',
-    })
-    expect(enqueueIngest).toHaveBeenCalledWith('boss')
-    expect(enfileirar).toHaveBeenCalledWith(ID)
-  })
-  it('upload falso (nome e MIME de PDF, bytes de executável) é recusado sem tocar o Storage', async () => {
-    const r = await A.importarArquivoAction(fdCom(bin([0x4d, 0x5a, 0x90, 0x00], 'cardapio.pdf', 'application/pdf')))
-    expect(r).toEqual({ ok: false, fieldErrors: { arquivo: 'Envie um PDF ou uma imagem (JPEG, PNG ou WebP).' } })
-    expect(upload).not.toHaveBeenCalled()
-    expect(criarImportacao).not.toHaveBeenCalled()
-  })
-  it('mesmo arquivo já importado (aprovado ou em rascunho) não é reenfileirado: a tela vai ao estado atual', async () => {
-    upload.mockResolvedValue({ error: { statusCode: '409', message: 'The resource already exists' } })
-    criarImportacao.mockResolvedValue({ ok: true, valor: { id: ID } })
-    for (const status of ['aprovado', 'rascunho', 'processando'] as const) {
-      lerImportacao.mockResolvedValueOnce({ id: ID, status })
-      expect(await A.importarArquivoAction(fdCom(bin(PNG)))).toEqual({ ok: true, data: { id: ID, status } })
-    }
-    expect(enfileirar).not.toHaveBeenCalled()
-  })
-  it('fila fora do ar: avisa para tentar de novo (o reenvio do mesmo arquivo enfileira)', async () => {
-    upload.mockResolvedValue({ error: null })
-    criarImportacao.mockResolvedValue({ ok: true, valor: { id: ID } })
-    lerImportacao.mockResolvedValue({ id: ID, status: 'enviado' })
-    enfileirar.mockRejectedValueOnce(new Error('down'))
-    expect(await A.importarArquivoAction(fdCom(bin(PNG)))).toEqual({
-      ok: false, formError: 'Recebemos o arquivo, mas não foi possível começar a leitura agora. Envie de novo em instantes.',
-    })
-  })
-  it('falha do Storage vira erro geral', async () => {
-    upload.mockResolvedValue({ error: { statusCode: '500', message: 'boom' } })
-    expect(await A.importarArquivoAction(fdCom(bin(PNG)))).toEqual({ ok: false, formError: 'Não foi possível enviar o arquivo agora. Tente de novo.' })
-    expect(criarImportacao).not.toHaveBeenCalled()
-  })
-})
-
 describe('estado, aplicar e descartar', () => {
   it('estado para o acompanhamento (polling)', async () => {
-    lerImportacao.mockResolvedValue({ id: ID, status: 'erro', erro: 'Não consegui ler esse arquivo.' })
-    expect(await A.estadoImportacaoAction(ID)).toEqual({ ok: true, data: { status: 'erro', erro: 'Não consegui ler esse arquivo.' } })
+    const em = new Date('2026-10-06T12:00:00Z')
+    lerImportacao.mockResolvedValue({ id: ID, status: 'erro', erro: 'Não consegui ler esse arquivo.', loteAtual: 0, lotesTotal: null, atualizadoEm: em })
+    expect(await A.estadoImportacaoAction(ID)).toEqual({
+      ok: true, data: { status: 'erro', erro: 'Não consegui ler esse arquivo.', loteAtual: 0, lotesTotal: null, atualizadoEm: em.toISOString() },
+    })
+    // vários arquivos: o progresso por lote vai para "Lendo n de m"; a última mudança (parcial ou lote salvo) reinicia o prazo da tela
+    lerImportacao.mockResolvedValue({ id: ID, status: 'processando', erro: null, loteAtual: 2, lotesTotal: 5, atualizadoEm: em })
+    expect(await A.estadoImportacaoAction(ID)).toEqual({ ok: true, data: { status: 'processando', erro: null, loteAtual: 2, lotesTotal: 5, atualizadoEm: em.toISOString() } })
     lerImportacao.mockResolvedValue(null)
     expect(await A.estadoImportacaoAction(ID)).toMatchObject({ ok: false })
     expect(await A.estadoImportacaoAction('x')).toMatchObject({ ok: false })
@@ -187,6 +141,10 @@ describe('estado, aplicar e descartar', () => {
     expect(await A.aplicarRascunhoAction(ID, rascunho, { usarComoArquivoDeEnvio: false, unitIdArquivo: null })).toEqual({
       ok: false, formError: 'Essa importação já foi aplicada.',
     })
+    aplicarRascunho.mockResolvedValue({ ok: false, erro: 'nao_pronta' })
+    expect(await A.aplicarRascunhoAction(ID, rascunho, { usarComoArquivoDeEnvio: false, unitIdArquivo: null })).toEqual({
+      ok: false, formError: 'Esta importação não está pronta para confirmar: a leitura ainda não terminou, deu erro ou ela foi descartada. Atualize a página.',
+    })
     lerImportacao.mockResolvedValue({ id: ID, storagePath: null })
     aplicarRascunho.mockResolvedValue({ ok: false, erro: 'arquivo_invalido' })
     expect(await A.aplicarRascunhoAction(ID, rascunho, { usarComoArquivoDeEnvio: true, unitIdArquivo: null })).toEqual({
@@ -202,7 +160,7 @@ describe('estado, aplicar e descartar', () => {
     expect(await A.descartarImportacaoAction(ID)).toEqual({ ok: true, data: null })
     expect(rejeitarImportacao).toHaveBeenCalledWith('db', { sub: 'u' }, ID)
     rejeitarImportacao.mockResolvedValue({ ok: false, erro: 'nao_encontrada' })
-    expect(await A.descartarImportacaoAction(ID)).toEqual({ ok: false, formError: 'Essa importação já foi aplicada ou descartada.' })
+    expect(await A.descartarImportacaoAction(ID)).toEqual({ ok: false, formError: 'Essa importação já foi aplicada, descartada ou está sendo lida.' })
     expect(await A.descartarImportacaoAction('x')).toMatchObject({ ok: false })
   })
 })

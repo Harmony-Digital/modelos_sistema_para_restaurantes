@@ -4,11 +4,13 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import type { RascunhoCardapioImportacao } from '@atd/core/importacao'
 import { LIMITES_RASCUNHO, normalizeText, type RascunhoCardapio } from '@atd/core/s4'
 import { aplicarRascunhoAction, descartarImportacaoAction } from '@/app/(painel)/conteudo/importar-actions'
 import { Field, Select, TextInput } from '@/components/form'
 import { MaskedInput } from '@/components/form/masked-input'
 import { Confirmar } from '@/components/painel/confirmar'
+import { AvisoConflitoPreco, ResultadoImportacao, useConfirmarImportacao } from '@/components/painel/revisao-comum'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { chamarAcao } from '@/lib/action-result'
@@ -26,6 +28,8 @@ type ItemEdit = {
   outrosNomes: string[]
   unidade: string | null
   incluir: boolean
+  /** preços diferentes lidos nos arquivos (só para conferir; não vai no rascunho) */
+  precoConflito: number[]
 }
 type CategoriaEdit = { nome: string; itens: ItemEdit[] }
 /** Item já cadastrado (para mostrar o que a importação muda nele). */
@@ -43,12 +47,12 @@ type Resultado = { criados: number; atualizados: number; ignorados: Ignorado[] }
 const chave = (categoria: string, nome: string) => `${normalizeText(categoria)}|${normalizeText(nome)}`
 const rotuloTag = (t: string) => ROTULO_TAG[t as TagCardapio] ?? t
 
-function paraEdicao(r: RascunhoCardapio): CategoriaEdit[] {
+function paraEdicao(r: RascunhoCardapioImportacao): CategoriaEdit[] {
   return r.categorias.map((c) => ({
     nome: c.nome,
     itens: c.itens.map((i) => ({
       nome: i.nome, descricao: i.descricao ?? '', preco: i.precoCentavos === null ? '' : formatarCentavos(i.precoCentavos),
-      tags: i.tags, outrosNomes: i.outrosNomes, unidade: i.unidade, incluir: i.incluir,
+      tags: i.tags, outrosNomes: i.outrosNomes, unidade: i.unidade, incluir: i.incluir, precoConflito: i.precoConflito ?? [],
     })),
   }))
 }
@@ -110,7 +114,11 @@ function mudancas(i: ItemEdit, atual: ItemExistente): string[] {
 export function RevisaoRascunho(props: {
   id: string
   origem: 'csv' | 'arquivo'
-  rascunho: RascunhoCardapio
+  rascunho: RascunhoCardapioImportacao
+  /** importação por alvo (vários arquivos, Etapa 07): aplica por `aplicarImportacaoAction` */
+  porAlvo?: boolean
+  /** por alvo: os arquivos da importação, para escolher um como cardápio de envio (como na Etapa 05) */
+  arquivosDeEnvio?: { ordem: number; mime: string }[]
   categoriasExistentes: { nome: string; ativo: boolean }[]
   itensExistentes: ItemExistente[]
   /** unidades ativas (para o arquivo de envio) */
@@ -122,6 +130,10 @@ export function RevisaoRascunho(props: {
   const [cats, setCats] = useState(() => paraEdicao(props.rascunho))
   const [usarArquivo, setUsarArquivo] = useState(false)
   const [unitIdArquivo, setUnitIdArquivo] = useState('')
+  const arquivos = props.arquivosDeEnvio ?? []
+  // o PDF (cardápio inteiro) vem escolhido; senão o primeiro arquivo
+  const [ordemArquivo, setOrdemArquivo] = useState(() => String((arquivos.find((a) => a.mime === 'application/pdf') ?? arquivos[0])?.ordem ?? ''))
+  const ofereceArquivo = props.origem === 'arquivo' && props.podeAplicar && (!props.porAlvo || arquivos.length > 0)
   const [mostrarErros, setMostrarErros] = useState(false)
   const [erroGeral, setErroGeral] = useState<string | undefined>()
   const [aplicando, setAplicando] = useState(false)
@@ -129,6 +141,7 @@ export function RevisaoRascunho(props: {
   const [descartar, setDescartar] = useState(false)
   // guarda síncrona: o duplo clique chega antes do re-render com o botão ocupado
   const emAndamento = useRef(false)
+  const porAlvo = useConfirmarImportacao({ id: props.id, alvo: 'cardapio', modo: 'completo' })
 
   const existentes = useMemo(() => new Map(props.itensExistentes.map((i) => [chave(i.categoria, i.nome), i])), [props.itensExistentes])
   const categoriasCadastradas = useMemo(() => new Set(props.categoriasExistentes.map((c) => normalizeText(c.nome))), [props.categoriasExistentes])
@@ -137,6 +150,19 @@ export function RevisaoRascunho(props: {
     [props.categoriasExistentes],
   )
   const incluidos = cats.reduce((n, c) => n + c.itens.filter((i) => i.incluir).length, 0)
+  // o mesmo prato lido em categorias diferentes (fotos/páginas diferentes) fica separado: a revisão avisa
+  const categoriasDoItem = new Map<string, Set<string>>()
+  for (const c of cats) {
+    for (const i of c.itens) {
+      if (!i.incluir || !i.nome.trim()) continue
+      const k = `${normalizeText(i.nome)}|${i.unidade ?? ''}`
+      categoriasDoItem.set(k, (categoriasDoItem.get(k) ?? new Set()).add(c.nome.trim()))
+    }
+  }
+  const outrasCategorias = (c: CategoriaEdit, i: ItemEdit) =>
+    i.incluir && i.nome.trim()
+      ? [...(categoriasDoItem.get(`${normalizeText(i.nome)}|${i.unidade ?? ''}`) ?? [])].filter((n) => normalizeText(n) !== normalizeText(c.nome))
+      : []
   const temErro = cats.some((c) => erroDaCategoria(c.nome) !== undefined || c.itens.some((i) => Object.keys(errosDoItem(i)).length > 0))
 
   const mudarCategoria = (ci: number, nome: string) => setCats((atual) => atual.map((c, x) => (x !== ci ? c : { ...c, nome })))
@@ -150,6 +176,12 @@ export function RevisaoRascunho(props: {
       setMostrarErros(true)
       setErroGeral('Confira os itens marcados antes de confirmar.')
       return
+    }
+    if (props.porAlvo) {
+      const arquivoDeEnvio = usarArquivo && ordemArquivo !== ''
+        ? { ordem: Number(ordemArquivo), unitId: unitIdArquivo !== '' ? unitIdArquivo : null }
+        : null
+      return porAlvo.confirmar(() => paraRascunho(cats), { arquivoDeEnvio })
     }
     emAndamento.current = true
     setAplicando(true)
@@ -186,6 +218,9 @@ export function RevisaoRascunho(props: {
   }
 
   if (resultado) return <ResultadoAplicacao r={resultado} />
+  if (porAlvo.resultado) return <ResultadoImportacao alvo="cardapio" modo="completo" r={porAlvo.resultado} />
+  const aplicandoAgora = aplicando || porAlvo.aplicando
+  const erroAgora = erroGeral ?? porAlvo.erroGeral
 
   return (
     <div className="flex flex-col gap-4">
@@ -250,6 +285,15 @@ export function RevisaoRascunho(props: {
                     {i.incluir && <Badge variant={atualiza ? 'secondary' : 'default'}>{atualiza ? 'Atualiza' : 'Novo'}</Badge>}
                   </div>
                   {i.unidade && <p className="text-sm text-muted-foreground">Preço só da unidade {i.unidade}</p>}
+                  <AvisoConflitoPreco precos={i.precoConflito} />
+                  {outrasCategorias(c, i).length > 0 && (
+                    <p className="flex items-start gap-2 rounded-md border border-border bg-secondary p-3 text-sm text-foreground">
+                      <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+                      <span className="min-w-0 break-words">
+                        Também aparece em {outrasCategorias(c, i).join(' e ')}. Se for o mesmo item, desmarque “Incluir” em um deles.
+                      </span>
+                    </p>
+                  )}
                   {i.incluir && atualiza && (
                     <p className="text-sm text-muted-foreground">
                       {muda.length ? `Muda: ${muda.join(', ')}` : 'Nada muda: campos em branco mantêm o valor atual.'}
@@ -304,12 +348,23 @@ export function RevisaoRascunho(props: {
         {props.categoriasExistentes.map((c) => <option key={c.nome} value={c.nome} />)}
       </datalist>
 
-      {props.origem === 'arquivo' && props.podeAplicar && (
+      {ofereceArquivo && (
         <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
           <label className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-foreground">
             <input type="checkbox" className="size-5 accent-primary" checked={usarArquivo} onChange={(ev) => setUsarArquivo(ev.target.checked)} />
-            Usar este arquivo como cardápio para enviar aos clientes
+            {arquivos.length > 1 ? 'Usar um dos arquivos como cardápio para enviar aos clientes' : 'Usar este arquivo como cardápio para enviar aos clientes'}
           </label>
+          {usarArquivo && arquivos.length > 1 && (
+            <Field id="rev-arquivo-envio" label="Arquivo">
+              {(a) => (
+                <Select {...a} value={ordemArquivo} onChange={(ev) => setOrdemArquivo(ev.target.value)}>
+                  {arquivos.map((x) => (
+                    <option key={x.ordem} value={String(x.ordem)}>{`Arquivo ${x.ordem} (${x.mime === 'application/pdf' ? 'PDF' : 'Foto'})`}</option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          )}
           {usarArquivo && (
             <Field id="rev-unidade-arquivo" label="Vale para">
               {(a) => (
@@ -323,7 +378,7 @@ export function RevisaoRascunho(props: {
         </div>
       )}
 
-      {erroGeral && <p role="alert" className="text-sm text-destructive">{erroGeral}</p>}
+      {erroAgora && <p role="alert" className="text-sm text-destructive">{erroAgora}</p>}
       {!props.podeAplicar && (
         <p className="text-sm text-muted-foreground">
           Só o dono, ou gerente com acesso a todas as unidades, confirma a importação. Você pode revisar os itens ou descartá-la.
@@ -331,11 +386,11 @@ export function RevisaoRascunho(props: {
       )}
       <div className="flex flex-wrap gap-2">
         {props.podeAplicar && (
-          <Button aria-busy={aplicando || undefined} disabled={aplicando || incluidos === 0} onClick={confirmar}>
-            {aplicando ? 'Aplicando…' : 'Confirmar importação'}
+          <Button aria-busy={aplicandoAgora || undefined} disabled={aplicandoAgora || incluidos === 0} onClick={confirmar}>
+            {aplicandoAgora ? 'Aplicando…' : 'Confirmar importação'}
           </Button>
         )}
-        <Button variant="outline" disabled={aplicando} onClick={() => setDescartar(true)}>Descartar</Button>
+        <Button variant="outline" disabled={aplicandoAgora} onClick={() => setDescartar(true)}>Descartar</Button>
       </div>
       <Confirmar
         aberto={descartar}

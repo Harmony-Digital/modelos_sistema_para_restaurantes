@@ -67,6 +67,14 @@ export function getTestDb() {
  * Só toca tabelas com linha — a maioria fica vazia em cada teste.
  */
 export async function resetDb(sql: postgres.Sql) {
+  // Guarda: nunca zerar o banco de desenvolvimento (ou qualquer banco fora dos clones do global setup).
+  const [linha] = await sql<{ nome: string }[]>`select current_database() as nome`
+  const nome = linha?.nome ?? ''
+  if (!nome.startsWith(TEST_DB_PREFIX)) {
+    throw new Error(
+      `resetDb recusado: "${nome}" não é um banco de teste (${TEST_DB_PREFIX}*). Rode os testes de banco com "pnpm test:db" ou "pnpm vitest run --project db".`,
+    )
+  }
   await sql.begin(async (tx) => {
     await tx`set local session_replication_role = replica`
     const tabelas = await tx<{ t: string }[]>`

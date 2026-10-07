@@ -1,0 +1,286 @@
+import { createHash } from 'node:crypto'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const requireStaff = vi.fn()
+const criarImportacaoArquivos = vi.fn()
+const anexarArquivo = vi.fn()
+const removerArquivo = vi.fn()
+const iniciarLeitura = vi.fn()
+const aplicarImportacao = vi.fn()
+const lerImportacao = vi.fn()
+const leituraParada = vi.fn()
+const podeAnexar = vi.fn()
+const caminhoArquivoImportacao = vi.fn()
+const copy = vi.fn()
+const enfileirar = vi.fn()
+const enqueueIngest = vi.fn(() => enfileirar)
+const upload = vi.fn()
+const remove = vi.fn()
+const from = vi.fn(() => ({ upload, remove, copy }))
+const revalidatePath = vi.fn()
+vi.mock('server-only', () => ({}))
+vi.mock('@/lib/dal', () => ({ requireStaff }))
+vi.mock('@/lib/server/db', () => ({ getDb: () => 'db' }))
+vi.mock('@/lib/server/boss', () => ({ getBoss: async () => 'boss' }))
+vi.mock('@/lib/supabase/server', () => ({ createClient: async () => ({ storage: { from } }) }))
+vi.mock('next/cache', () => ({ revalidatePath }))
+vi.mock('@atd/db', () => ({
+  criarImportacaoArquivos, anexarArquivo, removerArquivo, iniciarLeitura, aplicarImportacao, lerImportacao, enqueueIngest, leituraParada, podeAnexar,
+  caminhoArquivoImportacao,
+}))
+
+const A = await import('./importar-alvo-actions')
+
+const REST = '00000000-0000-4000-8000-0000000000aa'
+const ID = '00000000-0000-4000-8000-000000000011'
+const OUTRA = '00000000-0000-4000-8000-000000000012'
+const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]
+const fdCom = (f: File | null) => {
+  const fd = new FormData()
+  if (f !== null) fd.set('arquivo', f)
+  return fd
+}
+const bin = (bytes: number[], nome = 'foto.png', type = 'image/png') => new File([Uint8Array.from(bytes)], nome, { type })
+const SEM_PERMISSAO = 'Só o dono, ou gerente com acesso a todas as unidades, importa informações, horários e espaços.'
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  requireStaff.mockResolvedValue({ claims: { sub: 'u' }, restaurantId: REST, role: 'dono' })
+  podeAnexar.mockResolvedValue({ ok: true, valor: null })
+  leituraParada.mockResolvedValue(false)
+})
+
+describe('novaImportacaoAction', () => {
+  it('cria a importação do alvo (dono/gerente; o banco confere o acesso a todas as unidades)', async () => {
+    criarImportacaoArquivos.mockResolvedValue({ ok: true, valor: { id: ID } })
+    expect(await A.novaImportacaoAction({ alvo: 'cardapio', modo: 'so_precos' })).toEqual({ ok: true, data: { id: ID } })
+    expect(criarImportacaoArquivos).toHaveBeenCalledWith('db', { sub: 'u' }, { alvo: 'cardapio', modo: 'so_precos' })
+    expect(requireStaff).toHaveBeenCalledWith(['dono', 'gerente'])
+  })
+  it('alvo desconhecido ou "só preços" fora do cardápio não chega ao banco', async () => {
+    expect(await A.novaImportacaoAction({ alvo: 'clientes' as never, modo: 'completo' })).toMatchObject({ ok: false })
+    expect(await A.novaImportacaoAction({ alvo: 'horarios', modo: 'so_precos' })).toMatchObject({ ok: false })
+    expect(criarImportacaoArquivos).not.toHaveBeenCalled()
+  })
+  it('gerente restrito a uma unidade: mensagem de permissão', async () => {
+    criarImportacaoArquivos.mockResolvedValue({ ok: false, erro: 'sem_permissao' })
+    expect(await A.novaImportacaoAction({ alvo: 'horarios', modo: 'completo' })).toEqual({ ok: false, formError: SEM_PERMISSAO })
+  })
+})
+
+describe('anexarArquivoAction (um arquivo por requisição)', () => {
+  it('valida os bytes, sobe para o bucket importacoes e anexa na lista', async () => {
+    upload.mockResolvedValue({ error: null })
+    anexarArquivo.mockResolvedValue({ ok: true, valor: { ordem: 2, descartarCaminho: null } })
+    expect(await A.anexarArquivoAction(ID, fdCom(bin(PNG)))).toEqual({ ok: true, data: { ordem: 2 } })
+    const sha = createHash('sha256').update(Uint8Array.from(PNG)).digest('hex')
+    expect(from).toHaveBeenCalledWith('importacoes')
+    expect(anexarArquivo).toHaveBeenCalledWith('db', { sub: 'u' }, ID, {
+      storagePath: `importacoes/${REST}/${sha}.png`, mime: 'image/png', tamanho: PNG.length, sha256: sha,
+    })
+  })
+  it('upload falso, vazio ou grande demais é recusado sem tocar o Storage', async () => {
+    expect(await A.anexarArquivoAction(ID, fdCom(bin([0x4d, 0x5a], 'c.pdf', 'application/pdf')))).toEqual({
+      ok: false, fieldErrors: { arquivo: 'Envie um PDF ou uma imagem (JPEG, PNG ou WebP).' },
+    })
+    expect(await A.anexarArquivoAction(ID, fdCom(null))).toMatchObject({ ok: false, fieldErrors: { arquivo: expect.any(String) } })
+    const grande = bin(PNG)
+    Object.defineProperty(grande, 'size', { value: 21 * 1024 * 1024 })
+    expect(await A.anexarArquivoAction(ID, fdCom(grande))).toMatchObject({ ok: false, fieldErrors: { arquivo: expect.stringMatching(/passa de/) } })
+    expect(upload).not.toHaveBeenCalled()
+    expect(anexarArquivo).not.toHaveBeenCalled()
+  })
+  it('Minor 6: nunca apaga objeto do Storage (o mesmo sha256 pode ser de outra importação)', async () => {
+    upload.mockResolvedValue({ error: null })
+    anexarArquivo.mockResolvedValue({ ok: true, valor: { ordem: 1, descartarCaminho: `importacoes/${REST}/sobra.png` } })
+    expect(await A.anexarArquivoAction(ID, fdCom(bin(PNG)))).toEqual({ ok: true, data: { ordem: 1 } })
+    expect(remove).not.toHaveBeenCalled()
+  })
+  it('Minor 5: confere permissão, estado e limite antes de subir ao Storage (sem objeto órfão)', async () => {
+    const casos = [
+      [{ ok: false, erro: 'sem_permissao' }, { ok: false, formError: SEM_PERMISSAO }],
+      [{ ok: false, erro: 'nao_encontrada' }, { ok: false, formError: expect.any(String) }],
+      [{ ok: false, erro: 'limite_arquivos' }, { ok: false, formError: 'No máximo 10 arquivos por importação.' }],
+      [{ ok: false, erro: 'ja_iniciada' }, { ok: false, formError: expect.stringMatching(/já começou/) }],
+    ] as const
+    for (const [r, esperado] of casos) {
+      podeAnexar.mockResolvedValueOnce(r)
+      expect(await A.anexarArquivoAction(ID, fdCom(bin(PNG)))).toEqual(esperado)
+    }
+    expect(podeAnexar).toHaveBeenCalledWith('db', { sub: 'u' }, ID)
+    expect(upload).not.toHaveBeenCalled()
+    expect(anexarArquivo).not.toHaveBeenCalled()
+  })
+  it('id inválido não sobe nada', async () => {
+    expect(await A.anexarArquivoAction('x', fdCom(bin(PNG)))).toMatchObject({ ok: false })
+    expect(upload).not.toHaveBeenCalled()
+  })
+  it('mais de 10 arquivos, leitura já iniciada e falha do Storage viram mensagem', async () => {
+    upload.mockResolvedValue({ error: null })
+    anexarArquivo.mockResolvedValueOnce({ ok: false, erro: 'limite_arquivos' })
+    expect(await A.anexarArquivoAction(ID, fdCom(bin(PNG)))).toEqual({ ok: false, formError: 'No máximo 10 arquivos por importação.' })
+    anexarArquivo.mockResolvedValueOnce({ ok: false, erro: 'ja_iniciada' })
+    expect(await A.anexarArquivoAction(ID, fdCom(bin(PNG)))).toEqual({
+      ok: false, formError: 'A leitura destes arquivos já começou. Para mudar a lista, comece outra importação.',
+    })
+    anexarArquivo.mockResolvedValueOnce({ ok: false, erro: 'sem_permissao' })
+    expect(await A.anexarArquivoAction(ID, fdCom(bin(PNG)))).toEqual({ ok: false, formError: SEM_PERMISSAO })
+    upload.mockResolvedValue({ error: { statusCode: '500', message: 'boom' } })
+    anexarArquivo.mockClear()
+    expect(await A.anexarArquivoAction(ID, fdCom(bin(PNG)))).toEqual({ ok: false, formError: 'Não foi possível enviar o arquivo agora. Tente de novo.' })
+    expect(anexarArquivo).not.toHaveBeenCalled()
+  })
+})
+
+describe('removerArquivoAction', () => {
+  it('remove pela posição; posição inválida não chega ao banco', async () => {
+    removerArquivo.mockResolvedValue({ ok: true, valor: null })
+    expect(await A.removerArquivoAction(ID, 3)).toEqual({ ok: true, data: null })
+    expect(removerArquivo).toHaveBeenCalledWith('db', { sub: 'u' }, ID, 3)
+    expect(await A.removerArquivoAction(ID, 0)).toMatchObject({ ok: false })
+    expect(await A.removerArquivoAction(ID, 11)).toMatchObject({ ok: false })
+    expect(await A.removerArquivoAction('x', 1)).toMatchObject({ ok: false })
+    expect(removerArquivo).toHaveBeenCalledTimes(1)
+    removerArquivo.mockResolvedValue({ ok: false, erro: 'ja_iniciada' })
+    expect(await A.removerArquivoAction(ID, 1)).toMatchObject({ ok: false, formError: expect.stringMatching(/já começou/) })
+  })
+})
+
+describe('lerArquivosAction', () => {
+  it('fecha a lista e enfileira a leitura', async () => {
+    iniciarLeitura.mockResolvedValue({ ok: true, valor: null })
+    expect(await A.lerArquivosAction(ID)).toEqual({ ok: true, data: { id: ID, existente: false } })
+    expect(enfileirar).toHaveBeenCalledWith(ID)
+    expect(revalidatePath).toHaveBeenCalledWith('/conteudo')
+  })
+  it('mesmo conjunto já importado: devolve a importação existente sem enfileirar', async () => {
+    iniciarLeitura.mockResolvedValue({ ok: false, erro: 'ja_importado', id: OUTRA })
+    expect(await A.lerArquivosAction(ID)).toEqual({ ok: true, data: { id: OUTRA, existente: true } })
+    expect(enfileirar).not.toHaveBeenCalled()
+    expect(leituraParada).toHaveBeenCalledWith('db', { sub: 'u' }, OUTRA)
+  })
+  it('I1: a existente está parada (fila perdida, leitor morto): reenfileira a existente', async () => {
+    iniciarLeitura.mockResolvedValue({ ok: false, erro: 'ja_importado', id: OUTRA })
+    leituraParada.mockResolvedValue(true)
+    expect(await A.lerArquivosAction(ID)).toEqual({ ok: true, data: { id: OUTRA, existente: true } })
+    expect(enfileirar).toHaveBeenCalledWith(OUTRA)
+  })
+  it('I1: "Tentar de novo" na importação parada em processando reenfileira; lendo de verdade, não', async () => {
+    iniciarLeitura.mockResolvedValue({ ok: false, erro: 'ja_iniciada' })
+    leituraParada.mockResolvedValueOnce(true)
+    expect(await A.lerArquivosAction(ID)).toEqual({ ok: true, data: { id: ID, existente: false } })
+    expect(enfileirar).toHaveBeenCalledWith(ID)
+    enfileirar.mockClear()
+    leituraParada.mockResolvedValueOnce(false)
+    expect(await A.lerArquivosAction(ID)).toEqual({ ok: true, data: { id: ID, existente: false } })
+    expect(enfileirar).not.toHaveBeenCalled()
+  })
+  it('sem arquivos ⇒ mensagem', async () => {
+    iniciarLeitura.mockResolvedValue({ ok: false, erro: 'sem_arquivos' })
+    expect(await A.lerArquivosAction(ID)).toEqual({ ok: false, formError: 'Envie ao menos um arquivo antes de ler.' })
+  })
+  it('fila fora do ar: pede para tentar de novo; o novo clique reenfileira (a leitura já iniciada e ainda na fila)', async () => {
+    iniciarLeitura.mockResolvedValueOnce({ ok: true, valor: null })
+    enfileirar.mockRejectedValueOnce(new Error('down'))
+    expect(await A.lerArquivosAction(ID)).toEqual({
+      ok: false, formError: 'Recebemos os arquivos, mas não foi possível começar a leitura agora. Tente de novo em instantes.',
+    })
+    iniciarLeitura.mockResolvedValueOnce({ ok: false, erro: 'ja_iniciada' })
+    leituraParada.mockResolvedValueOnce(true)
+    expect(await A.lerArquivosAction(ID)).toEqual({ ok: true, data: { id: ID, existente: false } })
+    expect(enfileirar).toHaveBeenCalledTimes(2)
+    // já lendo ou em rascunho: só mostra o estado atual
+    iniciarLeitura.mockResolvedValueOnce({ ok: false, erro: 'ja_iniciada' })
+    expect(await A.lerArquivosAction(ID)).toEqual({ ok: true, data: { id: ID, existente: false } })
+    expect(enfileirar).toHaveBeenCalledTimes(2)
+    // fila fora de novo ao reenfileirar a parada: mensagem
+    iniciarLeitura.mockResolvedValueOnce({ ok: false, erro: 'ja_iniciada' })
+    leituraParada.mockResolvedValueOnce(true)
+    enfileirar.mockRejectedValueOnce(new Error('down'))
+    expect(await A.lerArquivosAction(ID)).toMatchObject({ ok: false, formError: expect.stringMatching(/não foi possível começar a leitura/) })
+  })
+})
+
+describe('aplicarImportacaoAction (Zod pelo alvo)', () => {
+  const informacoes = { fatos: [{ tema: 'Estacionamento', texto: 'Temos estacionamento.', exemplos: [], unidade: null, incluir: true }] }
+  const horarios = {
+    unidades: [{ unidade: 'Centro', semana: [{ dia: 1, turnos: [{ abre: '11:00', fecha: '15:00' }], conflito: false }], excecoes: [], incluir: true }],
+  }
+  const espacos = { espacos: [{ nome: 'Salão', unidade: 'Centro', capacidadeMin: 10, capacidadeMax: 40, descricao: null, condicoes: null, incluir: true }] }
+  const soPrecos = { itens: [{ nome: 'Picanha', categoria: null, precoCentavos: 9990, incluir: true }] }
+  const cardapio = {
+    categorias: [{ nome: 'Carnes', itens: [{ nome: 'Picanha', descricao: null, precoCentavos: 8990, precoConflito: [8990, 9490], tags: [], outrosNomes: [], unidade: null, incluir: true }] }],
+  }
+
+  it.each([
+    ['informacoes', 'completo', informacoes],
+    ['horarios', 'completo', horarios],
+    ['espacos', 'completo', espacos],
+    ['cardapio', 'so_precos', soPrecos],
+    ['cardapio', 'completo', cardapio],
+  ] as const)('%s/%s válido chega ao banco e devolve as contagens', async (alvo, modo, rascunho) => {
+    aplicarImportacao.mockResolvedValue({ ok: true, valor: { criados: 1, atualizados: 2, ignorados: 3 } })
+    expect(await A.aplicarImportacaoAction(ID, { alvo, modo, rascunho })).toEqual({ ok: true, data: { criados: 1, atualizados: 2, ignorados: 3 } })
+    expect(aplicarImportacao).toHaveBeenCalledWith('db', { sub: 'u' }, ID, expect.objectContaining(rascunho), { arquivoDeEnvio: null })
+    expect(requireStaff).toHaveBeenCalledWith(['dono', 'gerente'])
+  })
+
+  it('I3: cardápio com arquivo de envio: copia o arquivo escolhido para o bucket cardapio e aplica com ele', async () => {
+    const UNIDADE = '00000000-0000-4000-8000-0000000000bb'
+    caminhoArquivoImportacao.mockResolvedValue(`importacoes/${REST}/abc.pdf`)
+    copy.mockResolvedValue({ error: null })
+    aplicarImportacao.mockResolvedValue({ ok: true, valor: { criados: 1, atualizados: 0, ignorados: 0 } })
+    const entrada = { alvo: 'cardapio', modo: 'completo', rascunho: cardapio, arquivoDeEnvio: { ordem: 2, unitId: UNIDADE } } as const
+    expect(await A.aplicarImportacaoAction(ID, entrada)).toMatchObject({ ok: true })
+    expect(caminhoArquivoImportacao).toHaveBeenCalledWith('db', { sub: 'u' }, ID, 2)
+    expect(copy).toHaveBeenCalledWith(`${REST}/abc.pdf`, `${REST}/abc.pdf`, { destinationBucket: 'cardapio' })
+    expect(aplicarImportacao).toHaveBeenCalledWith('db', { sub: 'u' }, ID, expect.anything(), { arquivoDeEnvio: { ordem: 2, unitId: UNIDADE } })
+    // cópia falhou: nada é aplicado
+    aplicarImportacao.mockClear()
+    copy.mockResolvedValue({ error: { statusCode: '500', message: 'x' } })
+    expect(await A.aplicarImportacaoAction(ID, entrada)).toEqual({ ok: false, formError: 'Não foi possível enviar o arquivo agora. Tente de novo.' })
+    // arquivo que não está na importação, ordem/unidade inválidas ou outro alvo: recusado
+    caminhoArquivoImportacao.mockResolvedValue(null)
+    expect(await A.aplicarImportacaoAction(ID, entrada)).toEqual({ ok: false, formError: 'Este arquivo não pode ser usado como cardápio para enviar aos clientes.' })
+    expect(await A.aplicarImportacaoAction(ID, { ...entrada, arquivoDeEnvio: { ordem: 0, unitId: null } })).toMatchObject({ ok: false })
+    expect(await A.aplicarImportacaoAction(ID, { ...entrada, arquivoDeEnvio: { ordem: 1, unitId: 'x' } })).toMatchObject({ ok: false })
+    expect(await A.aplicarImportacaoAction(ID, { alvo: 'informacoes', modo: 'completo', rascunho: informacoes, arquivoDeEnvio: { ordem: 1, unitId: null } }))
+      .toEqual({ ok: false, formError: 'Este arquivo não pode ser usado como cardápio para enviar aos clientes.' })
+    expect(aplicarImportacao).not.toHaveBeenCalled()
+    aplicarImportacao.mockResolvedValueOnce({ ok: false, erro: 'arquivo_invalido' })
+    caminhoArquivoImportacao.mockResolvedValue(`importacoes/${REST}/abc.pdf`)
+    copy.mockResolvedValue({ error: null })
+    expect(await A.aplicarImportacaoAction(ID, entrada)).toEqual({ ok: false, formError: 'Este arquivo não pode ser usado como cardápio para enviar aos clientes.' })
+  })
+
+  it('rascunho fora do schema do alvo não chega ao banco', async () => {
+    const ruins = [
+      { alvo: 'horarios', modo: 'completo', rascunho: { unidades: [{ ...horarios.unidades[0]!, semana: [{ dia: 1, turnos: [{ abre: '11:00', fecha: '11:00' }] }] }] } },
+      { alvo: 'espacos', modo: 'completo', rascunho: { espacos: [{ ...espacos.espacos[0]!, capacidadeMin: 50, capacidadeMax: 10 }] } },
+      { alvo: 'informacoes', modo: 'completo', rascunho: { fatos: [{ ...informacoes.fatos[0]!, texto: '' }] } },
+      { alvo: 'cardapio', modo: 'so_precos', rascunho: { itens: [{ ...soPrecos.itens[0]!, precoCentavos: -5 }] } },
+      // rascunho de outro alvo
+      { alvo: 'horarios', modo: 'completo', rascunho: informacoes },
+      { alvo: 'espacos', modo: 'so_precos', rascunho: espacos },
+    ] as const
+    for (const r of ruins) {
+      expect(await A.aplicarImportacaoAction(ID, r as never)).toEqual({ ok: false, formError: 'Algum dado está inválido. Confira e tente de novo.' })
+    }
+    expect(await A.aplicarImportacaoAction('x', { alvo: 'espacos', modo: 'completo', rascunho: espacos })).toMatchObject({ ok: false })
+    expect(aplicarImportacao).not.toHaveBeenCalled()
+  })
+
+  it('erros do banco viram mensagens (unidade não escolhida, já aplicada, permissão)', async () => {
+    const casos = [
+      ['unidade_nao_escolhida', 'Escolha a unidade de cada horário ou espaço marcado (ou deixe-o de fora) antes de confirmar.'],
+      ['ja_aplicado', 'Essa importação já foi aplicada.'],
+      ['rascunho_invalido', 'Algum dado está inválido. Confira e tente de novo.'],
+      ['sem_permissao', 'Só o dono, ou gerente com acesso a todas as unidades, aplica a importação.'],
+      ['nao_pronta', 'Esta importação não está pronta para confirmar: a leitura ainda não terminou, deu erro ou ela foi descartada. Atualize a página.'],
+    ] as const
+    for (const [erro, msg] of casos) {
+      aplicarImportacao.mockResolvedValueOnce({ ok: false, erro })
+      expect(await A.aplicarImportacaoAction(ID, { alvo: 'horarios', modo: 'completo', rascunho: horarios })).toEqual({ ok: false, formError: msg })
+    }
+  })
+})

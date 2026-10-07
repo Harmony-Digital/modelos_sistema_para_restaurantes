@@ -32,9 +32,25 @@ export type LeituraCardapioFalsa = {
   }[]
 }
 
+type Parte = { type?: string; file?: { filename?: unknown; file_data?: unknown } }
+
 /** Partes de conteúdo das mensagens (array), para conferir anexos. */
-function partes(mensagens: { content: unknown }[]): { type?: string; file?: { file_data?: unknown } }[] {
-  return mensagens.flatMap((m) => (Array.isArray(m.content) ? (m.content as { type?: string; file?: { file_data?: unknown } }[]) : []))
+function partes(mensagens: { content: unknown }[]): Parte[] {
+  return mensagens.flatMap((m) => (Array.isArray(m.content) ? (m.content as Parte[]) : []))
+}
+
+/**
+ * Pedido de leitura de documento (Etapa 07): o schema pedido (`rascunho_<alvo>`) e os anexos do lote, em ordem (PDF
+ * com o nome que o worker dá ao lote, ex. `documento-1-paginas-1-a-5.pdf`; imagem sem nome).
+ */
+export type LeituraPedida = { schema: string; partes: { tipo: 'pdf' | 'imagem'; nome: string | null }[] }
+
+function anexosDoLote(mensagens: { content: unknown }[]): LeituraPedida['partes'] {
+  return partes(mensagens).flatMap((p): LeituraPedida['partes'] => {
+    if (p.type === 'file') return [{ tipo: 'pdf', nome: typeof p.file?.filename === 'string' ? p.file.filename : null }]
+    if (p.type === 'image_url') return [{ tipo: 'imagem', nome: null }]
+    return []
+  })
 }
 
 /**
@@ -43,16 +59,22 @@ function partes(mensagens: { content: unknown }[]): { type?: string; file?: { fi
  * require_parameters); sem ele é OpenAI (exige `store: false`, `json_schema` estrito e um `model`, sem campos do
  * OpenRouter) — o e2e roda o worker com `AI_PROVIDER=openai`, o caminho de produção.
  * `responder` recebe a mensagem do cliente e o `user` inteiro (com `<pergunta_pendente>`, quando houver).
- * `leituraCardapio` responde a leitura de PDF/foto da importação (sem ela, a leitura falha com 500); se devolver uma
- * Promise, a resposta espera por ela.
+ * `leituraCardapio` responde a leitura de PDF/foto do cardápio (`rascunho_cardapio`); `leituraDocumento` responde a
+ * leitura de qualquer alvo (`rascunho_<alvo>`, e o cardápio quando não há `leituraCardapio`) e recebe o schema e os
+ * anexos do lote. Sem a leitura configurada, ela falha com 500. Se devolver uma Promise, a resposta espera por ela.
  */
 export async function iniciarOpenRouterFalso(
   responder: (mensagem: string, user: string) => TriagemFalsa,
-  opcoes: { leituraCardapio?: () => LeituraCardapioFalsa | Promise<LeituraCardapioFalsa> } = {},
+  opcoes: {
+    leituraCardapio?: () => LeituraCardapioFalsa | Promise<LeituraCardapioFalsa>
+    leituraDocumento?: (pedido: LeituraPedida) => unknown
+  } = {},
 ) {
   const chamadas: string[] = []
   /** Leituras de cardápio recebidas (PDF pelo motor nativo do modelo?). */
   const leituras: { pdfNativo: boolean }[] = []
+  /** Leituras pela `leituraDocumento` (schema + anexos de cada lote), na ordem de chegada. */
+  const documentos: LeituraPedida[] = []
   /** `user` completo de cada chamada, na mesma ordem de `chamadas`. */
   const entradas: string[] = []
   /** Provedor de cada chamada aceita (triagem e leitura), na ordem de chegada. */
@@ -114,16 +136,29 @@ export async function iniciarOpenRouterFalso(
             choices: [{ message: { role: 'assistant', content: JSON.stringify(conteudo) } }],
             usage: { prompt_tokens: 10, completion_tokens: 5, cost: 0 },
           })
+      const devolver = (r: unknown) => void Promise.resolve(r).then(resposta, (e: unknown) => responderJson(500, { error: { message: String(e) } }))
+      const schema = body.response_format?.json_schema?.name ?? ''
+      // leitura por alvo (Etapa 07): o teste decide pelo schema e pelos anexos do lote
+      if (schema.startsWith('rascunho_') && (schema !== 'rascunho_cardapio' || !opcoes.leituraCardapio)) {
+        if (!opcoes.leituraDocumento) return responderJson(500, { error: { message: `leitura ${schema} não configurada no e2e` } })
+        const pedido: LeituraPedida = { schema, partes: anexosDoLote(body.messages) }
+        documentos.push(pedido)
+        try {
+          devolver(opcoes.leituraDocumento(pedido))
+        } catch (e) {
+          responderJson(500, { error: { message: String(e) } })
+        }
+        return
+      }
       // leitura de cardápio (job document.ingest): mesma política de dados, resposta fixa
-      if (body.response_format?.json_schema?.name === 'rascunho_cardapio') {
-        if (!opcoes.leituraCardapio) return responderJson(500, { error: { message: 'leitura de cardápio não configurada no e2e' } })
+      if (schema === 'rascunho_cardapio' && opcoes.leituraCardapio) {
         // OpenRouter: plugin file-parser com motor nativo; OpenAI: o PDF vai como parte `file` e o modelo lê direto
         const pdfNativo = openai
           ? partes(body.messages).some((p) => p.type === 'file' && String(p.file?.file_data ?? '').startsWith('data:application/pdf;base64,'))
           : (body.plugins ?? []).some((p) => p.id === 'file-parser' && p.pdf?.engine === 'native')
         leituras.push({ pdfNativo })
         // pode ser assíncrona: o teste segura a leitura para ver o estado "Lendo o cardápio…"
-        void Promise.resolve(opcoes.leituraCardapio()).then(resposta, (e: unknown) => responderJson(500, { error: { message: String(e) } }))
+        devolver(opcoes.leituraCardapio())
         return
       }
       const conteudo = body.messages.find((m) => m.role === 'user')?.content
@@ -147,6 +182,7 @@ export async function iniciarOpenRouterFalso(
     chamadas,
     entradas,
     leituras,
+    documentos,
     provedores,
     fechar: () => new Promise<void>((ok) => servidor.close(() => ok())),
   }

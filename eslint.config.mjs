@@ -1,7 +1,7 @@
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['**/node_modules/**', '**/.next/**', '**/dist/**', '**/migrations/**', 'supabase/**'] },
+  { ignores: ['**/node_modules/**', '**/.next/**', '**/dist/**', '**/migrations/**', 'supabase/**', '.claude/**'] },
   ...tseslint.configs.recommended,
   {
     rules: {

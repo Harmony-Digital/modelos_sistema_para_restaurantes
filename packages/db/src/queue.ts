@@ -15,10 +15,14 @@ export const QUEUES = {
 } as const
 export const PROCESS_DELAY_SECONDS = 4
 /**
- * Prazo do job de leitura de cardápio: 2 chamadas à IA (cada uma com prazo TOTAL de `INGESTAO_TIMEOUT_MS`, somando os
- * modelos da lista) + download. Não pode passar de `PRAZO_PROCESSANDO`, senão a retomada libera a reserva em voo.
+ * Prazo do job de leitura (cardápio da Etapa 05 ou um lote da Etapa 07): 2 chamadas à IA (cada uma com prazo TOTAL de
+ * `INGESTAO_TIMEOUT_MS`, somando os modelos da lista) + download + pdf-lib ≈ 270 s no pior caso. Fica acima disso com
+ * folga para o pg-boss não dar o job por expirado (e repetir) com o handler ainda rodando. A concessão do lote
+ * (`PRAZO_CONCESSAO_LOTE`) dura o mesmo: a repetição de um job expirado chega depois dela e só então retoma.
  */
-export const INGEST_EXPIRE_SECONDS = 300
+export const INGEST_EXPIRE_SECONDS = 420
+/** Concessão do lote em leitura (Etapa 07): enquanto viva, outra execução não lê nem libera a reserva do lote. */
+export const PRAZO_CONCESSAO_LOTE = `${INGEST_EXPIRE_SECONDS} seconds`
 export type ProcessJob = { conversationId: string }
 /** Leitura por IA de uma importação de cardápio (knowledge_documents `enviado`, origem `arquivo`). */
 export type IngestJob = { importacaoId: string }
@@ -65,6 +69,8 @@ export async function ensureQueues(boss: PgBoss): Promise<void> {
     expireInSeconds: INGEST_EXPIRE_SECONDS,
     deadLetter: QUEUES.ingestDlq,
   })
+  // createQueue não altera fila existente (ON CONFLICT DO NOTHING): o prazo do job muda também onde ela já existe
+  await boss.updateQueue(QUEUES.ingest, { expireInSeconds: INGEST_EXPIRE_SECONDS })
   await boss.createQueue(QUEUES.deliverDlq, { policy: 'standard' })
   await boss.createQueue(QUEUES.deliver, {
     policy: 'stately', // 1 job enfileirado + 1 ativo por singletonKey (= conversa); deliver() envia todas as pendentes
@@ -100,6 +106,16 @@ export function enqueueProcess(boss: PgBoss): Enqueue {
 export function enqueueIngest(boss: PgBoss): (importacaoId: string) => Promise<unknown> {
   return (importacaoId) =>
     boss.send(QUEUES.ingest, { importacaoId } satisfies IngestJob, { singletonKey: importacaoId })
+}
+
+/**
+ * Reenfileira a leitura no passo seguinte (Etapa 07: um lote por execução). `passo` = índice do próximo lote, ou o
+ * lote com a metade (`3a`/`3b`) quando a saída foi cortada. A chave única por passo deixa o próximo job na fila
+ * enquanto o atual ainda está ativo (stately) e não duplica o mesmo passo.
+ */
+export function enqueueIngestPasso(boss: PgBoss): (importacaoId: string, passo: string) => Promise<unknown> {
+  return (importacaoId, passo) =>
+    boss.send(QUEUES.ingest, { importacaoId } satisfies IngestJob, { singletonKey: `${importacaoId}:${passo}` })
 }
 
 /** Enfileira a entrega da resposta humana (Server Action, depois do commit de `responderConversa`/`reenviarMensagem`). */

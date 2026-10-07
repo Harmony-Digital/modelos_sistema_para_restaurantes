@@ -143,6 +143,17 @@ describe('orçamento', () => {
     expect(await liberarReservasPendentes(db, { restaurantId, ref, timeZone: TZ })).toBe(0)
     expect((await counters(restaurantId)).map((c) => c.reservado)).toEqual(['0.100000', '0.100000'])
   })
+
+  it('liberarReservasPendentes com liquidarUsd: liquida a reserva aberta por esse valor (chamada talvez cobrada)', async () => {
+    const restaurantId = await setup('1', '10')
+    const ref = 'importacao:y'
+    await reserveBudget(db, { restaurantId, scope: 'ia', amountUsd: '0.50', timeZone: TZ, ref })
+    expect(await withRole(db, 'worker_app', (tx) => liberarReservasPendentes(tx, { restaurantId, ref, timeZone: TZ, liquidarUsd: '0.10' }))).toBe(1)
+    expect((await counters(restaurantId)).map((c) => [c.reservado, c.gasto])).toEqual([['0.000000', '0.100000'], ['0.000000', '0.100000']])
+    const baixas = await db.select().from(spendLedger).where(eq(spendLedger.tipo, 'liquidacao'))
+    expect(baixas).toHaveLength(1)
+    expect(await liberarReservasPendentes(db, { restaurantId, ref, timeZone: TZ, liquidarUsd: '0.10' })).toBe(0)
+  })
 })
 
 

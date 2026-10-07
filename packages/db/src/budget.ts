@@ -150,12 +150,14 @@ export function releaseBudget(db: Db | Tx, r: Reservation, ref?: string) {
 }
 
 /**
- * Devolve as reservas ainda abertas (sem liquidação nem estorno) de um `ref` — processo que morreu entre a reserva e a
- * baixa. Os contadores são os dos períodos do momento da reserva. Idempotente (a baixa é única por reserva).
+ * Dá baixa nas reservas ainda abertas (sem liquidação nem estorno) de um `ref` — processo que morreu entre a reserva e a
+ * baixa. Sem `liquidarUsd`, devolve (estorno); com ele, liquida cada uma por esse valor (a chamada do processo morto
+ * pode ter sido cobrada e o custo real não é conhecido). Os contadores são os dos períodos do momento da reserva.
+ * Idempotente (a baixa é única por reserva).
  */
 export async function liberarReservasPendentes(
   db: Db | Tx,
-  p: { restaurantId: string; ref: string; timeZone: string },
+  p: { restaurantId: string; ref: string; timeZone: string; liquidarUsd?: string },
 ): Promise<number> {
   const abertas = await db
     .select({ id: spendLedger.id, escopo: spendLedger.escopo, valorUsd: spendLedger.valorUsd, createdAt: spendLedger.createdAt })
@@ -181,10 +183,12 @@ export async function liberarReservasPendentes(
         ),
       ))
       .orderBy(asc(budgetCounters.periodo)) // mesma ordem de lock da reserva (dia → mes)
-    await releaseBudget(db, {
+    const reserva: Reservation = {
       restaurantId: p.restaurantId, scope: r.escopo, amountUsd: String(r.valorUsd), counterIds: contadores.map((c) => c.id),
       reservationId: r.id, agora: r.createdAt,
-    }, p.ref)
+    }
+    if (p.liquidarUsd !== undefined) await settleBudget(db, reserva, p.liquidarUsd, p.ref)
+    else await releaseBudget(db, reserva, p.ref)
     liberadas++
   }
   return liberadas

@@ -2,12 +2,12 @@ import { hostname } from 'node:os'
 import { createLlmClient } from '@atd/ai'
 import { loadEnv, workerEnvSchema } from '@atd/config'
 import { keyFromBase64 } from '@atd/core'
-import { createBoss, createDb, ensureQueues, QUEUES, type ConviteJob, type DeliverJob, type IngestJob, type ProcessJob } from '@atd/db'
+import { createBoss, createDb, enqueueIngest, enqueueIngestPasso, ensureQueues, QUEUES, type ConviteJob, type DeliverJob, type IngestJob, type ProcessJob } from '@atd/db'
 import { createWhatsAppClient } from '@atd/whatsapp'
 import { CONCORRENCIA, POOL_DRIZZLE_WORKER } from './concorrencia.ts'
 import { createAuthAdmin, processarConvite } from './jobs/convite.ts'
 import { entregarRespostaHumana } from './jobs/deliver.ts'
-import { ingestDocument } from './jobs/ingest-document.ts'
+import { ingestDocument, retomarImportacoesParadas } from './jobs/ingest-document.ts'
 import { processConversation, type ProcessDeps } from './jobs/process-conversation.ts'
 import { agendarRetencao, executarRetencaoDiaria } from './jobs/retencao.ts'
 import { startHeartbeat } from './heartbeat.ts'
@@ -92,19 +92,25 @@ try {
   })
 
   if (!env.AI_INGEST_MODELS) log.warn('AI_INGEST_MODELS vazio: importação de cardápio por IA desligada (só CSV)')
+  // importação em lotes: um lote por job; o seguinte vai para a fila com singletonKey `importacaoId:passo`
+  const reenfileirar = enqueueIngestPasso(boss)
   await boss.work<IngestJob>(QUEUES.ingest, { localConcurrency: CONCORRENCIA.ingest }, async (jobs) => {
     for (const job of jobs) {
       try {
-        const outcome = await ingestDocument({ db, llm, storage, ingestModels: env.AI_INGEST_MODELS, log }, job.data.importacaoId)
+        const outcome = await ingestDocument({ db, llm, storage, ingestModels: env.AI_INGEST_MODELS, log, reenfileirar }, job.data.importacaoId)
         log.info({ importacaoId: job.data.importacaoId, outcome }, 'importação processada')
       } catch (err) {
-        // só falha antes de marcar `processando` chega aqui (depois disso o job grava `erro` e não lança)
+        // só chega aqui falha antes de marcar `processando` ou ao enfileirar o lote seguinte (a repetição segue de lote_atual)
         log.error({ err, importacaoId: job.data.importacaoId }, 'falha ao processar importação')
         Sentry.captureException(err, { extra: { importacaoId: job.data.importacaoId } })
         throw sanitizeJobError(err)
       }
     }
   })
+  // importação parada (enfileiramento perdido, fila que desistiu): segue de onde parou; de novo na retenção diária
+  const retomarParadas = () =>
+    retomarImportacoesParadas({ db, log, enfileirar: enqueueIngest(boss) }).catch((err) => log.error({ err }, 'falha ao procurar importações paradas'))
+  await retomarParadas()
 
   // convite de equipe (Server Action do dono): Auth admin com a chave de serviço; o e-mail nunca vai para log
   const auth = createAuthAdmin({ url: env.SUPABASE_URL, serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY })
@@ -124,6 +130,7 @@ try {
 
   // retenção diária (03:00 de São Paulo): idempotente e em lotes; retenta só quem falhou e nunca relança o job
   await boss.work(QUEUES.retencao, { localConcurrency: CONCORRENCIA.retencao }, async () => {
+    await retomarParadas()
     const r = await executarRetencaoDiaria({ db, log })
     log.info({ restaurantes: r.restaurantes, falhas: r.falhas }, 'retenção diária executada')
     if (r.falhas > 0) Sentry.captureMessage(`retenção falhou em ${r.falhas} restaurante(s)`, 'error')

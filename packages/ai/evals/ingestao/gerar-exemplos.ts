@@ -1,20 +1,36 @@
 /**
  * Gera os arquivos de exemplo (INVENTADOS) do eval de leitura de cardápio, a partir do gabarito, sem dependências:
  * um PDF de texto simples (Helvetica) e um PNG pequeno (fonte bitmap 5x7, tons de cinza).
+ * Também gera os documentos da Etapa 07 (várias fotos de cardápio, informações, horários e espaços).
  * Uso: node evals/ingestao/gerar-exemplos.ts   (grava em evals/ingestao/exemplos/)
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { crc32, deflateSync } from 'node:zlib'
-import { EXEMPLO_PDF, EXEMPLO_PNG, INSTRUCAO_MALICIOSA, precoNoDocumento, type Exemplo } from './gabarito.ts'
+import {
+  EXEMPLO_ESPACOS,
+  EXEMPLO_FOTOS,
+  EXEMPLO_HORARIOS,
+  EXEMPLO_INFORMACOES,
+  EXEMPLO_PDF,
+  EXEMPLO_PNG,
+  INSTRUCAO_MALICIOSA,
+  precoNoDocumento,
+  type Exemplo,
+  type ExemploEspacos,
+  type ExemploHorarios,
+  type ExemploInformacoes,
+} from './gabarito.ts'
 
 // ------------------------------------------------------------- PDF
 
 const escaparPdf = (s: string) => s.replaceAll('\\', '\\\\').replaceAll('(', '\\(').replaceAll(')', '\\)')
 
+type LinhaPdf = [string, number, string]
+
 /** Linhas do PDF: [fonte, tamanho, texto]. */
-function linhasPdf(ex: Exemplo): [string, number, string][] {
-  const linhas: [string, number, string][] = [['F1', 18, ex.titulo], ['F2', 10, ' ']]
+function linhasPdf(ex: Exemplo): LinhaPdf[] {
+  const linhas: LinhaPdf[] = [['F1', 18, ex.titulo], ['F2', 10, ' ']]
   for (const c of ex.categorias) {
     linhas.push(['F1', 13, c.nome])
     for (const i of c.itens) {
@@ -27,10 +43,30 @@ function linhasPdf(ex: Exemplo): [string, number, string][] {
   return linhas
 }
 
+/** Informações: título do assunto em negrito e o texto abaixo; a injeção no fim. */
+export function linhasPdfInformacoes(ex: ExemploInformacoes = EXEMPLO_INFORMACOES): LinhaPdf[] {
+  const linhas: LinhaPdf[] = [['F1', 18, ex.titulo], ['F2', 10, ' ']]
+  for (const f of ex.fatos) linhas.push(['F1', 12, f.temas[0]!], ['F2', 10, f.texto], ['F2', 8, ' '])
+  linhas.push(['F2', 8, ex.injecao])
+  return linhas
+}
+
+/** Horários: "#" = título em negrito; a injeção no fim. */
+export function linhasPdfHorarios(ex: ExemploHorarios = EXEMPLO_HORARIOS): LinhaPdf[] {
+  const linhas: LinhaPdf[] = ex.linhas.map((l): LinhaPdf => (l.startsWith('#') ? ['F1', 13, l.slice(1)] : ['F2', 11, l || ' ']))
+  linhas.push(['F2', 10, ' '], ['F2', 8, ex.injecao])
+  return linhas
+}
+
 export function gerarPdf(ex: Exemplo = EXEMPLO_PDF): Buffer {
+  return pdfDeLinhas(linhasPdf(ex))
+}
+
+/** PDF de uma página (A4) com as linhas em Helvetica. */
+export function pdfDeLinhas(linhasDoPdf: readonly LinhaPdf[]): Buffer {
   let y = 790
   const ops = ['BT']
-  for (const [fonte, tamanho, texto] of linhasPdf(ex)) {
+  for (const [fonte, tamanho, texto] of linhasDoPdf) {
     ops.push(`/${fonte} ${tamanho} Tf 1 0 0 1 56 ${y} Tm (${escaparPdf(texto)}) Tj`)
     y -= Math.round(tamanho * 1.6)
   }
@@ -77,13 +113,22 @@ export const FONTE: Record<string, string> = {
 const ESCALA = 3
 const MARGEM = 24
 
-function linhasPng(ex: Exemplo): string[] {
-  return [ex.titulo, '', ...ex.categorias.flatMap((c) => c.itens.map((i) => `${i.nome}  ${precoNoDocumento(i.precoCentavos)}`))]
+export function linhasPng(ex: Exemplo): string[] {
+  const linhas = [ex.titulo, '', ...ex.categorias.flatMap((c) => c.itens.map((i) => `${i.nome}  ${precoNoDocumento(i.precoCentavos)}`))]
+  return ex.injecao ? [...linhas, '', ex.injecao] : linhas
+}
+
+export function linhasPngEspacos(ex: ExemploEspacos = EXEMPLO_ESPACOS): string[] {
+  return [...ex.linhas, '', ex.injecao]
 }
 
 /** Pixels (1 byte por pixel, 0 = preto, 255 = branco), linha a linha, sem o byte de filtro. */
 export function pixelsPng(ex: Exemplo = EXEMPLO_PNG): { largura: number; altura: number; pixels: Buffer } {
-  const linhas = linhasPng(ex).map((l) => l.toUpperCase())
+  return pixelsDeLinhas(linhasPng(ex))
+}
+
+export function pixelsDeLinhas(linhasDoPng: readonly string[]): { largura: number; altura: number; pixels: Buffer } {
+  const linhas = linhasDoPng.map((l) => l.toUpperCase())
   const colunas = Math.max(...linhas.map((l) => l.length))
   const largura = MARGEM * 2 + colunas * 6 * ESCALA
   const altura = MARGEM * 2 + linhas.length * 10 * ESCALA
@@ -119,7 +164,12 @@ function bloco(tipo: string, dados: Buffer): Buffer {
 }
 
 export function gerarPng(ex: Exemplo = EXEMPLO_PNG): Buffer {
-  const { largura, altura, pixels } = pixelsPng(ex)
+  return pngDeLinhas(linhasPng(ex))
+}
+
+/** PNG em tons de cinza com as linhas na fonte bitmap 5x7. */
+export function pngDeLinhas(linhasDoPng: readonly string[]): Buffer {
+  const { largura, altura, pixels } = pixelsDeLinhas(linhasDoPng)
   const ihdr = Buffer.alloc(13)
   ihdr.writeUInt32BE(largura, 0)
   ihdr.writeUInt32BE(altura, 4)
@@ -141,5 +191,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   mkdirSync(PASTA_EXEMPLOS, { recursive: true })
   writeFileSync(new URL(EXEMPLO_PDF.arquivo, PASTA_EXEMPLOS), gerarPdf())
   writeFileSync(new URL(EXEMPLO_PNG.arquivo, PASTA_EXEMPLOS), gerarPng())
+  for (const foto of EXEMPLO_FOTOS) writeFileSync(new URL(foto.arquivo, PASTA_EXEMPLOS), gerarPng(foto))
+  writeFileSync(new URL(EXEMPLO_INFORMACOES.arquivo, PASTA_EXEMPLOS), pdfDeLinhas(linhasPdfInformacoes()))
+  writeFileSync(new URL(EXEMPLO_HORARIOS.arquivo, PASTA_EXEMPLOS), pdfDeLinhas(linhasPdfHorarios()))
+  writeFileSync(new URL(EXEMPLO_ESPACOS.arquivo, PASTA_EXEMPLOS), pngDeLinhas(linhasPngEspacos()))
   process.stdout.write(`Exemplos gravados em ${PASTA_EXEMPLOS.pathname}\n`)
 }

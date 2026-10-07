@@ -61,7 +61,7 @@ function fakeStorage() {
 }
 
 const deps = (llm: LlmClient, o: Partial<IngestDeps> = {}): IngestDeps =>
-  ({ db, llm, storage: fakeStorage(), ingestModels: ['visao/m'], log, ...o })
+  ({ db, llm, storage: fakeStorage(), ingestModels: ['visao/m'], log, reenfileirar: async () => undefined, ...o })
 const importacao = async (id: string) => (await db.select().from(schema.knowledgeDocuments).where(eq(schema.knowledgeDocuments.id, id)))[0]!
 const contadores = (restaurantId: string) =>
   db.select({ reservado: schema.budgetCounters.reservado, gasto: schema.budgetCounters.gasto }).from(schema.budgetCounters)

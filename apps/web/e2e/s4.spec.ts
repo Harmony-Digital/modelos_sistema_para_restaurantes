@@ -36,8 +36,12 @@ const LEITURA: LeituraCardapioFalsa = {
 }
 
 /** PDF mínimo (o upload confere os magic bytes); o sufixo deixa o sha256 único a cada execução. */
+// PDF mínimo com uma página: a leitura por lotes (Etapa 07) conta as páginas com pdf-lib e recusa PDF sem página
 const pdf = (marca: string) =>
-  Buffer.from(`%PDF-1.4\n% ${marca} ${SUFIXO}\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n`)
+  Buffer.from(
+    `%PDF-1.4\n% ${marca} ${SUFIXO}\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n` +
+      `3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n`,
+  )
 
 const CSV = [
   'categoria;nome;descricao;preco;tags;outros_nomes;unidade',
@@ -74,16 +78,22 @@ test.afterAll(async () => {
   const sql = getSql()
   const doTeste = sql`split_part(cu.wa_id_hash, ':', 2) in (select id::text from auth.users where email like '%@teste.local')`
   // arquivos do Storage (cardápio enviado e importações) antes das linhas que guardam o caminho
+  // o arquivo de envio vindo da importação (I3) é a cópia de um arquivo dela no bucket `cardapio`
+  const daImportacao = sql`select replace(f.storage_path, 'importacoes/', 'cardapio/') from knowledge_document_files f
+    join knowledge_documents k on k.id = f.importacao_id where k.enviado_por in (select id from auth.users where email like '%@teste.local')`
   const caminhos = await sql<{ storage_path: string }[]>`
-    select storage_path from menu_files where titulo like ${'%' + SUFIXO + '%'}
+    select storage_path from menu_files where titulo like ${'%' + SUFIXO + '%'} or storage_path in (${daImportacao})
     union all
     select storage_path from knowledge_documents
-     where storage_path is not null and enviado_por in (select id from auth.users where email like '%@teste.local')`
+     where storage_path is not null and enviado_por in (select id from auth.users where email like '%@teste.local')
+    union all
+    select f.storage_path from knowledge_document_files f join knowledge_documents k on k.id = f.importacao_id
+     where k.enviado_por in (select id from auth.users where email like '%@teste.local')`
   for (const { storage_path } of caminhos) {
     const [bucket, ...resto] = storage_path.split('/')
     await getAdmin().storage.from(bucket!).remove([resto.join('/')])
   }
-  await sql`delete from menu_files where titulo like ${'%' + SUFIXO + '%'}`
+  await sql`delete from menu_files where titulo like ${'%' + SUFIXO + '%'} or storage_path in (${daImportacao})`
   await sql`delete from knowledge_documents where enviado_por in (select id from auth.users where email like '%@teste.local')`
   // itens e exceções saem junto com a categoria (on delete cascade)
   await sql`delete from menu_categories where nome like ${'%' + SUFIXO + '%'}`
@@ -209,11 +219,15 @@ test('importar CSV: revisão com itens novos, confirmar e os itens aparecem no c
   ])
 })
 
-test('importar PDF: "Lendo o cardápio…", revisão com o rascunho da IA, editar e confirmar', async ({ page }) => {
+test('importar PDF: lista de arquivos, "Lendo o cardápio…", revisão com o rascunho da IA, editar, usar como arquivo de envio e confirmar', async ({ page }) => {
   await entrarComoGestor(page)
+  // o endereço antigo (Cardápio → Importar) leva à aba Importar
   await page.goto('/conteudo?aba=cardapio&sub=importar')
-  await page.getByLabel(/^PDF ou foto/).setInputFiles({ name: 'cardapio-peixes.pdf', mimeType: 'application/pdf', buffer: pdf('importacao') })
-  await page.getByRole('button', { name: 'Enviar para leitura' }).click()
+  await expect(page).toHaveURL(/aba=importar&alvo=cardapio/)
+  await page.getByLabel(/^Arquivos/).setInputFiles({ name: 'cardapio-peixes.pdf', mimeType: 'application/pdf', buffer: pdf('importacao') })
+  await page.getByRole('button', { name: 'Enviar arquivos' }).click()
+  await expect(page.getByRole('list', { name: 'Arquivos para ler' }).getByRole('listitem')).toHaveCount(1)
+  await page.getByRole('button', { name: 'Ler arquivos' }).click()
   await expect(page.getByText('Lendo o cardápio…')).toBeVisible()
   liberarLeitura()
 
@@ -228,10 +242,16 @@ test('importar PDF: "Lendo o cardápio…", revisão com o rascunho da IA, edita
   // a revisão corrige o preço antes de virar dado oficial
   await moqueca.getByLabel(/^Preço/).fill('12490')
   expect(await getSql()`select 1 from menu_categories where nome = ${CATEGORIA_PDF}`).toHaveLength(0)
+  // como na Etapa 05: o arquivo importado vira o cardápio para enviar aos clientes (I3)
   await page.getByLabel('Usar este arquivo como cardápio para enviar aos clientes').check()
+  await expect(page.getByLabel(/^Vale para/)).toHaveValue('')
 
   await confirmar.click()
   await expect(page.getByRole('status').filter({ hasText: 'Cardápio atualizado: 2 novos, 0 atualizados' })).toBeVisible()
+  const envio = await getSql()`select m.titulo, m.unit_id, m.mime, m.ativo from menu_files m
+    where m.storage_path in (select replace(f.storage_path, 'importacoes/', 'cardapio/') from knowledge_document_files f
+      join knowledge_documents k on k.id = f.importacao_id where k.enviado_por in (select id from auth.users where email like '%@teste.local'))`
+  expect(envio).toEqual([{ titulo: expect.stringMatching(/^Cardápio importado em /), unit_id: null, mime: 'application/pdf', ativo: true }])
   const itens = await getSql()`select i.nome, i.preco_centavos from menu_items i
     join menu_categories c on c.id = i.category_id where c.nome = ${CATEGORIA_PDF} order by i.preco_centavos nulls last`
   expect(itens).toEqual([
@@ -241,12 +261,6 @@ test('importar PDF: "Lendo o cardápio…", revisão com o rascunho da IA, edita
   const [doc] = await getSql()`select k.status, k.revisado_por is not null as revisado from knowledge_documents k
     join auth.users u on u.id = k.enviado_por where u.email like '%@teste.local' and k.origem = 'arquivo'`
   expect(doc).toEqual({ status: 'aprovado', revisado: true })
-  // arquivo de envio copiado para o bucket cardapio (a equipe toda vê a prévia; importacoes é só de dono/gerente)
-  const [arquivo] = await getSql()`select f.storage_path from menu_files f
-    join knowledge_documents k on k.sha256 = f.sha256 and k.restaurant_id = f.restaurant_id where k.origem = 'arquivo'`
-  expect(arquivo!.storage_path).toMatch(/^cardapio\//)
-  const objeto = String(arquivo!.storage_path).replace(/^cardapio\//, '')
-  expect(await getSql()`select 1 from storage.objects where bucket_id = 'cardapio' and name = ${objeto}`).toHaveLength(1)
 })
 
 test('atendente consulta o cardápio sem botões de edição; aba Conteúdo cabe em 360 px', async ({ page }) => {
