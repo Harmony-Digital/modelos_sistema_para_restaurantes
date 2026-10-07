@@ -76,6 +76,15 @@ async function abrirSimuladorLimpo(page: Page) {
   await (await pedido).response()
 }
 
+/** Celular: fecha a folha modal do pedido; desktop: o detalhe fica ao lado e não esconde a linha do tempo. */
+async function fecharFolhaDoPedido(page: Page) {
+  const folha = page.getByRole('dialog', { name: 'Pedido de evento' })
+  if (await folha.isVisible()) {
+    await folha.getByRole('button', { name: 'Fechar' }).click()
+    await expect(folha).toHaveCount(0)
+  }
+}
+
 async function perguntar(page: Page, texto: string) {
   await page.getByRole('textbox', { name: 'Mensagem' }).fill(texto)
   await page.keyboard.press('Enter')
@@ -106,11 +115,13 @@ test('modo demonstração: aviso e pedido de evento do simulador aparecem no pai
   const pendente = page.getByRole('region', { name: 'Pedidos para responder em outros dias' }).getByRole('link')
   await expect(pendente).toContainText('Simulação')
   await pendente.click()
-  const pedido = page.getByRole('list', { name: 'Linha do tempo do dia' }).getByRole('link', { name: /40 convidados/ })
-  await expect(pedido).toContainText('Simulação')
   const detalhe = page.getByRole('dialog', { name: 'Pedido de evento' }).or(page.getByRole('complementary', { name: 'Pedido de evento' }))
   await expect(detalhe).toContainText('Simulação')
   await expect(detalhe.getByRole('button', { name: /telefone/i })).toHaveCount(0)
+  // no celular a folha é modal (o resto da tela sai da árvore de acessibilidade): fecha para ver a linha do tempo
+  await fecharFolhaDoPedido(page)
+  const pedido = page.getByRole('list', { name: 'Linha do tempo do dia' }).getByRole('link', { name: /40 convidados/ })
+  await expect(pedido).toContainText('Simulação')
 
   // Conversas: as simuladas entram sem o filtro, que some
   await page.goto('/conversas?aba=ia')

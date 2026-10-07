@@ -193,7 +193,14 @@ test('pedido real na fila: status, responsável, notas e telefone sob demanda (a
   // abre o dia do evento com o pedido em folha
   await pendentes.getByRole('link', { name: new RegExp(CLIENTE) }).click()
   const folha = page.getByRole('dialog', { name: 'Pedido de evento' })
-  await expect(page.getByRole('list', { name: 'Linha do tempo do dia' }).getByRole('link', { name: new RegExp(CLIENTE) })).toContainText('40 convidados')
+  await expect(folha).toContainText(UNIDADE)
+  await expect(folha).toContainText(CLIENTE)
+  // a folha é modal (o resto da tela sai da árvore de acessibilidade): fecha para ver o pedido na linha do tempo do dia
+  await folha.getByRole('button', { name: 'Fechar' }).click()
+  await expect(folha).toHaveCount(0)
+  const linha = page.getByRole('list', { name: 'Linha do tempo do dia' }).getByRole('link', { name: new RegExp(CLIENTE) })
+  await expect(linha).toContainText('40 convidados')
+  await linha.click()
   await expect(folha).toContainText(UNIDADE)
   await folha.getByRole('button', { name: 'Mostrar telefone' }).click()
   await expect(folha.getByText(TELEFONE)).toBeVisible()

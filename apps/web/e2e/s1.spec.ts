@@ -123,6 +123,9 @@ test('pergunta sem resposta: o dono responde e o simulador passa a responder', a
     values (${r!.id}, ${'info:' + TEMA}, 'tem estacionamento?')`
   await entrarComoGestor(page)
   await page.getByRole('link', { name: 'Conteúdo' }).click()
+  // "Sem resposta" mora em Conteúdo → Informações, com a ação "Responder" em cada pergunta
+  await page.getByRole('navigation', { name: 'Seções de conteúdo' }).getByRole('link', { name: 'Informações' }).click()
+  await expect(page.getByRole('heading', { level: 2, name: /^Sem resposta/ })).toBeVisible()
   await page.getByRole('button', { name: new RegExp(`^Responder: ${TEMA}`, 'i') }).click()
   await page.getByLabel(/^Resposta/).fill(RESPOSTA)
   await page.getByRole('button', { name: 'Salvar resposta' }).click()
