@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { acessoInbox, listarInbox } from '@atd/db'
+import { acessoInbox, listarInbox, modoDemonstracao } from '@atd/db'
 import { ControlesAvisos } from '@/components/conversas/avisos'
 import { ListaConversas } from '@/components/conversas/lista'
 import { Abas } from '@/components/painel/abas'
@@ -33,7 +33,9 @@ export default async function ConversasPage(props: { searchParams: Promise<Busca
   const unidades = acesso?.unidades ?? []
   // filtro só entre as unidades permitidas; qualquer outro valor é ignorado
   const unidade = unidades.some((u) => u.id === sp.unidade) ? sp.unidade : undefined
-  const sim = sp.sim === '1'
+  // modo demonstração ligado: as simulações já entram sempre (com o selo) e o filtro some
+  const demonstracao = await modoDemonstracao(db, session.claims)
+  const sim = !demonstracao && sp.sim === '1'
   const { itens, proximo } = await listarInbox(db, session.claims, {
     aba, simulacoes: sim, ...(unidade && { unitId: unidade }), ...(sp.cursor && { cursor: sp.cursor }),
   })
@@ -56,11 +58,13 @@ export default async function ConversasPage(props: { searchParams: Promise<Busca
               </select>
             </label>
           )}
-          <label className="flex min-h-11 items-center gap-2 text-sm text-foreground">
-            <input type="checkbox" name="sim" value="1" defaultChecked={sim} className="size-5 accent-primary" />
-            Mostrar simulações
-          </label>
-          <Button type="submit" variant="outline">Filtrar</Button>
+          {!demonstracao && (
+            <label className="flex min-h-11 items-center gap-2 text-sm text-foreground">
+              <input type="checkbox" name="sim" value="1" defaultChecked={sim} className="size-5 accent-primary" />
+              Mostrar simulações
+            </label>
+          )}
+          {(!demonstracao || unidades.length > 1) && <Button type="submit" variant="outline">Filtrar</Button>}
         </form>
         <ControlesAvisos />
         <ListaConversas itens={itens} aba={aba} meuId={session.userId} />

@@ -2,6 +2,7 @@ import { and, asc, eq, gte, inArray, sql } from 'drizzle-orm'
 import { agoraLocal } from '@atd/core'
 import type { Db } from './client.ts'
 import { exigirPapel, falha, ok, registrarAuditoria, semPermissaoVira, type ResultadoPainel } from './painel-comum.ts'
+import { filtroSimulacao, lerModoDemonstracao } from './modo-demonstracao.ts'
 import { withUserContext, type JwtClaims } from './rls.ts'
 import { restaurants, units } from './schema/restaurant.ts'
 import { attendanceNotices } from './schema/s2.ts'
@@ -17,10 +18,11 @@ export type AvisoPainel = {
   horarioAprox: string | null
   origem: 'ia' | 'painel'
   status: 'ativo' | 'cancelado'
+  simulado: boolean
 }
 export type PrevisaoUnidade = { unitId: string; unidade: string; totalPessoas: number; avisos: AvisoPainel[] }
 
-/** Previsão do dia por unidade ativa visível (mesma ordem do S1). Simulados nunca entram; o total é só de ativos. */
+/** Previsão do dia por unidade ativa visível (mesma ordem do S1). Simulados só no modo demonstração; o total é só de ativos. */
 export function previsaoDoDia(
   db: Db,
   claims: JwtClaims,
@@ -33,17 +35,18 @@ export function previsaoDoDia(
       .where(eq(units.ativo, true))
       .orderBy(asc(units.ordem), asc(units.nome))
     if (us.length === 0) return []
+    const modo = await lerModoDemonstracao(tx)
     const rows = await tx
       .select({
         id: attendanceNotices.id, unitId: attendanceNotices.unitId, nome: attendanceNotices.nome,
         pessoas: attendanceNotices.pessoas, horarioAprox: attendanceNotices.horarioAprox,
-        origem: attendanceNotices.origem, status: attendanceNotices.status,
+        origem: attendanceNotices.origem, status: attendanceNotices.status, simulado: attendanceNotices.simulado,
       })
       .from(attendanceNotices)
       .where(and(
         inArray(attendanceNotices.unitId, us.map((u) => u.id)),
         eq(attendanceNotices.data, p.data),
-        eq(attendanceNotices.simulado, false),
+        filtroSimulacao(attendanceNotices.simulado, modo),
         p.incluirCancelados ? undefined : eq(attendanceNotices.status, 'ativo'),
       ))
       .orderBy(asc(attendanceNotices.createdAt), asc(attendanceNotices.id))
@@ -71,7 +74,7 @@ export function totalPrevistoHoje(db: Db, claims: JwtClaims, agora: Date = new D
       .where(and(
         eq(attendanceNotices.data, hoje),
         eq(attendanceNotices.status, 'ativo'),
-        eq(attendanceNotices.simulado, false),
+        filtroSimulacao(attendanceNotices.simulado, await lerModoDemonstracao(tx)),
       ))
     return t?.total ?? 0
   })

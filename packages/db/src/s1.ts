@@ -5,6 +5,7 @@ import {
 } from '@atd/core'
 import type { Db } from './client.ts'
 import { withUserContext, type JwtClaims, type Tx } from './rls.ts'
+import { filtroSimulacao, lerModoDemonstracao } from './modo-demonstracao.ts'
 import { aiRuns } from './schema/ops.ts'
 import { restaurants, units } from './schema/restaurant.ts'
 import { knowledgeFacts, knowledgeGaps, replyTemplates, unitHourExceptions, unitHours } from './schema/s1.ts'
@@ -120,7 +121,7 @@ export async function registrarLacunas(tx: Tx, p: { restaurantId: string; lacuna
   }
 }
 
-/** Indicador "% respondido pela IA": itens de S1 respondidos com dado ÷ itens válidos (sem simulação). */
+/** Indicador "% respondido pela IA": itens de S1 respondidos com dado ÷ itens válidos (simulação só no modo demonstração). */
 export function taxaRespostaIa(db: Db, claims: JwtClaims, agora: Date = new Date()) {
   return withUserContext(db, claims, async (tx) => {
     const [r] = await tx.select({ tz: restaurants.timezone }).from(restaurants).limit(1)
@@ -136,7 +137,7 @@ export function taxaRespostaIa(db: Db, claims: JwtClaims, agora: Date = new Date
         respondidos7: sql<number>`coalesce(sum(${aiRuns.itensRespondidos}), 0)::int`,
       })
       .from(aiRuns)
-      .where(and(eq(aiRuns.simulado, false), sql`${aiRuns.createdAt} >= ${inicio7}`))
+      .where(and(filtroSimulacao(aiRuns.simulado, await lerModoDemonstracao(tx)), sql`${aiRuns.createdAt} >= ${inicio7}`))
     return {
       hoje: { validos: x?.validosHoje ?? 0, respondidos: x?.respondidosHoje ?? 0 },
       seteDias: { validos: x?.validos7 ?? 0, respondidos: x?.respondidos7 ?? 0 },

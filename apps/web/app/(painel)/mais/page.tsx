@@ -1,15 +1,16 @@
-import { carregarUnidadesPainel } from '@atd/db'
+import { carregarUnidadesPainel, modoDemonstracao } from '@atd/db'
 import { ChevronRight, Headset, LogOut, ShieldCheck, Store, Users, Wallet, type LucideIcon } from 'lucide-react'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { Button } from '@/components/ui/button'
+import { ModoDemonstracao } from '@/components/painel/modo-demonstracao'
 import { RestauranteForm } from '@/components/painel/restaurante-form'
 import { TopBar } from '@/components/shell/top-bar'
 import { requireStaff } from '@/lib/dal'
 import { getDb } from '@/lib/server/db'
 import { parseTema, THEME_COOKIE } from '@/lib/theme'
 import { setTheme, signOut } from '../actions'
-import { salvarRestauranteAction } from './actions'
+import { salvarModoDemonstracaoAction, salvarRestauranteAction } from './actions'
 import { ThemeForm } from './theme-form'
 
 export const dynamic = 'force-dynamic'
@@ -35,6 +36,8 @@ export default async function MaisPage() {
   const tema = parseTema((await cookies()).get(THEME_COOKIE)?.value)
   // gastos, privacidade e equipe: só dono e gerente (o atendente nem vê os atalhos)
   const gestao = session.role !== 'atendente'
+  // modo demonstração: o dono muda, o gerente vê, o atendente nem vê
+  const demonstracao = gestao ? await modoDemonstracao(getDb(), session.claims) : null
   return (
     <>
       <TopBar title="Mais" subtitle={`Você entrou como ${PAPEL[session.role]}`} />
@@ -46,6 +49,9 @@ export default async function MaisPage() {
             acao={salvarRestauranteAction}
             somenteLeitura={session.role !== 'dono'}
           />
+          {demonstracao !== null && (
+            <ModoDemonstracao ligado={demonstracao} acao={salvarModoDemonstracaoAction} somenteLeitura={session.role !== 'dono'} />
+          )}
         </section>
         <nav aria-labelledby="atalhos" className="flex flex-col gap-3">
           <h2 id="atalhos" className="text-sm font-medium text-foreground">Cadastros</h2>

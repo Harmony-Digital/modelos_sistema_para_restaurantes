@@ -23,7 +23,7 @@ describe('previsão: datas e links', () => {
     expect(rotuloDoDia('2026-10-06', '2026-10-05')).toBe('Terça-feira, 06/10/2026')
   })
   it('resumo da unidade conta só ativos e usa singular', () => {
-    const av = (status: 'ativo' | 'cancelado', pessoas: number) => ({ id: String(Math.random()), unitId: 'u', nome: null, pessoas, horarioAprox: null, origem: 'ia' as const, status })
+    const av = (status: 'ativo' | 'cancelado', pessoas: number) => ({ id: String(Math.random()), unitId: 'u', nome: null, pessoas, horarioAprox: null, origem: 'ia' as const, status, simulado: false })
     expect(resumoUnidade({ unitId: 'u', unidade: 'A', totalPessoas: 1, avisos: [av('ativo', 1)] })).toEqual({ pessoas: '1 pessoa', avisos: '1 aviso' })
     expect(resumoUnidade({ unitId: 'u', unidade: 'A', totalPessoas: 5, avisos: [av('ativo', 5), av('cancelado', 3), av('ativo', 0)] })).toEqual({ pessoas: '5 pessoas', avisos: '2 avisos' })
     expect(resumoUnidade({ unitId: 'u', unidade: 'A', totalPessoas: 0, avisos: [] })).toEqual({ pessoas: '0 pessoas', avisos: '0 avisos' })

@@ -6,3 +6,6 @@ export const restauranteSchema = z.object({
   politicaUrl: z.string().trim().refine((v) => v === '' || /^https:\/\/\S+$/.test(v), 'Use um link completo que comece com https://'),
 })
 export type RestauranteForm = z.input<typeof restauranteSchema>
+
+export const modoDemonstracaoSchema = z.object({ ligado: z.boolean() })
+export type ModoDemonstracaoForm = z.input<typeof modoDemonstracaoSchema>

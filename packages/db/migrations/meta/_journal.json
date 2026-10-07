@@ -302,6 +302,20 @@
       "when": 1791325141073,
       "tag": "0042_importacao_concessao_lote",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1791373118530,
+      "tag": "0043_modo_demonstracao",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1791373120497,
+      "tag": "0044_modo_demonstracao_rls",
+      "breakpoints": true
     }
   ]
 }

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { chamarAcao } from '@/lib/action-result'
 import { dataDoEvento, linksTelefone, membrosDaUnidade, ROTULO_STATUS, statusPossiveis, type MembroTela } from '@/lib/eventos'
 import { MAX_NOTAS, pedidoSchema } from '@/lib/schemas/eventos'
+import { SeloSimulacao } from './selo-simulacao'
 import { SeloStatus } from './selo-status'
 
 const linkClass =
@@ -93,7 +94,7 @@ export function PedidoDetalhe(props: {
   return (
     <div className="flex flex-col gap-5">
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-        <dt className="text-muted-foreground">Cliente</dt><dd className="break-words font-medium text-foreground">{p.nome ?? 'Sem nome'}</dd>
+        <dt className="text-muted-foreground">Cliente</dt><dd className="flex flex-wrap items-center gap-2 break-words font-medium text-foreground">{p.nome ?? 'Sem nome'}{p.simulado && <SeloSimulacao />}</dd>
         <dt className="text-muted-foreground">Situação</dt><dd><SeloStatus status={p.status} /></dd>
         <dt className="text-muted-foreground">Data</dt><dd className="text-foreground">{dataDoEvento(p.data)}</dd>
         <dt className="text-muted-foreground">Convidados</dt><dd className="text-foreground">{p.convidados}</dd>
@@ -103,7 +104,8 @@ export function PedidoDetalhe(props: {
         {p.observacoes && (<><dt className="text-muted-foreground">Observações</dt><dd className="whitespace-pre-line break-words text-foreground">{p.observacoes}</dd></>)}
       </dl>
 
-      {p.temTelefone && <Telefone pedidoId={p.id} />}
+      {/* cliente simulado não tem telefone real: a DAL recusa, então nem mostra o botão */}
+      {p.temTelefone && !p.simulado && <Telefone pedidoId={p.id} />}
 
       <form noValidate onSubmit={onSubmit} className="flex flex-col gap-4">
         <FormError form={form} />

@@ -1,0 +1,1 @@
+ALTER TABLE "restaurants" ADD COLUMN "modo_demonstracao" boolean DEFAULT false NOT NULL;

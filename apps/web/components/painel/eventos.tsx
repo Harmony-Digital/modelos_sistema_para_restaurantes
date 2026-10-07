@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { Abas } from './abas'
 import { FolhaFormulario } from './folha-formulario'
 import { PedidoDetalhe } from './pedido-detalhe'
+import { SeloSimulacao } from './selo-simulacao'
 import { SeloStatus } from './selo-status'
 
 const chip =
@@ -81,7 +82,10 @@ export function Eventos(props: {
                 >
                   <span className="flex flex-wrap items-center justify-between gap-2">
                     <span className="min-w-0 break-words font-semibold text-foreground">{p.nome ?? 'Sem nome'}</span>
-                    <SeloStatus status={p.status} />
+                    <span className="flex flex-wrap items-center gap-2">
+                      {p.simulado && <SeloSimulacao />}
+                      <SeloStatus status={p.status} />
+                    </span>
                   </span>
                   <span className="text-sm text-foreground">{dataDoEvento(p.data)}</span>
                   <span className="text-sm text-muted-foreground">
