@@ -84,6 +84,11 @@ describe('Conversa', () => {
     expect(acoes.encerrar).toHaveBeenCalledWith(ID)
   })
 
+  it('lg+: o compositor deixa livre o canto direito do botão/pílula do simulador (Enviar nunca fica embaixo)', () => {
+    montar({ estado: 'humano', atendente: 'Ana', atendenteId: 'eu' })
+    expect(screen.getByRole('region', { name: 'Responder' }).className).toContain('lg:mr-14')
+  })
+
   it('comigo e fora da janela: compositor desabilitado', () => {
     montar({ estado: 'humano', atendente: 'Ana', atendenteId: 'eu', janelaAte: new Date('2026-10-06T11:00:00Z') })
     expect(screen.getByRole('textbox', { name: 'Resposta' })).toBeDisabled()
@@ -124,5 +129,31 @@ describe('Conversa', () => {
     montar({ simulada: true })
     expect(screen.queryByRole('button', { name: 'Mostrar telefone' })).toBeNull()
     expect(screen.getByText('Simulação')).toBeInTheDocument()
+  })
+
+  describe('atalho A (assumir)', () => {
+    it('A assume a conversa aberta quando ela está livre', async () => {
+      montar()
+      await userEvent.setup().keyboard('a')
+      expect(acoes.assumir).toHaveBeenCalledWith(ID, { forcar: false })
+    })
+
+    it('não dispara digitando no compositor, nem com outra pessoa atendendo, nem com Ctrl', async () => {
+      const u = userEvent.setup()
+      const r = montar({ estado: 'humano', atendente: 'Ana', atendenteId: 'eu' })
+      await u.click(screen.getByRole('textbox', { name: 'Resposta' }))
+      await u.keyboard('a')
+      expect(acoes.assumir).not.toHaveBeenCalled()
+      r.unmount()
+      montar({ estado: 'humano', atendente: 'Bia', atendenteId: 'bia' }, { papel: 'gerente' })
+      await u.keyboard('a')
+      expect(acoes.assumir).not.toHaveBeenCalled()
+    })
+
+    it('com Ctrl/Cmd não é atalho', async () => {
+      montar()
+      await userEvent.setup().keyboard('{Control>}a{/Control}')
+      expect(acoes.assumir).not.toHaveBeenCalled()
+    })
   })
 })

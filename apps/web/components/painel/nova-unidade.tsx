@@ -17,6 +17,7 @@ export function NovaUnidade() {
       </Button>
       <FolhaFormulario aberto={aberto} onAbertoChange={setAberto} titulo="Nova unidade" descricao="Depois de salvar, cadastre os horários.">
         <DadosUnidadeForm
+          idPrefixo="nova-"
           inicial={UNIDADE_VAZIA}
           acao={(v) => salvarDadosUnidadeAction(null, v)}
           onSalvo={(id) => {

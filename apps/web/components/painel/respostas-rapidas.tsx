@@ -2,7 +2,7 @@
 import { MessageSquareText, Pencil, Plus } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { salvarRespostaRapidaAction } from '@/app/(painel)/mais/atendimento-humano/actions'
+import { salvarRespostaRapidaAction } from '@/app/(painel)/ajustes/atendimento-humano/actions'
 import { applyServerErrors, Field, FormError, SubmitButton, SwitchField, Textarea, TextInput, useZodForm } from '@/components/form'
 import { EmptyState } from '@/components/shell/empty-state'
 import { Button } from '@/components/ui/button'

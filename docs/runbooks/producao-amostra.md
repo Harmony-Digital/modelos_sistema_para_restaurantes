@@ -33,10 +33,10 @@ Você (agente no Claude Code de quem publica) segue este arquivo sozinho, do pas
 7. Use uma máquina de **uso pessoal**: alguns comandos (`psql` nos passos 3 e 9) recebem a URL com senha na
    linha de comando, visível no `ps` de outros usuários da mesma máquina.
 
-**Resultado esperado:** painel em `https://<domínio>` com o dono logando por TOTP; Início com "IA: Online";
+**Resultado esperado:** painel em `https://<domínio>` com o dono logando por TOTP; Início com a etiqueta "IA online";
 simulador respondendo S1–S4; handoff aparecendo em Conversas em tempo real; importação de CSV funcionando;
-gerente restrito (convidado pelo painel, Mais → Equipe) vendo só a sua unidade; limites de gasto conferidos em
-Mais → Gastos e limites; `scripts/producao/verificar.sh` com `Resultado: 0 falha(s)`;
+gerente restrito (convidado pelo painel, Gestão → Equipe) vendo só a sua unidade; limites de gasto conferidos em
+Gestão → Gastos; `scripts/producao/verificar.sh` com `Resultado: 0 falha(s)`;
 mensagem de "pronto" (passo 9) entregue ao humano.
 
 ## Variáveis por destino
@@ -519,15 +519,15 @@ Rode e anote cada item. 🔑 O humano faz os itens de navegador (ou acompanha vo
 |---|---|---|---|
 | 1 | Script verde | `scripts/producao/verificar.sh --bootstrap .env.production-bootstrap --vercel .env.vercel-producao --worker .env.worker-producao --dominio https://<domínio>` | última linha `Resultado: 0 falha(s)` |
 | 2 | Login com TOTP | 🔑 dono abre o convite (vale 1 h; expirado → recuperação do convite, passo 4), define senha (≥ 12), cadastra o autenticador e entra | "dono entrou com TOTP" |
-| 3 | IA Online | Início mostra **IA: Online** (heartbeat do worker) | print ou texto do cartão |
+| 3 | IA Online | Início mostra a etiqueta **IA online** (heartbeat do worker) | print ou texto do cartão |
 | 4 | Simulador S1–S4 | botão "Abrir simulador de WhatsApp" do painel: "que horas abre a Asa Sul hoje?" (S1), "vou chegar às 20h com 4 pessoas" (S2), "quero fazer um aniversário para 30 pessoas" (S3), "quanto custa a picanha?" (S4) | uma linha por serviço: pergunta → resumo da resposta |
 | 5 | Handoff em tempo real | no simulador: "quero falar com um atendente"; com Conversas aberta em outra aba, a conversa aparece **sem recarregar** | "apareceu em N s sem recarregar" |
-| 6 | Importar CSV | Conteúdo → Cardápio → sub-aba Importar → CSV pequeno (2 itens) → revisar → aprovar | itens novos visíveis no cardápio |
+| 6 | Importar CSV | Conteúdo (abre na aba Cardápio) → botão **Importar** → CSV pequeno (2 itens) → revisar → aprovar | itens novos visíveis no cardápio |
 | 7 | Gerente restrito | ver abaixo (convite pelo painel) | gerente vê só a unidade dele em Unidades/Agenda/Conversas |
-| 8 | Modo demonstração ligado | 🔑 o **dono**, logado, vai em **Mais → Restaurante** e liga **Modo demonstração** (toast "Modo demonstração ligado"). Depois, no simulador: "vou hoje na Asa Sul com 4 pessoas à noite" e "quero fazer um aniversário para 30 pessoas na Asa Sul"; em **Agenda → Previsão** e **Agenda → Eventos** os dois aparecem com o selo **Simulação**, e o Início passa a contá-los. Faça isto **antes de apresentar**: com o modo desligado, o painel esconde tudo o que nasce no simulador | "modo ligado; aviso e pedido com o selo Simulação" |
-| 9 | Gastos | Início → Gastos mostra o gasto do dia (> US$ 0 após o item 4; o simulador conta na linha **Simulação**, fora do total dos clientes); Mais → **Gastos e limites** mostra os limites padrão (IA 2/dia e 40/mês; Simulação 1/dia e 10/mês; WhatsApp 1/dia e 20/mês) — o dono ajusta ali, pelo painel, se quiser | valor exibido e limites conferidos |
+| 8 | Modo demonstração ligado | 🔑 o **dono**, logado, vai em **Ajustes** (menu lateral; no celular, **Mais → Ajustes**) e liga **Modo demonstração** (toast "Modo demonstração ligado"). Depois, no simulador: "vou hoje na Asa Sul com 4 pessoas à noite" e "quero fazer um aniversário para 30 pessoas na Asa Sul"; na **Agenda** (dia de hoje e "Pedidos para responder em outros dias") os dois aparecem com o selo **Simulação**, e o Início passa a contá-los. Faça isto **antes de apresentar**: com o modo desligado, o painel esconde tudo o que nasce no simulador | "modo ligado; aviso e pedido com o selo Simulação" |
+| 9 | Gastos | Início → Gastos mostra o gasto do dia (> US$ 0 após o item 4; o simulador conta na linha **Simulação**, fora do total dos clientes); **Gestão → Gastos** (tela "Gastos e limites"; no celular, **Mais → Gastos**) mostra os limites padrão (IA 2/dia e 40/mês; Simulação 1/dia e 10/mês; WhatsApp 1/dia e 20/mês) — o dono ajusta ali, pelo painel, se quiser | valor exibido e limites conferidos |
 
-Gerente restrito (pelo painel, Etapa 08): 🔑 o **dono**, logado, vai em **Mais → Equipe → Convidar**: nome
+Gerente restrito (pelo painel, Etapa 08): 🔑 o **dono**, logado, vai em **Gestão → Equipe → Convidar** (no celular, **Mais → Equipe**): nome
 "Gerente Asa Sul", o e-mail do gerente (passo 0), papel **Gerente**, desliga **Todas as unidades** e marca só
 **Asa Sul** ⇒ **Enviar convite** ⇒ "Convite enviado". Em segundos o worker envia o e-mail e a pessoa aparece como
 "Convite enviado, aguardando o primeiro acesso". O gerente abre o convite (vale 1 h), define a senha, cadastra o

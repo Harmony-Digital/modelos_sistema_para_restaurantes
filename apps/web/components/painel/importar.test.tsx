@@ -19,7 +19,7 @@ vi.mock('sonner', () => ({ toast }))
 const { ImportarCsv, HistoricoImportacoes, AcompanharImportacao } = await import('./importar')
 
 const ID = '00000000-0000-4000-8000-000000000011'
-const URL_IMP = `/conteudo?aba=importar&imp=${ID}`
+const URL_IMP = `/conteudo?aba=cardapio&importar=1&imp=${ID}`
 
 beforeEach(() => vi.clearAllMocks())
 afterEach(() => vi.useRealTimers())
@@ -51,6 +51,7 @@ describe('ImportarCsv e histórico', () => {
   it('lista as importações recentes com status', () => {
     render(
       <HistoricoImportacoes
+        alvo="cardapio"
         vazio="Nenhuma importação ainda."
         importacoes={[
           { id: ID, origem: 'arquivo', modo: 'completo', mime: 'application/pdf', arquivos: 1, status: 'rascunho', recebendo: false, criadoEm: '2026-10-05T15:00:00.000Z' },
@@ -121,7 +122,7 @@ describe('AcompanharImportacao', () => {
     await user.click(within(dialogo).getByRole('button', { name: 'Descartar importação' }))
     await waitFor(() => expect(acoes.descartarImportacaoAction).toHaveBeenCalledWith(ID))
     expect(toast.success).toHaveBeenCalledWith('Importação descartada')
-    expect(push).toHaveBeenCalledWith('/conteudo?aba=importar')
+    expect(push).toHaveBeenCalledWith('/conteudo?aba=cardapio&importar=1')
   })
 
   it('vários arquivos: "Lendo n de m"; o prazo (10 min) recomeça a cada mudança salva (lote ou metade de lote)', async () => {

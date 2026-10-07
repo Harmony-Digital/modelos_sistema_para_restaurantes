@@ -215,6 +215,6 @@ describe('CartaoPrazoLgpd', () => {
     const cartao = screen.getByRole('region', { name: 'Pedidos de privacidade (LGPD)' })
     expect(cartao).toHaveTextContent('1 pedido vencido')
     expect(cartao).toHaveTextContent('1 pedido vence em até 3 dias')
-    expect(within(cartao).getByRole('link', { name: 'Ver pedidos' })).toHaveAttribute('href', '/mais/privacidade')
+    expect(within(cartao).getByRole('link', { name: 'Ver pedidos' })).toHaveAttribute('href', '/gestao/privacidade')
   })
 })

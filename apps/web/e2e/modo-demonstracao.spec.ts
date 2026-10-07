@@ -76,6 +76,15 @@ async function abrirSimuladorLimpo(page: Page) {
   await (await pedido).response()
 }
 
+/** Celular: fecha a folha modal do pedido; desktop: o detalhe fica ao lado e não esconde a linha do tempo. */
+async function fecharFolhaDoPedido(page: Page) {
+  const folha = page.getByRole('dialog', { name: 'Pedido de evento' })
+  if (await folha.isVisible()) {
+    await folha.getByRole('button', { name: 'Fechar' }).click()
+    await expect(folha).toHaveCount(0)
+  }
+}
+
 async function perguntar(page: Page, texto: string) {
   await page.getByRole('textbox', { name: 'Mensagem' }).fill(texto)
   await page.keyboard.press('Enter')
@@ -83,7 +92,7 @@ async function perguntar(page: Page, texto: string) {
 
 test('modo demonstração: aviso e pedido de evento do simulador aparecem no painel com o selo "Simulação"', async ({ page }) => {
   await entrarComoGestor(page)
-  await page.goto('/mais')
+  await page.goto('/ajustes')
   const chave = page.getByRole('switch', { name: 'Modo demonstração' })
   await expect(chave).toHaveAttribute('aria-checked', 'false')
   await chave.click()
@@ -96,17 +105,23 @@ test('modo demonstração: aviso e pedido de evento do simulador aparecem no pai
   await perguntar(page, `quero fazer um aniversário para 40 pessoas na ${UNIDADE} dia amanhã`)
   await expect(simulador(page).getByText(/^Recebemos seu pedido/)).toBeVisible({ timeout: 20_000 })
 
+  // endereço antigo da Previsão redireciona para a Agenda do dia
   await page.goto(`/agenda?aba=previsao&unidade=${unitId}`)
-  const aviso = page.getByRole('region', { name: UNIDADE }).getByRole('listitem').filter({ hasText: '4 pessoas' })
+  await expect(page).toHaveURL(new RegExp(`/agenda\\?unidade=${unitId}$`))
+  const aviso = page.getByRole('list', { name: 'Linha do tempo do dia' }).getByRole('listitem').filter({ hasText: '4 pessoas' })
   await expect(aviso).toContainText('Simulação')
 
-  await page.goto(`/agenda?aba=eventos&unidade=${unitId}`)
-  const pedido = page.getByRole('button', { name: /40 convidados/ })
-  await expect(pedido).toContainText('Simulação')
-  await pedido.click()
-  const detalhe = page.getByRole('dialog')
+  await page.goto(`/agenda?unidade=${unitId}`)
+  const pendente = page.getByRole('region', { name: 'Pedidos para responder em outros dias' }).getByRole('link')
+  await expect(pendente).toContainText('Simulação')
+  await pendente.click()
+  const detalhe = page.getByRole('dialog', { name: 'Pedido de evento' }).or(page.getByRole('complementary', { name: 'Pedido de evento' }))
   await expect(detalhe).toContainText('Simulação')
   await expect(detalhe.getByRole('button', { name: /telefone/i })).toHaveCount(0)
+  // no celular a folha é modal (o resto da tela sai da árvore de acessibilidade): fecha para ver a linha do tempo
+  await fecharFolhaDoPedido(page)
+  const pedido = page.getByRole('list', { name: 'Linha do tempo do dia' }).getByRole('link', { name: /40 convidados/ })
+  await expect(pedido).toContainText('Simulação')
 
   // Conversas: as simuladas entram sem o filtro, que some
   await page.goto('/conversas?aba=ia')

@@ -1,6 +1,6 @@
-import { Badge } from '@/components/ui/badge'
+import { EtiquetaStatus } from '@/components/ui/etiqueta-status'
 
 /** Marca o que nasceu no simulador (conversa, aviso, pedido de evento) quando aparece no painel. */
 export function SeloSimulacao() {
-  return <Badge variant="outline" className="border-border text-muted-foreground">Simulação</Badge>
+  return <EtiquetaStatus variante="simulacao">Simulação</EtiquetaStatus>
 }

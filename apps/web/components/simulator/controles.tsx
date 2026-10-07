@@ -7,6 +7,8 @@ import { horarioLocal, type DetalheTela } from '@/lib/simulador-tela'
 const usd = (v: string) => `US$ ${v.replace('.', ',')}`
 
 export function SimuladorControles(props: {
+  /** `folha` (padrão): no topo da folha e ao lado do celular a partir de md; `flutuante`: cartão posicionado por quem o envolve. */
+  variante?: 'folha' | 'flutuante'
   timezone: string
   offset: number | null
   relogio: string | null
@@ -39,8 +41,12 @@ export function SimuladorControles(props: {
   }
 
   return (
-    <div className="flex shrink-0 flex-col gap-2 bg-background p-2 pr-14 text-sm text-foreground md:absolute md:right-full md:top-0 md:mr-4 md:w-64 md:rounded-xl md:p-3 md:pr-3 md:shadow-xl">
-      <div className="flex flex-wrap gap-2 md:flex-col">
+    <div
+      className={props.variante === 'flutuante'
+        ? 'flex flex-col gap-2 rounded-xl border border-border bg-background p-3 text-sm text-foreground shadow-xl'
+        : 'flex shrink-0 flex-col gap-2 bg-background p-2 pr-14 text-sm text-foreground md:absolute md:right-full md:top-0 md:mr-4 md:w-64 md:rounded-xl md:p-3 md:pr-3 md:shadow-xl'}
+    >
+      <div className={props.variante === 'flutuante' ? 'flex flex-col gap-2' : 'flex flex-wrap gap-2 md:flex-col'}>
         <Button type="button" variant="outline" onClick={props.onNovoCliente}>
           <UserPlus aria-hidden="true" /> Novo cliente
         </Button>

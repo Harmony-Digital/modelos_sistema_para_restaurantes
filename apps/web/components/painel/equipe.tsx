@@ -2,7 +2,7 @@
 import { Plus, Send, Users } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { criarConviteAction, definirAtivoAction, reenviarConviteAction } from '@/app/(painel)/mais/equipe/actions'
+import { criarConviteAction, definirAtivoAction, reenviarConviteAction } from '@/app/(painel)/gestao/equipe/actions'
 import { applyServerErrors, Field, FormError, Select, SubmitButton, SwitchField, TextInput, useZodForm } from '@/components/form'
 import { EmptyState } from '@/components/shell/empty-state'
 import { Button } from '@/components/ui/button'

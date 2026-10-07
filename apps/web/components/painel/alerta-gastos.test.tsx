@@ -17,7 +17,7 @@ describe('FaixaAlertaGastos', () => {
     expect(within(faixa).getByText('Simulação: 100% do limite do mês')).toBeInTheDocument()
     expect(within(faixa).getByText(/e mais 1 alerta/)).toBeInTheDocument()
     expect(within(faixa).getByText(/modo econômico/)).toBeInTheDocument()
-    expect(within(faixa).getByRole('link', { name: 'Ajustar limites' })).toHaveAttribute('href', '/mais/gastos')
+    expect(within(faixa).getByRole('link', { name: 'Ajustar limites' })).toHaveAttribute('href', '/gestao/gastos')
   })
 
   it('só 80%: avisa sem dizer que parou', () => {
@@ -43,7 +43,7 @@ describe('CartaoAlertasGastos', () => {
     const cartao = screen.getByRole('region', { name: 'Alertas de gasto' })
     const itens = within(cartao).getAllByRole('listitem')
     expect(itens.map((i) => i.textContent)).toEqual([expect.stringContaining('Simulação: 100% do limite do mês'), expect.stringContaining('IA: 82% do limite do dia')])
-    expect(within(cartao).getByRole('link', { name: 'Ajustar limites' })).toHaveAttribute('href', '/mais/gastos')
+    expect(within(cartao).getByRole('link', { name: 'Ajustar limites' })).toHaveAttribute('href', '/gestao/gastos')
   })
 
   it('sem alerta não aparece', () => {

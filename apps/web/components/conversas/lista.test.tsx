@@ -50,4 +50,27 @@ describe('ListaConversas', () => {
     expect(outra).toHaveTextContent('Com Bia')
     expect(within(outra!).queryByText('Você')).toBeNull()
   })
+
+  it('lista + detalhe: a conversa aberta fica marcada e os links mantêm os filtros da lista', () => {
+    render(
+      <ListaConversas
+        itens={[item({}), item({ id: '11111111-1111-4111-8111-000000000002', nome: 'Bia' })]}
+        aba="ia"
+        meuId="eu"
+        agora={agora}
+        abertaId="11111111-1111-4111-8111-111111111111"
+        busca="aba=ia&sim=1"
+      />,
+    )
+    const aberta = screen.getByRole('link', { name: /Maria/ })
+    expect(aberta).toHaveAttribute('aria-current', 'page')
+    // etiqueta de sucesso ("IA") fica AA: aberta em fundo de cartão + barra laranja, nunca accent/muted
+    expect(aberta.className).toContain('bg-card')
+    expect(aberta.className).toContain('shadow-[inset_3px_0_0_var(--primary)]')
+    expect(aberta.className).not.toMatch(/(^|\s)bg-accent/)
+    expect(aberta).toHaveAttribute('href', '/conversas/11111111-1111-4111-8111-111111111111?aba=ia&sim=1')
+    expect(screen.getByRole('link', { name: /Bia/ })).not.toHaveAttribute('aria-current')
+    // lista navegável pelo teclado (↑/↓)
+    expect(screen.getByRole('list')).toHaveAttribute('data-lista-navegavel')
+  })
 })

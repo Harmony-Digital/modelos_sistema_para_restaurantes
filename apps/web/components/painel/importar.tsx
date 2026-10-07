@@ -11,7 +11,7 @@ import { Confirmar } from '@/components/painel/confirmar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { chamarAcao } from '@/lib/action-result'
-import { URL_IMPORTAR, urlImportacao } from '@/lib/importacao'
+import { urlImportacao, urlImportarAlvo, type AlvoImportacaoTela } from '@/lib/importacao'
 
 export type StatusImportacaoTela = 'enviado' | 'processando' | 'rascunho' | 'aprovado' | 'rejeitado' | 'erro'
 export type ImportacaoTela = {
@@ -58,7 +58,7 @@ export const classeArquivo =
   'min-h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm text-foreground file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium'
 
 /** Importações recentes (de um alvo), com o estado de cada uma. */
-export function HistoricoImportacoes(props: { importacoes: ImportacaoTela[]; vazio: string }) {
+export function HistoricoImportacoes(props: { alvo: AlvoImportacaoTela; importacoes: ImportacaoTela[]; vazio: string }) {
   return (
     <section aria-labelledby="importacoes-recentes" className="flex flex-col gap-3">
       <h2 id="importacoes-recentes" className="text-base font-semibold text-foreground">Importações recentes</h2>
@@ -75,7 +75,7 @@ export function HistoricoImportacoes(props: { importacoes: ImportacaoTela[]; vaz
               <div className="flex items-center gap-3">
                 <Badge variant={i.recebendo ? 'outline' : VARIANTE_STATUS[i.status]}>{i.recebendo ? 'Recebendo arquivos' : ROTULO_STATUS[i.status]}</Badge>
                 {i.status !== 'rejeitado' && (
-                  <Link href={urlImportacao(i.id)} className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 hover:underline">
+                  <Link href={urlImportacao(i.id, props.alvo)} className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 hover:underline">
                     Abrir<span className="sr-only">: {tipo(i)} de {quando(i.criadoEm)}</span>
                   </Link>
                 )}
@@ -113,7 +113,7 @@ export function ImportarCsv() {
       if (!r.ok) return setErro(r.fieldErrors?.arquivo ?? r.formError)
       if (!r.data) return
       if (r.data.id === null) return setErrosLinhas(r.data.erros)
-      router.push(urlImportacao(r.data.id))
+      router.push(urlImportacao(r.data.id, 'cardapio'))
     } finally {
       emAndamento.current = false
       setEnviando(false)
@@ -260,7 +260,7 @@ export function AcompanharImportacao(props: {
     }
     setDescartar(false)
     toast.success('Importação descartada')
-    router.push(props.voltar ?? URL_IMPORTAR)
+    router.push(props.voltar ?? urlImportarAlvo('cardapio'))
   }
 
   return (
@@ -287,7 +287,7 @@ export function AcompanharImportacao(props: {
         {porLotes && !lendo && props.status !== 'erro' && (
           <Button onClick={() => void tentarDeNovo()}>Tentar de novo</Button>
         )}
-        <Link href={props.voltar ?? URL_IMPORTAR} className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 hover:underline">
+        <Link href={props.voltar ?? urlImportarAlvo('cardapio')} className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 hover:underline">
           {lendo || porLotes ? 'Voltar às importações' : 'Enviar outro arquivo'}
         </Link>
         {props.status === 'erro' && <Button variant="outline" onClick={() => setDescartar(true)}>Descartar</Button>}

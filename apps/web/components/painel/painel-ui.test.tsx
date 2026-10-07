@@ -37,6 +37,24 @@ describe('DadosUnidadeForm', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível salvar. Tente de novo.')
   })
 
+  it('duas na mesma tela (unidade aberta + folha "Nova unidade"): ids próprios, cada rótulo no seu campo e resumo apontando certo', async () => {
+    const user = userEvent.setup()
+    render(
+      <>
+        <section aria-label="Aberta"><DadosUnidadeForm inicial={{ ...UNIDADE_VAZIA, nome: 'Asa Sul' }} acao={vi.fn()} /></section>
+        <section aria-label="Nova"><DadosUnidadeForm idPrefixo="nova-" inicial={UNIDADE_VAZIA} acao={vi.fn()} /></section>
+      </>,
+    )
+    const nova = screen.getByRole('region', { name: 'Nova' })
+    const campos = screen.getAllByLabelText(/^Nome da unidade/)
+    expect(campos).toHaveLength(2)
+    expect(new Set(campos.map((c) => c.id)).size).toBe(2)
+    expect(nova.querySelector('#nova-nome')).toBe(campos[1])
+    await user.click(nova.querySelector('button[type="submit"]')!)
+    expect(campos[1]).toHaveFocus()
+    expect(nova.querySelector('a[href="#nova-nome"]')).not.toBeNull()
+  })
+
   it('somente leitura: campos desabilitados e sem botão de salvar', () => {
     render(<DadosUnidadeForm inicial={{ ...UNIDADE_VAZIA, nome: 'Asa Sul' }} acao={vi.fn()} somenteLeitura />)
     expect(screen.getByLabelText(/^Nome da unidade/)).toBeDisabled()

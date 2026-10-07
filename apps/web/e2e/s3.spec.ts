@@ -121,11 +121,10 @@ test('simulador registra o pedido de evento, mas a fila não mostra pedido simul
   const gravados = await getSql()`select convidados, tipo, simulado, status from event_requests where unit_id = ${unitId}`
   expect(gravados).toEqual([{ convidados: 40, tipo: 'aniversario', simulado: true, status: 'novo' }])
 
-  await page.goto(`/agenda?aba=eventos&unidade=${unitId}`)
+  await page.goto(`/agenda?dia=${amanha()}&unidade=${unitId}`)
   await expect(page.getByRole('heading', { level: 1, name: 'Agenda' })).toBeVisible()
-  await expect(page.getByText('Nenhum pedido de evento por aqui')).toBeVisible()
-  // simulado também não entra na contagem da aba
-  await expect(page.getByRole('link', { name: 'Eventos', exact: true })).toBeVisible()
+  await expect(page.getByText(/^Nada na agenda para/)).toBeVisible()
+  await expect(page.getByText('40 convidados')).toHaveCount(0)
 })
 
 test('coleta em mensagens: sem tipo, pergunta "Qual o tipo do evento?" e registra com a resposta', async ({ page }) => {
@@ -182,18 +181,26 @@ test('pedido real na fila: status, responsável, notas e telefone sob demanda (a
   const membro = await entrarComoGestor(page)
   const [eu] = await sql`select id from auth.users where email = ${membro.email}`
 
-  // celular estreito: barra com "Agenda" e a aba "Eventos (1 novo)" cabem sem rolagem horizontal
+  // celular estreito: a Agenda de hoje lista o pedido de amanhã entre os pendentes, sem rolagem horizontal
   await page.setViewportSize({ width: 360, height: 740 })
   await page.getByRole('link', { name: 'Agenda', exact: true }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Agenda' })).toBeVisible()
-  await page.getByRole('link', { name: /^Eventos \(\d+ novos?\)$/ }).click()
-  await expect(page.getByRole('link', { name: 'Eventos (1 novo)' })).toBeInViewport({ ratio: 1 })
-  await expect(page.getByRole('button', { name: new RegExp(CLIENTE) })).toContainText('40 convidados')
+  const pendentes = page.getByRole('region', { name: 'Pedidos para responder em outros dias' })
+  await expect(pendentes.getByRole('link', { name: new RegExp(CLIENTE) })).toContainText('Novo')
   await semRolagemHorizontal(page)
   await expect(page.getByRole('link', { name: 'Agenda', exact: true })).toBeInViewport({ ratio: 1 })
 
-  await page.getByRole('button', { name: new RegExp(CLIENTE) }).click()
+  // abre o dia do evento com o pedido em folha
+  await pendentes.getByRole('link', { name: new RegExp(CLIENTE) }).click()
   const folha = page.getByRole('dialog', { name: 'Pedido de evento' })
+  await expect(folha).toContainText(UNIDADE)
+  await expect(folha).toContainText(CLIENTE)
+  // a folha é modal (o resto da tela sai da árvore de acessibilidade): fecha para ver o pedido na linha do tempo do dia
+  await folha.getByRole('button', { name: 'Fechar' }).click()
+  await expect(folha).toHaveCount(0)
+  const linha = page.getByRole('list', { name: 'Linha do tempo do dia' }).getByRole('link', { name: new RegExp(CLIENTE) })
+  await expect(linha).toContainText('40 convidados')
+  await linha.click()
   await expect(folha).toContainText(UNIDADE)
   await folha.getByRole('button', { name: 'Mostrar telefone' }).click()
   await expect(folha.getByText(TELEFONE)).toBeVisible()
@@ -206,7 +213,8 @@ test('pedido real na fila: status, responsável, notas e telefone sob demanda (a
   await folha.getByLabel(/^Notas internas/).fill('Ligar depois das 18h')
   await folha.getByRole('button', { name: 'Salvar' }).click()
   await expect(page.getByText('Pedido atualizado.')).toBeVisible()
-  await expect(page.getByRole('button', { name: new RegExp(CLIENTE) })).toContainText('Em contato')
+  await expect(folha).toHaveCount(0)
+  await expect(page.getByRole('list', { name: 'Linha do tempo do dia' }).getByRole('link', { name: new RegExp(CLIENTE) })).toContainText('Em contato')
 
   const [depois] = await sql`select status, responsavel_id, notas_internas from event_requests where id = ${pedidoId}`
   expect(depois).toEqual({ status: 'em_contato', responsavel_id: eu!.id, notas_internas: 'Ligar depois das 18h' })
@@ -220,9 +228,12 @@ test('atendente vê a fila e muda o status, mas não cadastra espaço', async ({
   const { email, senha } = await criarMembro('atendente')
   await entrar(page, email, senha)
   await expect(page.getByRole('heading', { level: 1, name: 'Início' })).toBeVisible()
+  // endereço antigo da aba Eventos leva à lista de todos os pedidos da Agenda; o pedido de amanhã está nela
   await page.goto('/agenda?aba=eventos')
-  await page.getByRole('button', { name: new RegExp(CLIENTE) }).click()
-  const folha = page.getByRole('dialog', { name: 'Pedido de evento' })
+  await expect(page).toHaveURL(/\/agenda\?ver=pedidos$/)
+  await page.getByRole('list', { name: 'Todos os pedidos de evento' }).getByRole('link', { name: new RegExp(CLIENTE) }).click()
+  // celular: folha; desktop: painel ao lado
+  const folha = page.getByRole('dialog', { name: 'Pedido de evento' }).or(page.getByRole('complementary', { name: 'Pedido de evento' }))
   await folha.getByLabel(/^Status/).selectOption('confirmado')
   await folha.getByRole('button', { name: 'Salvar' }).click()
   await expect(page.getByText('Pedido atualizado.')).toBeVisible()

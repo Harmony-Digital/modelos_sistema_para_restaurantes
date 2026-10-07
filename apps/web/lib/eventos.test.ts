@@ -1,28 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { alternarStatus, dataDoEvento, haQuanto, hrefEventos, linksTelefone, membrosDaUnidade, statusDaUrl, statusPossiveis } from './eventos'
+import { dataDoEvento, haQuanto, linksTelefone, membrosDaUnidade, statusPossiveis } from './eventos'
 
-describe('eventos: filtros e transições', () => {
+describe('eventos: transições', () => {
   it('statusPossiveis: atual mais as transições válidas', () => {
     expect(statusPossiveis('novo')).toEqual(['novo', 'em_contato', 'confirmado', 'recusado', 'cancelado'])
     expect(statusPossiveis('em_contato')).toEqual(['em_contato', 'confirmado', 'recusado', 'cancelado'])
     expect(statusPossiveis('confirmado')).toEqual(['confirmado', 'cancelado'])
     expect(statusPossiveis('recusado')).toEqual(['recusado'])
     expect(statusPossiveis('cancelado')).toEqual(['cancelado'])
-  })
-  it('statusDaUrl: padrão, lista e lixo', () => {
-    expect(statusDaUrl(undefined)).toEqual(['novo', 'em_contato'])
-    expect(statusDaUrl('confirmado,novo')).toEqual(['novo', 'confirmado'])
-    expect(statusDaUrl('x,y')).toEqual(['novo', 'em_contato'])
-    expect(statusDaUrl('')).toEqual(['novo', 'em_contato'])
-  })
-  it('hrefEventos omite o padrão e o filtro de unidade vazio', () => {
-    expect(hrefEventos({ status: ['novo', 'em_contato'], unidade: null })).toBe('/agenda?aba=eventos')
-    expect(hrefEventos({ status: ['novo', 'confirmado'], unidade: 'u1' })).toBe('/agenda?aba=eventos&status=novo,confirmado&unidade=u1')
-  })
-  it('alternarStatus liga, desliga e nunca esvazia', () => {
-    expect(alternarStatus(['novo', 'em_contato'], 'confirmado')).toEqual(['novo', 'em_contato', 'confirmado'])
-    expect(alternarStatus(['novo', 'em_contato'], 'novo')).toEqual(['em_contato'])
-    expect(alternarStatus(['novo'], 'novo')).toEqual(['novo'])
   })
 })
 

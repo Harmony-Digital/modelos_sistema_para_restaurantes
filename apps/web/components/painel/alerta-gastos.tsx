@@ -20,14 +20,14 @@ export function FaixaAlertaGastos(props: { alertas: AlertaPainel[] }) {
       aria-label="Alerta de gastos"
       className="relative z-40 -mb-[env(safe-area-inset-top)] border-b border-warning bg-card pt-[env(safe-area-inset-top)]"
     >
-      <div className="mx-auto flex max-w-xl flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2">
+      <div className="mx-auto flex max-w-xl flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 lg:max-w-none lg:px-8">
         <AlertTriangle aria-hidden="true" className="size-5 shrink-0 text-warning" />
         <p className="min-w-0 flex-1 text-sm text-foreground">
           <strong className="font-semibold">{textoAlerta(principal!)}</strong>
           {emModoEconomico(principal!) && <span> — modo econômico até o próximo período ou até aumentar o limite.</span>}
           {outros.length > 0 && <span className="text-muted-foreground"> (e mais {outros.length} {outros.length === 1 ? 'alerta' : 'alertas'})</span>}
         </p>
-        <Link href="/mais/gastos" className={LINK}>Ajustar limites</Link>
+        <Link href="/gestao/gastos" className={LINK}>Ajustar limites</Link>
       </div>
     </section>
   )
@@ -49,7 +49,7 @@ export function CartaoAlertasGastos(props: { alertas: AlertaPainel[] }) {
           </li>
         ))}
       </ul>
-      <Link href="/mais/gastos" className={LINK}>Ajustar limites</Link>
+      <Link href="/gestao/gastos" className={LINK}>Ajustar limites</Link>
     </section>
   )
 }

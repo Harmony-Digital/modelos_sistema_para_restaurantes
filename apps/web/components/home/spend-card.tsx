@@ -82,7 +82,7 @@ export function SpendCard(props: { gastos: Gastos; cotacao: string; provedor: Ro
         </tfoot>
       </table>
       <p className="mt-3 text-xs text-muted-foreground">Cotação usada: US$ 1 = R$ {usdParaCampo(props.cotacao)}</p>
-      <Link href="/mais/gastos" className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 [@media(hover:hover)]:hover:underline">
+      <Link href="/gestao/gastos" className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 [@media(hover:hover)]:hover:underline">
         Ver gastos e limites
       </Link>
     </section>

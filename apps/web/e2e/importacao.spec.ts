@@ -106,9 +106,9 @@ test.afterAll(async () => {
   await closeSql()
 })
 
-/** Aba Importar do alvo → envia os arquivos → lista em ordem → "Ler arquivos". */
+/** Importar na tela do alvo (Cardápio, Informações ou Unidades) → envia os arquivos → lista em ordem → "Ler arquivos". */
 async function importar(page: Page, alvo: string, arquivos: { name: string; mimeType: string; buffer: Buffer }[], modo?: 'Só preços') {
-  await page.goto(`/conteudo?aba=importar&alvo=${alvo}`)
+  await page.goto(alvo === 'cardapio' || alvo === 'informacoes' ? `/conteudo?aba=${alvo}&importar=1` : `/unidades/importar?alvo=${alvo}`)
   if (modo) await page.getByRole('radio', { name: new RegExp(`^${modo}`) }).check()
   await page.getByLabel(/^Arquivos/).setInputFiles(arquivos)
   await page.getByRole('button', { name: 'Enviar arquivos' }).click()

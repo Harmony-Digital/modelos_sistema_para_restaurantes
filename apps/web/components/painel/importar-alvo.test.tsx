@@ -26,7 +26,7 @@ const { ImportarAlvo, ArquivosImportacao } = await import('./importar-alvo')
 
 const ID = '00000000-0000-4000-8000-000000000011'
 const OUTRA = '00000000-0000-4000-8000-000000000012'
-const URL_IMP = `/conteudo?aba=importar&imp=${ID}`
+const URL_IMP = `/conteudo?aba=cardapio&importar=1&imp=${ID}`
 const pdf = (nome = 'cardapio.pdf') => new File(['%PDF'], nome, { type: 'application/pdf' })
 const foto = (nome = 'foto.jpg') => new File(['x'], nome, { type: 'image/jpeg' })
 
@@ -94,7 +94,7 @@ describe('ImportarAlvo', () => {
     render(<ImportarAlvo alvo="informacoes" importacoes={[]} />)
     await user.upload(screen.getByLabelText(/^Arquivos/), [pdf('falso.pdf'), foto()])
     await user.click(screen.getByRole('button', { name: 'Enviar arquivos' }))
-    await waitFor(() => expect(push).toHaveBeenCalledWith(URL_IMP))
+    await waitFor(() => expect(push).toHaveBeenCalledWith(`/conteudo?aba=informacoes&importar=1&imp=${ID}`))
     expect(acoesAlvo.novaImportacaoAction).toHaveBeenCalledWith({ alvo: 'informacoes', modo: 'completo' })
     // a tela da importação (recebendo arquivos) mostra as falhas, uma vez
     const { unmount } = render(<ArquivosImportacao id={ID} alvo="informacoes" modo="completo" arquivos={[{ ordem: 1, mime: 'image/jpeg', tamanho: 1 }]} />)
@@ -130,8 +130,8 @@ describe('ImportarAlvo', () => {
     )
     expect(screen.getByText('Recebendo arquivos')).toBeInTheDocument()
     expect(screen.getByText('Para revisar')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Abrir: 3 arquivos de 05\/10/ })).toHaveAttribute('href', URL_IMP)
-    expect(screen.getByRole('link', { name: /Abrir: PDF de 04\/10/ })).toHaveAttribute('href', `/conteudo?aba=importar&imp=${OUTRA}`)
+    expect(screen.getByRole('link', { name: /Abrir: 3 arquivos de 05\/10/ })).toHaveAttribute('href', `/unidades/importar?alvo=horarios&imp=${ID}`)
+    expect(screen.getByRole('link', { name: /Abrir: PDF de 04\/10/ })).toHaveAttribute('href', `/unidades/importar?alvo=horarios&imp=${OUTRA}`)
   })
 })
 
@@ -175,7 +175,7 @@ describe('ArquivosImportacao', () => {
     acoes.descartarImportacaoAction.mockResolvedValue({ ok: true, data: null })
     render(<ArquivosImportacao id={ID} alvo="espacos" modo="completo" arquivos={arquivos} />)
     await user.click(screen.getByRole('button', { name: 'Ler arquivos' }))
-    await waitFor(() => expect(push).toHaveBeenCalledWith(`/conteudo?aba=importar&imp=${OUTRA}`))
+    await waitFor(() => expect(push).toHaveBeenCalledWith(`/unidades/importar?alvo=espacos&imp=${OUTRA}`))
     expect(acoes.descartarImportacaoAction).toHaveBeenCalledWith(ID)
     expect(toast.info).toHaveBeenCalledWith('Esses arquivos já foram importados. Mostrando a importação deles.')
   })
@@ -218,7 +218,7 @@ describe('ArquivosImportacao', () => {
     expect(acoes.descartarImportacaoAction).not.toHaveBeenCalled()
     await user.click(await screen.findByRole('button', { name: 'Descartar importação' }))
     await waitFor(() => expect(acoes.descartarImportacaoAction).toHaveBeenCalledWith(ID))
-    await waitFor(() => expect(push).toHaveBeenCalledWith('/conteudo?aba=importar&alvo=horarios'))
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/unidades/importar?alvo=horarios'))
     expect(toast.success).toHaveBeenCalledWith('Importação descartada')
   })
 })

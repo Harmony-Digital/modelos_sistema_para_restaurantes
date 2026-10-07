@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const criarConviteAction = vi.fn()
 const reenviarConviteAction = vi.fn()
 const definirAtivoAction = vi.fn()
-vi.mock('@/app/(painel)/mais/equipe/actions', () => ({ criarConviteAction, reenviarConviteAction, definirAtivoAction }))
+vi.mock('@/app/(painel)/gestao/equipe/actions', () => ({ criarConviteAction, reenviarConviteAction, definirAtivoAction }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 const { Equipe } = await import('./equipe')
 

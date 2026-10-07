@@ -164,7 +164,7 @@ describe('RevisaoRascunho', () => {
     await user.click(within(dialogo).getByRole('button', { name: 'Descartar importação' }))
     await waitFor(() => expect(acoes.descartarImportacaoAction).toHaveBeenCalledWith(ID))
     expect(toast.success).toHaveBeenCalledWith('Importação descartada')
-    expect(push).toHaveBeenCalledWith('/conteudo?aba=importar')
+    expect(push).toHaveBeenCalledWith('/conteudo?aba=cardapio&importar=1')
   })
 
   it('gerente sem acesso a todas as unidades não confirma', () => {

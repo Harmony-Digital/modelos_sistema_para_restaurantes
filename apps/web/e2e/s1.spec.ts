@@ -85,8 +85,8 @@ function proximoDomingoAoMeioDia(): string {
 
 test('cadastra unidade e horários; a lista mostra "Aberta agora"', async ({ page }) => {
   await entrarComoGestor(page)
-  await page.getByRole('link', { name: 'Mais', exact: true }).click()
-  await page.getByRole('link', { name: 'Unidades', exact: true }).click()
+  await page.getByRole('button', { name: 'Mais', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Mais' }).getByRole('link', { name: 'Unidades', exact: true }).click()
   await page.getByRole('button', { name: 'Nova unidade' }).click()
   const nome = `E2E Centro ${SUFIXO}`
   await page.getByLabel(/^Nome/).fill(nome)
@@ -100,15 +100,15 @@ test('cadastra unidade e horários; a lista mostra "Aberta agora"', async ({ pag
   await page.getByRole('button', { name: 'Copiar segunda para todos os dias' }).click()
   await page.getByRole('button', { name: 'Salvar horários' }).click()
   await expect(page.getByText('Horários salvos')).toBeVisible()
-  await page.getByRole('link', { name: 'Mais', exact: true }).click()
-  await page.getByRole('link', { name: 'Unidades', exact: true }).click()
+  await page.getByRole('button', { name: 'Mais', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Mais' }).getByRole('link', { name: 'Unidades', exact: true }).click()
   await expect(page.getByRole('listitem').filter({ hasText: nome })).toContainText('Aberta agora')
 })
 
 test('formulário de unidade: erro no campo certo, sem gravar', async ({ page }) => {
   await entrarComoGestor(page)
-  await page.getByRole('link', { name: 'Mais', exact: true }).click()
-  await page.getByRole('link', { name: 'Unidades', exact: true }).click()
+  await page.getByRole('button', { name: 'Mais', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Mais' }).getByRole('link', { name: 'Unidades', exact: true }).click()
   await page.getByRole('button', { name: 'Nova unidade' }).click()
   // o SubmitButton não tira o foco no mousedown: o clique envia mesmo com o erro do blur do Nome
   await page.getByRole('button', { name: 'Salvar unidade' }).click()
@@ -123,6 +123,9 @@ test('pergunta sem resposta: o dono responde e o simulador passa a responder', a
     values (${r!.id}, ${'info:' + TEMA}, 'tem estacionamento?')`
   await entrarComoGestor(page)
   await page.getByRole('link', { name: 'Conteúdo' }).click()
+  // "Sem resposta" mora em Conteúdo → Informações, com a ação "Responder" em cada pergunta
+  await page.getByRole('navigation', { name: 'Seções de conteúdo' }).getByRole('link', { name: 'Informações' }).click()
+  await expect(page.getByRole('heading', { level: 2, name: /^Sem resposta/ })).toBeVisible()
   await page.getByRole('button', { name: new RegExp(`^Responder: ${TEMA}`, 'i') }).click()
   await page.getByLabel(/^Resposta/).fill(RESPOSTA)
   await page.getByRole('button', { name: 'Salvar resposta' }).click()

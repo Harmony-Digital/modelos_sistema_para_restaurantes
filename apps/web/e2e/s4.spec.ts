@@ -190,7 +190,9 @@ test('dono envia o arquivo do cardápio; "manda o cardápio" no simulador vira d
 test('importar CSV: revisão com itens novos, confirmar e os itens aparecem no cardápio', async ({ page }) => {
   await entrarComoGestor(page)
   await page.setViewportSize({ width: 360, height: 740 })
-  await page.goto('/conteudo?aba=cardapio&sub=importar')
+  await page.goto('/conteudo?aba=cardapio')
+  await page.getByRole('link', { name: 'Importar' }).click()
+  await expect(page).toHaveURL(/aba=cardapio&importar=1/)
   await semRolagemHorizontal(page)
   await page.getByLabel(/^Planilha CSV/).setInputFiles({ name: 'cardapio.csv', mimeType: 'text/csv', buffer: Buffer.from(CSV) })
   await page.getByRole('button', { name: 'Ler planilha' }).click()
@@ -221,9 +223,9 @@ test('importar CSV: revisão com itens novos, confirmar e os itens aparecem no c
 
 test('importar PDF: lista de arquivos, "Lendo o cardápio…", revisão com o rascunho da IA, editar, usar como arquivo de envio e confirmar', async ({ page }) => {
   await entrarComoGestor(page)
-  // o endereço antigo (Cardápio → Importar) leva à aba Importar
+  // o endereço antigo (Cardápio → Importar) abre o importador dentro do Cardápio
   await page.goto('/conteudo?aba=cardapio&sub=importar')
-  await expect(page).toHaveURL(/aba=importar&alvo=cardapio/)
+  await expect(page).toHaveURL(/aba=cardapio&importar=1/)
   await page.getByLabel(/^Arquivos/).setInputFiles({ name: 'cardapio-peixes.pdf', mimeType: 'application/pdf', buffer: pdf('importacao') })
   await page.getByRole('button', { name: 'Enviar arquivos' }).click()
   await expect(page.getByRole('list', { name: 'Arquivos para ler' }).getByRole('listitem')).toHaveCount(1)

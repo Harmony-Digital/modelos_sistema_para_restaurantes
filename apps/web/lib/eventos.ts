@@ -12,34 +12,9 @@ export const ROTULO_STATUS: Record<StatusPedido, string> = {
   cancelado: 'Cancelado',
 }
 
-/** Padrão da fila: o que ainda pede trabalho. */
-export const STATUS_PADRAO: readonly StatusPedido[] = ['novo', 'em_contato']
-
 /** O status atual mais os que ele pode virar, na ordem do ciclo. */
 export function statusPossiveis(atual: StatusPedido): StatusPedido[] {
   return STATUS_PEDIDO.filter((s) => s === atual || TRANSICOES_PEDIDO_EVENTO[atual].includes(s))
-}
-
-/** `?status=novo,em_contato`: ignora valor desconhecido; ausente ou só lixo ⇒ padrão. */
-export function statusDaUrl(param: string | undefined): StatusPedido[] {
-  if (param === undefined) return [...STATUS_PADRAO]
-  const pedidos = new Set(param.split(','))
-  const ok = STATUS_PEDIDO.filter((s) => pedidos.has(s))
-  return ok.length > 0 ? ok : [...STATUS_PADRAO]
-}
-
-export function hrefEventos(p: { status: readonly StatusPedido[]; unidade: string | null }): string {
-  const padrao = p.status.length === STATUS_PADRAO.length && STATUS_PADRAO.every((s) => p.status.includes(s))
-  let href = '/agenda?aba=eventos'
-  if (!padrao) href += `&status=${STATUS_PEDIDO.filter((s) => p.status.includes(s)).join(',')}`
-  if (p.unidade) href += `&unidade=${encodeURIComponent(p.unidade)}`
-  return href
-}
-
-/** Liga/desliga um status do filtro; nunca deixa o filtro vazio (o último não sai). */
-export function alternarStatus(atual: readonly StatusPedido[], s: StatusPedido): StatusPedido[] {
-  if (!atual.includes(s)) return STATUS_PEDIDO.filter((x) => x === s || atual.includes(x))
-  return atual.length === 1 ? [...atual] : atual.filter((x) => x !== s)
 }
 
 export function dataDoEvento(d: string): string {

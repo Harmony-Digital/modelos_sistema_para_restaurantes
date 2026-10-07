@@ -1,35 +1,14 @@
-import type { PrevisaoUnidade } from '@atd/db'
 import {
   agoraLocal, DIAS_SEMANA, diaDaSemana, feriadosNacionais, formatarTurnos, mapaFeriados, partesDaData, somarDias,
   type AgendaUnidade, type DataIso, type PoliticaFeriado,
 } from '@atd/core/s1'
 import { validarAvisoNaAgenda } from '@atd/core/s2'
-import { DIAS_A_FRENTE, dataIsoValida } from '@/lib/schemas/avisos'
+import { DIAS_A_FRENTE } from '@/lib/schemas/avisos'
 
 export const FUSO_PADRAO = 'America/Sao_Paulo'
 
 export const hojeLocal = (agora: Date, timezone: string = FUSO_PADRAO): DataIso => agoraLocal(agora, timezone).data
 export const limiteDaPrevisao = (hoje: DataIso): DataIso => somarDias(hoje, DIAS_A_FRENTE)
-/** A previsão também consulta os últimos 30 dias (só leitura); o formulário continua de hoje a +30. */
-export const DIAS_ATRAS = 30
-export const inicioDaPrevisao = (hoje: DataIso): DataIso => somarDias(hoje, -DIAS_ATRAS)
-
-/** Dia pedido na URL: inválido volta para hoje; fora de [hoje-30, hoje+30] vai para o limite mais próximo. */
-export function dataDaUrl(param: string | undefined, hoje: DataIso): DataIso {
-  if (!param || !dataIsoValida(param)) return hoje
-  const inicio = inicioDaPrevisao(hoje)
-  const limite = limiteDaPrevisao(hoje)
-  return param < inicio ? inicio : param > limite ? limite : param
-}
-
-export function hrefPrevisao(p: { data: DataIso; hoje: DataIso; unidade?: string | undefined; cancelados?: boolean | undefined }): string {
-  const q = new URLSearchParams()
-  if (p.data !== p.hoje) q.set('data', p.data)
-  if (p.unidade) q.set('unidade', p.unidade)
-  if (p.cancelados) q.set('cancelados', '1')
-  const s = q.toString()
-  return s ? `/agenda?aba=previsao&${s}` : '/agenda?aba=previsao'
-}
 
 export function dataBr(d: DataIso): string {
   const { ano, mes, dia } = partesDaData(d)
@@ -39,14 +18,6 @@ export function dataBr(d: DataIso): string {
 export function rotuloDoDia(d: DataIso, hoje: DataIso): string {
   const base = `${DIAS_SEMANA[diaDaSemana(d)]}, ${dataBr(d)}`
   return d === hoje ? `Hoje · ${base}` : base
-}
-
-const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`
-
-/** "N pessoas · M avisos": só avisos ativos entram na conta. */
-export function resumoUnidade(p: PrevisaoUnidade): { pessoas: string; avisos: string } {
-  const ativos = p.avisos.filter((a) => a.status === 'ativo')
-  return { pessoas: plural(p.totalPessoas, 'pessoa', 'pessoas'), avisos: plural(ativos.length, 'aviso', 'avisos') }
 }
 
 /** Mesma regra do resolver da IA (agenda da unidade, feriado, turnos e horário de hoje que já passou); erros por campo ou null. */
