@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -17,19 +17,27 @@ describe('AwaitingHuman', () => {
   })
   it('conversa simulada (modo demonstração) leva o selo Simulação', () => {
     render(<AwaitingHuman itens={[item, { ...item, id: '22222222-2222-4222-8222-222222222222', nome: 'Teste', simulada: true }]} action={vi.fn()} />)
-    expect(screen.getByRole('link', { name: /Teste/ })).toHaveTextContent('Simulação')
-    expect(screen.getByRole('link', { name: /Maria/ })).not.toHaveTextContent('Simulação')
+    expect(screen.getByRole('link', { name: /Teste/ }).closest('tr')).toHaveTextContent('Simulação')
+    expect(screen.getByRole('link', { name: /Maria/ }).closest('tr')).not.toHaveTextContent('Simulação')
   })
-  it('item leva à conversa', () => {
-    render(<AwaitingHuman itens={[item]} action={vi.fn()} />)
-    expect(screen.getByRole('link', { name: /Maria/ })).toHaveAttribute('href', `/conversas/${item.id}`)
+  it('tabela da fila: item leva à conversa aberta, com a situação em etiqueta e a espera em mm:ss', () => {
+    render(<AwaitingHuman itens={[item, { ...item, id: '33333333-3333-4333-8333-333333333333', nome: null, estado: 'humano' }]} action={vi.fn()} />)
+    const tabela = screen.getByRole('table', { name: 'Aguardando atendimento' })
+    expect(within(tabela).getByRole('columnheader', { name: 'Espera' })).toBeInTheDocument()
+    const maria = within(tabela).getByRole('link', { name: /Maria/ })
+    expect(maria).toHaveAttribute('href', `/conversas/${item.id}`)
+    const linha = maria.closest('tr')!
+    expect(within(linha).getByText('Aguardando')).toHaveAttribute('data-variante', 'aguarda')
+    expect(within(linha).getByText(/^0[45]:\d\d$/)).toBeInTheDocument()
+    const outra = within(tabela).getByRole('link', { name: /Cliente sem nome/ })
+    expect(within(outra.closest('tr')!).getByText('Em atendimento')).toHaveAttribute('data-variante', 'humano')
+    expect(screen.getByText('Ao vivo')).toBeInTheDocument()
   })
   it('devolve e confirma com toast', async () => {
     const user = userEvent.setup()
     const action = vi.fn(async () => ({ ok: true as const, data: null }))
     render(<AwaitingHuman itens={[item]} action={action} />)
     expect(screen.getByText('Maria')).toBeInTheDocument()
-    expect(screen.getByText(/há 5 min/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Devolver à IA a conversa de Maria' }))
     expect(action).toHaveBeenCalledWith(item.id)
     expect(toast.success).toHaveBeenCalledWith('Conversa devolvida à IA')
