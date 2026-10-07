@@ -39,7 +39,7 @@ describe('links do Início', () => {
 })
 
 const aviso = (p: Partial<AvisoPainel>): AvisoPainel => ({
-  id: 'a', unitId: 'u1', nome: 'Ana', pessoas: 4, horarioAprox: null, origem: 'ia', status: 'ativo', simulado: false, ...p,
+  id: 'a', unitId: 'u1', nome: 'Ana', pessoas: 4, horarioAprox: null, horario: null, origem: 'ia', status: 'confirmada', simulado: false, ...p,
 })
 const pedido = (p: Partial<PedidoPainel>): PedidoPainel => ({
   id: 'p', unitId: 'u1', unidade: 'Asa Sul', spaceId: null, espaco: null, nome: 'Bia', data: '2026-10-07', convidados: 30,
@@ -53,7 +53,7 @@ describe('agendaDeHoje', () => {
       { unitId: 'u1', unidade: 'Asa Sul', totalPessoas: 10, avisos: [
         aviso({ id: 'a1', horarioAprox: '20:00', pessoas: 6 }),
         aviso({ id: 'a2', horarioAprox: null, nome: null }),
-        aviso({ id: 'a3', status: 'cancelado' }),
+        aviso({ id: 'a3', status: 'cancelada' }),
       ] },
       { unitId: 'u2', unidade: 'Asa Norte', totalPessoas: 2, avisos: [aviso({ id: 'a4', unitId: 'u2', horarioAprox: '12h30', pessoas: 2, simulado: true })] },
     ]

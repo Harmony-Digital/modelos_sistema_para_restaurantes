@@ -77,7 +77,7 @@ describe('acesso', () => {
       ultimaInteracao: '2026-10-05T12:00:00Z',
       conversas: 1,
       mensagens: 3,
-      avisos: [{ data: '2026-10-10', pessoas: 4, status: 'ativo', unidade: 'Asa Sul' }],
+      avisos: [{ data: '2026-10-10', pessoas: 4, status: 'confirmada', unidade: 'Asa Sul' }],
       eventos: [{ data: '2026-11-20', convidados: 40, tipo: 'aniversario', status: 'confirmado', unidade: 'Asa Sul' }],
       pedidos: [
         { tipo: 'correcao', status: 'concluido', criadoEm: '2026-09-01T12:00:00Z' },

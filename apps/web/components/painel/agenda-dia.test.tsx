@@ -22,8 +22,8 @@ const U2 = '00000000-0000-4000-8000-000000000002'
 const M1 = '00000000-0000-4000-8000-0000000000b1'
 const P1 = '00000000-0000-4000-8000-0000000000aa'
 const aviso = (over = {}) => ({
-  id: crypto.randomUUID(), unitId: U1, nome: 'Ana', pessoas: 4, horarioAprox: '20:00' as string | null,
-  origem: 'ia' as const, status: 'ativo' as 'ativo' | 'cancelado', simulado: false, ...over,
+  id: crypto.randomUUID(), unitId: U1, nome: 'Ana', pessoas: 4, horarioAprox: '20:00' as string | null, horario: null as string | null,
+  origem: 'ia' as const, status: 'confirmada' as 'confirmada' | 'cancelada' | 'nao_veio', simulado: false, ...over,
 })
 const pedido = (over = {}) => ({
   id: P1, unitId: U1, unidade: 'Asa Sul', spaceId: null, espaco: 'Salão Jardim' as string | null, nome: 'Caio' as string | null, data: '2026-10-05',
@@ -256,7 +256,7 @@ describe('AgendaDia: avisos', () => {
   })
 
   it('cancelados: sem botão, com selo, e link para ocultar', () => {
-    const cancelado = aviso({ status: 'cancelado', nome: 'Bia' })
+    const cancelado = aviso({ status: 'cancelada', nome: 'Bia' })
     render(<AgendaDia {...base} cancelados unidades={[{ ...unidades[0]!, avisos: [aviso(), cancelado] }]} />)
     expect(screen.getAllByText('Cancelado').length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: /Cancelar aviso de Bia/ })).not.toBeInTheDocument()

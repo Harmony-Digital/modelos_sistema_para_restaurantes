@@ -210,10 +210,10 @@ describe('grants de runtime (web_app → worker_app)', () => {
       ({ itens: [{ servico: 'aviso_presenca', tipo, unidade: null, data: null, tema: null, pessoas, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null }], fora_escopo: false }) as TriageV5
     const { conversationId } = await receiveAsWeb(rid, 'vou hoje com 2')
     await processConversation(depsAsWorker(fakeLlm(aviso('registrar', 2)).llm, fakeWa()), conversationId)
-    expect(await admin.db.select().from(schema.attendanceNotices)).toMatchObject([{ pessoas: 2, status: 'ativo', simulado: false }])
+    expect(await admin.db.select().from(schema.attendanceNotices)).toMatchObject([{ pessoas: 2, status: 'confirmada', simulado: false }])
     await receiveAsWeb(rid, 'não vou mais')
     await processConversation(depsAsWorker(fakeLlm(aviso('cancelar', null)).llm, fakeWa()), conversationId)
-    expect(await admin.db.select().from(schema.attendanceNotices)).toMatchObject([{ status: 'cancelado' }])
+    expect(await admin.db.select().from(schema.attendanceNotices)).toMatchObject([{ status: 'cancelada' }])
     const acoes = (await admin.db.select().from(schema.auditLog)).map((x) => x.acao).filter((a) => a.startsWith('aviso.'))
     expect(acoes.sort()).toEqual(['aviso.cancelado', 'aviso.registrado'])
   })

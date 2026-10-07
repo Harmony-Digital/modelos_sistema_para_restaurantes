@@ -32,7 +32,14 @@ export async function criarAvisoAction(input: AvisoForm): Promise<ActionResult<{
   const r = await criarAvisoPainel(getDb(), s.claims, {
     unitId: v.unitId, data: v.data, pessoas: v.pessoas, horarioAprox: v.horario === '' ? null : v.horario, nome: v.nome === '' ? null : v.nome,
   })
-  if (r.ok) revalidar()
+  if (!r.ok) {
+    if (r.erro === 'lotado') {
+      return { ok: false, formError: `A unidade está lotada nesse dia. ${r.vagas === 1 ? 'Resta 1 vaga' : `Restam ${r.vagas} vagas`}.` }
+    }
+    if (r.erro === 'transicao_invalida' || r.erro === 'duplicada') return INDISPONIVEL
+    return resultadoDoPainel({ ok: false, erro: r.erro })
+  }
+  revalidar()
   return resultadoDoPainel(r)
 }
 

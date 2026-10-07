@@ -69,7 +69,7 @@ function dataNoFuso(iso: string | Date, timeZone: string): string {
   return new Intl.DateTimeFormat('pt-BR', { timeZone, day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(iso))
 }
 
-const ROTULO_STATUS_AVISO: Record<string, string> = { ativo: 'Ativo', cancelado: 'Cancelado' }
+const ROTULO_STATUS_AVISO: Record<string, string> = { confirmada: 'Confirmada', cancelada: 'Cancelada', nao_veio: 'Não veio' }
 const maiuscula = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`
 

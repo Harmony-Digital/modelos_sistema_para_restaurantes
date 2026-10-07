@@ -16,7 +16,7 @@ const base = (restaurantId: string, customerId: string, unitId: string, o: Parti
   restaurantId, customerId, unitId, data: '2026-10-10', pessoas: 4, horarioAprox: '20h', nome: 'Ana', simulado: false, ...o,
 })
 const ativos = (customerId: string) =>
-  db.select().from(attendanceNotices).where(and(eq(attendanceNotices.customerId, customerId), eq(attendanceNotices.status, 'ativo')))
+  db.select().from(attendanceNotices).where(and(eq(attendanceNotices.customerId, customerId), eq(attendanceNotices.status, 'confirmada')))
 
 describe('avisos do worker', () => {
   it('cria; o segundo registro do mesmo cliente/unidade/dia atualiza; após cancelar cria outro', async () => {
@@ -27,7 +27,7 @@ describe('avisos do worker', () => {
     const b = await db.transaction((tx) => registrarAviso(tx, base(restaurantId, c, unitId, { pessoas: 6, nome: null, horarioAprox: null })))
     expect(b).toEqual({ id: a.id, atualizado: true })
     const [linha] = await ativos(c)
-    expect(linha).toMatchObject({ pessoas: 6, nome: 'Ana', horarioAprox: null, origem: 'ia', status: 'ativo' })
+    expect(linha).toMatchObject({ pessoas: 6, nome: 'Ana', horarioAprox: null, origem: 'ia', status: 'confirmada' })
     expect(await db.transaction((tx) => cancelarAvisoDoCliente(tx, { restaurantId, customerId: c, avisoId: a.id }))).toBe(true)
     const d = await db.transaction((tx) => registrarAviso(tx, base(restaurantId, c, unitId)))
     expect(d.atualizado).toBe(false)

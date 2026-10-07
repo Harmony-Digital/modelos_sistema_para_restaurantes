@@ -155,7 +155,7 @@ export function resumoDoDia(itens: ItemAgenda[]): { pessoas: number; avisos: num
   let avisos = 0
   let eventos = 0
   for (const i of itens) {
-    if (i.tipo === 'aviso' && i.aviso.status === 'ativo') {
+    if (i.tipo === 'aviso' && i.aviso.status === 'confirmada') {
       avisos += 1
       pessoas += i.aviso.pessoas
     }

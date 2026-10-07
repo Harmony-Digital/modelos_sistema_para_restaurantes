@@ -88,6 +88,14 @@ describe('previsão: actions', () => {
     expect(await criarAvisoAction(form())).toEqual({ ok: false, formError: 'Você não tem permissão para fazer essa alteração.' })
   })
 
+  it('unidade lotada no dia: mensagem com as vagas que restam, sem revalidar', async () => {
+    criarAvisoPainel.mockResolvedValue({ ok: false, erro: 'lotado', vagas: 3 })
+    expect(await criarAvisoAction(form())).toEqual({ ok: false, formError: 'A unidade está lotada nesse dia. Restam 3 vagas.' })
+    criarAvisoPainel.mockResolvedValue({ ok: false, erro: 'lotado', vagas: 1 })
+    expect(await criarAvisoAction(form())).toEqual({ ok: false, formError: 'A unidade está lotada nesse dia. Resta 1 vaga.' })
+    expect(revalidatePath).not.toHaveBeenCalled()
+  })
+
   it('cancelar: id inválido, sucesso e aviso que sumiu', async () => {
     expect(await cancelarAvisoAction('x')).toEqual({ ok: false, formError: 'Esse aviso não está mais disponível.' })
     expect(cancelarAvisoPainel).not.toHaveBeenCalled()

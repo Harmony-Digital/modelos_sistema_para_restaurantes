@@ -7,8 +7,8 @@ import {
 const U1 = '00000000-0000-4000-8000-000000000001'
 const U2 = '00000000-0000-4000-8000-000000000002'
 const aviso = (over = {}) => ({
-  id: crypto.randomUUID(), unitId: U1, nome: 'Ana', pessoas: 4, horarioAprox: '20:00' as string | null,
-  origem: 'ia' as const, status: 'ativo' as 'ativo' | 'cancelado', simulado: false, ...over,
+  id: crypto.randomUUID(), unitId: U1, nome: 'Ana', pessoas: 4, horarioAprox: '20:00' as string | null, horario: null as string | null,
+  origem: 'ia' as const, status: 'confirmada' as 'confirmada' | 'cancelada' | 'nao_veio', simulado: false, ...over,
 })
 const pedido = (over = {}) => ({
   id: crypto.randomUUID(), unitId: U1, unidade: 'Asa Sul', spaceId: null, espaco: null, nome: 'Caio', data: '2026-10-05',
@@ -123,7 +123,7 @@ describe('agenda: linha do tempo', () => {
   })
 
   it('resumo: pessoas só de avisos ativos, contagem de avisos ativos e de eventos do dia', () => {
-    const us = [{ unitId: U1, unidade: 'Asa Sul', totalPessoas: 6, avisos: [aviso({ pessoas: 6 }), aviso({ pessoas: 3, status: 'cancelado' })] }]
+    const us = [{ unitId: U1, unidade: 'Asa Sul', totalPessoas: 6, avisos: [aviso({ pessoas: 6 }), aviso({ pessoas: 3, status: 'cancelada' })] }]
     const itens = linhaDoTempo(us, [pedido()], { dia: '2026-10-05', unidade: null })
     expect(resumoDoDia(itens)).toEqual({ pessoas: 6, avisos: 1, eventos: 1 })
   })

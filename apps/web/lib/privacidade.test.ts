@@ -55,7 +55,7 @@ describe('texto do resumo de acesso', () => {
     ultimaInteracao: '2026-10-05T18:00:00Z',
     conversas: 3,
     mensagens: 42,
-    avisos: [{ data: '2026-09-12', pessoas: 4, status: 'ativo', unidade: 'Asa Sul' }],
+    avisos: [{ data: '2026-09-12', pessoas: 4, status: 'confirmada', unidade: 'Asa Sul' }],
     eventos: [{ data: '2026-11-20', convidados: 30, tipo: 'aniversario', status: 'confirmado', unidade: 'Asa Sul' }],
     pedidos: [{ tipo: 'acesso', status: 'aberto', criadoEm: '2026-10-01T12:00:00Z' }],
   }
@@ -67,7 +67,7 @@ describe('texto do resumo de acesso', () => {
     expect(t).toContain('Última interação: 05/10/2026')
     expect(t).toContain('Conversas: 3')
     expect(t).toContain('Mensagens: 42')
-    expect(t).toContain('12/09/2026 · Asa Sul · 4 pessoas · Ativo')
+    expect(t).toContain('12/09/2026 · Asa Sul · 4 pessoas · Confirmada')
     expect(t).toContain('20/11/2026 · Asa Sul · Aniversário · 30 convidados · Confirmado')
     expect(t).toContain('Acesso aos dados · Aberto · 01/10/2026')
     expect(t).not.toMatch(/telefone/i)

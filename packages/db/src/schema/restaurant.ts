@@ -1,7 +1,12 @@
 import { sql } from 'drizzle-orm'
-import { boolean, check, index, integer, jsonb, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import { boolean, check, index, integer, jsonb, numeric, pgTable, smallint, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import { authUsers } from 'drizzle-orm/supabase'
 import { holidayPolicy, inviteStatus, staffRole } from './enums.ts'
+
+/** Texto padrão das regras enviadas depois de confirmar uma reserva (spec 2026-10-07 §2). */
+export const REGRAS_RESERVA_PADRAO =
+  'Sua reserva está confirmada! Guardamos o lugar por até 15 minutos após o horário marcado; depois disso, o espaço pode ser liberado para outros clientes. Se precisar cancelar ou mudar o número de pessoas, é só avisar por aqui.'
+export const REGRAS_RESERVA_MAX = 600
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -23,8 +28,16 @@ export const restaurants = pgTable('restaurants', {
   cotacaoUsdBrl: numeric('cotacao_usd_brl', { precision: 10, scale: 4, mode: 'string' }).notNull().default('5.5'),
   /** Modo demonstração: o painel mostra os dados do simulador como se fossem reais, com o selo "Simulação". Só o dono muda. */
   modoDemonstracao: boolean('modo_demonstracao').notNull().default(false),
+  /** Regras enviadas ao cliente depois de confirmar a reserva. Dono e gerente editam. */
+  regrasReserva: text('regras_reserva').notNull().default(REGRAS_RESERVA_PADRAO),
+  /** Logo no bucket público `marca`: `<restaurant_id>/logo-<sha256>.<ext>`. Nulo = sem logo. */
+  logoPath: text('logo_path'),
   ...timestamps,
-}, (t) => [check('restaurants_cotacao_ck', sql`${t.cotacaoUsdBrl} between 0.5 and 50`)])
+}, (t) => [
+  check('restaurants_cotacao_ck', sql`${t.cotacaoUsdBrl} between 0.5 and 50`),
+  check('restaurants_regras_reserva_ck', sql`char_length(${t.regrasReserva}) between 1 and 600`),
+  check('restaurants_logo_path_ck', sql`${t.logoPath} is null or ${t.logoPath} ~ ('^' || ${t.id}::text || '/logo-[0-9a-f]{64}[.](png|jpg|webp)$')`),
+])
 
 export const units = pgTable(
   'units',
@@ -45,9 +58,12 @@ export const units = pgTable(
     telefone: text('telefone'),
     apelidos: text('apelidos').array().notNull().default(sql`'{}'::text[]`),
     ordem: integer('ordem').notNull().default(0),
+    /** Lotação máxima de pessoas por dia (reservas `confirmada`). Nulo = sem controle de lotação. */
+    capacidadePessoas: smallint('capacidade_pessoas'),
     ...timestamps,
   },
   (t) => [
+    check('units_capacidade_ck', sql`${t.capacidadePessoas} is null or ${t.capacidadePessoas} between 1 and 5000`),
     uniqueIndex('units_restaurant_slug_uq').on(t.restaurantId, t.slug),
     // alvo das FKs compostas (unit_id, restaurant_id): impede misturar unidade de outro restaurante
     uniqueIndex('units_id_restaurant_uq').on(t.id, t.restaurantId),

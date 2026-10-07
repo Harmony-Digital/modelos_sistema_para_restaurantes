@@ -67,8 +67,8 @@ describe('app.excluir_titular', () => {
     await novaMensagem(a.restaurantId, convOutro.id)
     const [run] = await db.insert(aiRuns).values({ restaurantId: a.restaurantId, conversationId: aberta.id, etapa: 'triagem', modelo: 'm', promptVersion: 'v1', costUsd: '0.01' }).returning()
     await db.insert(attendanceNotices).values([
-      { restaurantId: a.restaurantId, unitId: a.unitId, customerId: alvo.id, nome: 'Maria', data: '2026-10-10', pessoas: 4, origem: 'ia' },
-      { restaurantId: a.restaurantId, unitId: a.unitId, customerId: outro.id, nome: 'João', data: '2026-10-10', pessoas: 2, origem: 'ia' },
+      { restaurantId: a.restaurantId, unitId: a.unitId, customerId: alvo.id, nome: 'Maria', data: '2026-10-10', pessoas: 4, origem: 'ia', contatoCifrado: 'contato-maria' },
+      { restaurantId: a.restaurantId, unitId: a.unitId, customerId: outro.id, nome: 'João', data: '2026-10-10', pessoas: 2, origem: 'ia', contatoCifrado: 'contato-joao' },
     ])
     const [ev] = await db.insert(eventRequests).values({
       restaurantId: a.restaurantId, unitId: a.unitId, customerId: alvo.id, nome: 'Maria', data: '2026-11-20', convidados: 40,
@@ -86,7 +86,9 @@ describe('app.excluir_titular', () => {
     expect(await db.select().from(conversations).where(eq(conversations.customerId, c.alvo.id))).toHaveLength(0)
     expect(await db.select().from(messages)).toHaveLength(1) // só a do outro cliente
     const avisos = await db.select().from(attendanceNotices).orderBy(attendanceNotices.pessoas)
-    expect(avisos.map((x) => [x.customerId, x.nome, x.anonimizado])).toEqual([[c.outro.id, 'João', false], [null, null, true]])
+    expect(avisos.map((x) => [x.customerId, x.nome, x.contatoCifrado, x.anonimizado])).toEqual([
+      [c.outro.id, 'João', 'contato-joao', false], [null, null, null, true],
+    ])
     const [ev] = await db.select().from(eventRequests).where(eq(eventRequests.id, c.ev.id))
     expect(ev).toMatchObject({ customerId: null, nome: null, notasInternas: null, tipoTexto: null, observacoes: null, anonimizado: true, status: 'confirmado' })
     const [run] = await db.select().from(aiRuns).where(eq(aiRuns.id, c.run.id))
@@ -210,8 +212,8 @@ describe('app.aplicar_retencao', () => {
     const cli = await novoCliente(a.restaurantId, { ultimaInteracaoAt: diasAtras(1) })
     // hoje = 2026-10-06 em São Paulo; avisos: 30 dias; eventos: 730 dias
     await db.insert(attendanceNotices).values([
-      { restaurantId: a.restaurantId, unitId: a.unitId, customerId: cli.id, nome: 'Velho', data: '2026-09-05', pessoas: 2, origem: 'ia' },
-      { restaurantId: a.restaurantId, unitId: a.unitId, customerId: cli.id, nome: 'Limite', data: '2026-09-06', pessoas: 3, origem: 'ia' },
+      { restaurantId: a.restaurantId, unitId: a.unitId, customerId: cli.id, nome: 'Velho', data: '2026-09-05', pessoas: 2, origem: 'ia', contatoCifrado: 'contato-velho' },
+      { restaurantId: a.restaurantId, unitId: a.unitId, customerId: cli.id, nome: 'Limite', data: '2026-09-06', pessoas: 3, origem: 'ia', contatoCifrado: 'contato-limite' },
     ])
     await db.insert(eventRequests).values([
       { restaurantId: a.restaurantId, unitId: a.unitId, customerId: cli.id, nome: 'Velho', data: '2024-10-05', convidados: 10, tipo: 'outro', tipoTexto: 'x', observacoes: 'y', notasInternas: 'z' },
@@ -219,7 +221,9 @@ describe('app.aplicar_retencao', () => {
     ])
     expect(await reter(a.restaurantId)).toMatchObject({ avisos: 1, eventos: 1 })
     const av = await db.select().from(attendanceNotices).orderBy(attendanceNotices.pessoas)
-    expect(av.map((x) => [x.nome, x.customerId, x.anonimizado])).toEqual([[null, null, true], ['Limite', cli.id, false]])
+    expect(av.map((x) => [x.nome, x.customerId, x.contatoCifrado, x.anonimizado])).toEqual([
+      [null, null, null, true], ['Limite', cli.id, 'contato-limite', false],
+    ])
     const ev = await db.select().from(eventRequests).orderBy(eventRequests.convidados)
     expect(ev[0]).toMatchObject({ nome: null, customerId: null, tipoTexto: null, observacoes: null, notasInternas: null, anonimizado: true })
     expect(ev[1]).toMatchObject({ nome: 'Limite', customerId: cli.id, anonimizado: false })

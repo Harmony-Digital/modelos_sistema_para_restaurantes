@@ -416,7 +416,7 @@ function Linha(props: {
     )
   }
   const a = i.aviso
-  const cancelado = a.status === 'cancelado'
+  const cancelado = a.status === 'cancelada'
   return (
     <li className={cn(linhaClass, 'border-b border-border last:border-b-0')}>
       {a.horarioAprox

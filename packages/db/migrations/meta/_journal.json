@@ -316,6 +316,20 @@
       "when": 1791373120497,
       "tag": "0044_modo_demonstracao_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1791397705866,
+      "tag": "0045_reservas_logo",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1791397728626,
+      "tag": "0046_reservas_logo_rls",
+      "breakpoints": true
     }
   ]
 }

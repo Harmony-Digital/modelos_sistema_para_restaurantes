@@ -84,7 +84,7 @@ test('simulador anota o aviso, mas a previsão de hoje não mostra aviso simulad
   await perguntar(page, `vou hoje na ${UNIDADE} com 4 pessoas à noite`)
   await expect(simulador(page).getByText(/^Anotado:/)).toBeVisible({ timeout: 20_000 })
 
-  const gravados = await getSql()`select pessoas, simulado, origem from attendance_notices where unit_id = ${unitId} and status = 'ativo'`
+  const gravados = await getSql()`select pessoas, simulado, origem from attendance_notices where unit_id = ${unitId} and status = 'confirmada'`
   expect(gravados).toEqual([{ pessoas: 4, simulado: true, origem: 'ia' }])
 
   await previsaoDaUnidade(page)
@@ -127,7 +127,7 @@ test('painel: novo aviso aparece na previsão e some ao cancelar', async ({ page
   await expect(page.getByText('Nada na agenda para hoje')).toBeVisible()
 
   const [a] = await getSql()`select status, origem, simulado from attendance_notices where nome = ${NOME_PAINEL}`
-  expect(a).toEqual({ status: 'cancelado', origem: 'painel', simulado: false })
+  expect(a).toEqual({ status: 'cancelada', origem: 'painel', simulado: false })
 })
 
 test('atendente vê a previsão, sem "Novo aviso" nem cancelar', async ({ page }) => {

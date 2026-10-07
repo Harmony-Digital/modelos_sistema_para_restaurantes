@@ -100,4 +100,21 @@ describe('painel — unidades', () => {
     const [r] = await db.select().from(restaurants).where(eq(restaurants.id, c.restaurantId))
     expect(r).toMatchObject(novo)
   })
+
+  it('lotação: dono e gerente salvam a capacidade (ou removem); fora de 1..5000 ⇒ capacidade_invalida; omitida não muda', async () => {
+    const c = await cenario()
+    expect(await salvarUnidade(db, as(c.gerenteU1), c.restaurantId, c.u1, { ...dados('Asa Sul'), capacidadePessoas: 150 })).toEqual({ ok: true, valor: { id: c.u1 } })
+    const cap = async () => (await db.select().from(units).where(eq(units.id, c.u1)))[0]!.capacidadePessoas
+    expect(await cap()).toBe(150)
+    expect((await salvarUnidade(db, as(c.dono), c.restaurantId, c.u1, dados('Asa Sul'))).ok).toBe(true)
+    expect(await cap()).toBe(150)
+    for (const v of [0, 5001, 1.5]) {
+      expect(await salvarUnidade(db, as(c.dono), c.restaurantId, c.u1, { ...dados('Asa Sul'), capacidadePessoas: v }), String(v))
+        .toEqual({ ok: false, erro: 'capacidade_invalida' })
+    }
+    expect(await cap()).toBe(150)
+    expect((await salvarUnidade(db, as(c.dono), c.restaurantId, c.u1, { ...dados('Asa Sul'), capacidadePessoas: null })).ok).toBe(true)
+    expect(await cap()).toBeNull()
+    expect(await salvarUnidade(db, as(c.atendente), c.restaurantId, c.u1, { ...dados('Asa Sul'), capacidadePessoas: 10 })).toEqual({ ok: false, erro: 'sem_permissao' })
+  })
 })

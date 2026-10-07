@@ -102,7 +102,7 @@ const deps = (llm: LlmClient, wa: Parameters<typeof comMidiaProibida>[0]): Proce
   ({ db, llm, wa: comMidiaProibida(wa), storage: storageProibido, phoneKey, triageModels: ['fake/m'], log, requeue: async () => undefined, now: () => SEG_14H })
 const conversa = async (id: string) => (await db.select().from(schema.conversations).where(eq(schema.conversations.id, id)))[0]!
 const avisos = () => db.select().from(schema.attendanceNotices).orderBy(asc(schema.attendanceNotices.createdAt))
-const ativos = async () => (await avisos()).filter((a) => a.status === 'ativo')
+const ativos = async () => (await avisos()).filter((a) => a.status === 'confirmada')
 const ultimoTexto = (wa: ReturnType<typeof fakeWa>) => wa.enviados.at(-1)!.corpo as string
 const acoesAudit = async () =>
   (await db.select({ acao: schema.auditLog.acao, entidade: schema.auditLog.entidade, atorTipo: schema.auditLog.atorTipo })
@@ -118,7 +118,7 @@ describe('S2 no worker', () => {
     expect(await processConversation(deps(llm, wa), conv)).toBe('replied')
     expect(ultimoTexto(wa)).toMatch(/^Anotado: Asa Sul, hoje, 4 pessoas, por volta das 20h\./)
     const [a] = await avisos()
-    expect(a).toMatchObject({ restaurantId, unitId: ids['Asa Sul'], data: '2026-10-05', pessoas: 4, horarioAprox: '20:00', nome: 'Maria', origem: 'ia', simulado: false, status: 'ativo' })
+    expect(a).toMatchObject({ restaurantId, unitId: ids['Asa Sul'], data: '2026-10-05', pessoas: 4, horarioAprox: '20:00', nome: 'Maria', origem: 'ia', simulado: false, status: 'confirmada' })
     const [run] = await db.select().from(schema.aiRuns)
     expect(run).toMatchObject({ promptVersion: 'triage-v6', intent: 'aviso_presenca:registrar', itensValidos: 1, itensRespondidos: 1 })
     const audit = await db.select().from(schema.auditLog).where(eq(schema.auditLog.acao, 'aviso.registrado'))
@@ -309,7 +309,7 @@ describe('S2 no worker', () => {
     await processConversation(deps(llm, wa), conv)
     expect(ultimoTexto(wa)).toBe('Pronto, cancelei seu aviso: Asa Sul, hoje.')
     expect(await ativos()).toHaveLength(0)
-    expect((await avisos())[0]!.status).toBe('cancelado')
+    expect((await avisos())[0]!.status).toBe('cancelada')
     expect(await acoesAudit()).toEqual([
       { acao: 'aviso.registrado', entidade: 'attendance_notice', atorTipo: 'ia' },
       { acao: 'aviso.cancelado', entidade: 'attendance_notice', atorTipo: 'ia' },
@@ -331,7 +331,7 @@ describe('S2 no worker', () => {
     injecao.avisos = [{ id: avisoA!.id, unitId: avisoA!.unitId, data: avisoA!.data, pessoas: 2, horarioAprox: null }]
     await receive(restaurantId, 'cancela o aviso', null, 'bia')
     await processConversation(deps(fakeLlm([triagem(cancelar())]).llm, wa), convB)
-    expect(await ativos()).toMatchObject([{ id: avisoA!.id, status: 'ativo' }])
+    expect(await ativos()).toMatchObject([{ id: avisoA!.id, status: 'confirmada' }])
     // a resposta reflete o que o banco fez: nada foi cancelado
     expect(ultimoTexto(wa)).toBe('Não encontrei nenhum aviso ativo seu.')
     expect((await acoesAudit()).map((a) => a.acao)).toEqual(['aviso.registrado'])
@@ -348,7 +348,7 @@ describe('S2 no worker', () => {
       async sendList(): Promise<never> { throw new Error('Meta chamada em simulação') },
     }
     await processConversation(deps(fakeLlm([triagem(av({ pessoas: 5 }))]).llm, proibido), conversationId)
-    expect(await avisos()).toMatchObject([{ pessoas: 5, simulado: true, status: 'ativo' }])
+    expect(await avisos()).toMatchObject([{ pessoas: 5, simulado: true, status: 'confirmada' }])
   })
 
   it('humano assume antes do commit ⇒ nenhum aviso gravado', async () => {

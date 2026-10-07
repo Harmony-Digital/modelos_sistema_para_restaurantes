@@ -58,6 +58,7 @@ export async function salvarDadosUnidadeAction(id: string | null, input: DadosUn
     ativo: d.ativo,
   })
   if (r.ok) revalidarUnidade(r.valor.id)
+  if (!r.ok && r.erro === 'capacidade_invalida') return { ok: false, formError: 'A lotação máxima deve ficar entre 1 e 5000 pessoas.' }
   const resultado = resultadoDoPainel(r, { nome_duplicado: 'nome' })
   return resultado.ok && aviso && resultado.data ? { ok: true, data: { ...resultado.data, aviso } } : resultado
 }

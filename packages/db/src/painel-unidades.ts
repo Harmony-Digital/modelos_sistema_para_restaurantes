@@ -22,7 +22,12 @@ export type DadosUnidade = {
   lat: number | null
   lng: number | null
   ativo: boolean
+  /** Lotação máxima de pessoas por dia (1..5000) ou null (sem controle). Omitida: não muda. */
+  capacidadePessoas?: number | null
 }
+export const CAPACIDADE_MAXIMA = 5000
+const capacidadeValida = (c: number | null | undefined) =>
+  c === undefined || c === null || (Number.isInteger(c) && c >= 1 && c <= CAPACIDADE_MAXIMA)
 export type ExcecaoInput = { data: DataIso; fechado: boolean; turnos: Turno[]; motivo: string | null }
 
 const GESTAO = ['dono', 'gerente'] as const
@@ -68,7 +73,8 @@ export function salvarUnidade(
   restaurantId: string,
   id: string | null,
   dados: DadosUnidade,
-): Promise<ResultadoPainel<{ id: string }>> {
+): Promise<ResultadoPainel<{ id: string }> | { ok: false; erro: 'capacidade_invalida' }> {
+  if (!capacidadeValida(dados.capacidadePessoas)) return Promise.resolve({ ok: false, erro: 'capacidade_invalida' })
   return semPermissaoVira(
     () => withUserContext(db, claims, async (tx) => {
       if (!(await exigirPapel(tx, GESTAO))) return falha('sem_permissao')
@@ -83,7 +89,7 @@ export function salvarUnidade(
       await registrarAuditoria(tx, claims, { restaurantId, acao: 'unidade.atualizada', entidade: 'unit', entidadeId: u.id, diff: valores })
       return ok({ id: u.id })
     }),
-    { units_restaurant_slug_uq: 'nome_duplicado' },
+    { units_restaurant_slug_uq: 'nome_duplicado' as const, units_capacidade_ck: 'capacidade_invalida' as const },
   )
 }
 

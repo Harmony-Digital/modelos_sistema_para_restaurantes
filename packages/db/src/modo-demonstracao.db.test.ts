@@ -72,8 +72,9 @@ describe('modo demonstração: leitura e escrita', () => {
   it('o dono sem MFA não muda; o gerente não consegue gravar direto na coluna (RLS)', async () => {
     const c = await cenario()
     expect((await salvarModoDemonstracao(db, as(c.dono, 'aal1'), c.restaurantId, true)).ok).toBe(false)
-    await withUserContext(db, as(c.gerente), (tx) =>
-      tx.update(restaurants).set({ modoDemonstracao: true }).where(eq(restaurants.id, c.restaurantId)))
+    await expect(withUserContext(db, as(c.gerente), (tx) =>
+      tx.update(restaurants).set({ modoDemonstracao: true }).where(eq(restaurants.id, c.restaurantId))))
+      .rejects.toMatchObject({ cause: { code: '42501' } })
     const [r] = await db.select({ m: restaurants.modoDemonstracao }).from(restaurants)
     expect(r!.m).toBe(false)
   })

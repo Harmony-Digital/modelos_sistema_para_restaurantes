@@ -55,7 +55,7 @@ function minutosDe(horario: string | null): number | null {
  */
 export function agendaDeHoje(previsao: readonly PrevisaoUnidade[], pedidos: readonly PedidoPainel[], hoje: string): LinhaAgendaHoje[] {
   const avisos = previsao.flatMap((u) => u.avisos
-    .filter((a) => a.status === 'ativo')
+    .filter((a) => a.status === 'confirmada')
     .map((a) => ({
       tipo: 'aviso' as const, id: a.id, hora: a.horarioAprox, titulo: a.pessoas === 1 ? '1 pessoa' : `${a.pessoas} pessoas`,
       detalhe: a.nome ?? 'Sem nome', unidade: u.unidade, simulado: a.simulado, href: hrefAvisosDoDia(hoje, u.unitId),
