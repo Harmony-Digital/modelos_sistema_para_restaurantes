@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { gruposDoMenu, itemAtivo, navegacaoInferior } from './navegacao.ts'
+import { gruposDoMenu, itemAtivo, navegacaoInferior, PAPEIS_SIMULADOR } from './navegacao.ts'
 
 const rotulos = (papel: 'dono' | 'gerente' | 'atendente') =>
   gruposDoMenu(papel).map((g) => [g.rotulo, g.itens.map((i) => i.rotulo)])
@@ -40,6 +40,11 @@ describe('navegação do painel', () => {
     expect(dono.principais.map((i) => i.rotulo)).toEqual(['Início', 'Conversas', 'Agenda', 'Conteúdo'])
     expect(dono.mais.map((i) => i.rotulo)).toEqual(['Simulador', 'Unidades', 'Gastos', 'Equipe', 'Privacidade', 'Ajustes'])
     expect(navegacaoInferior('atendente').mais.map((i) => i.rotulo)).toEqual(['Unidades', 'Ajustes'])
+  })
+  it('Simulador no menu segue a mesma regra do lançador montado no layout (constante única)', () => {
+    const sim = gruposDoMenu('dono').flatMap((g) => g.itens).find((i) => i.id === 'simulador')!
+    expect(sim.papeis).toBe(PAPEIS_SIMULADOR)
+    expect(PAPEIS_SIMULADOR).toEqual(['dono', 'gerente'])
   })
   it('item ativo: Início só na raiz; subpáginas contam; prefixo parecido não', () => {
     expect(itemAtivo('/', '/')).toBe(true)

@@ -15,16 +15,16 @@ export function AppShell(props: {
   floating?: React.ReactNode
   avisos?: React.ReactNode
   aguardando?: number
-  /** Faixa no topo de todas as telas (ex.: alerta de gastos). */
+  /** Faixa de alertas (ex.: gastos): no topo abaixo de lg; abaixo da barra superior (TopBar) a partir de lg. */
   faixa?: React.ReactNode
 }) {
   const aguardando = props.aguardando ?? 0
   return (
-    <ShellProvider valor={{ tema: props.tema, papel: props.papel }}>
+    <ShellProvider valor={{ tema: props.tema, papel: props.papel, faixa: props.faixa }}>
       <div className="min-h-dvh pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:flex lg:pb-0">
         <MenuLateral papel={props.papel} restaurante={props.restaurante} estadoInicial={props.menu} aguardando={aguardando} />
         <div className="min-w-0 flex-1">
-          {props.faixa}
+          {props.faixa && <div className="lg:hidden">{props.faixa}</div>}
           {props.children}
         </div>
         {props.floating}

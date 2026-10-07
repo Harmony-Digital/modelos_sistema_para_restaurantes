@@ -47,7 +47,7 @@ function Item(props: { item: ItemNav; recolhido: boolean; ativo: boolean; aguard
     </>
   )
   if (item.acao === 'simulador') {
-    return <button type="button" className={classe} aria-label={recolhido ? item.rotulo : undefined} onClick={abrirSimulador}>{conteudo}</button>
+    return <button type="button" className={classe} onClick={abrirSimulador}>{conteudo}</button>
   }
   return (
     <Link href={item.href!} aria-current={ativo ? 'page' : undefined} aria-label={nome} className={classe}>
@@ -88,8 +88,8 @@ export function MenuLateral(props: { papel: StaffRole; restaurante: string; esta
           {recolhido ? <ChevronsRight aria-hidden="true" className="size-4" /> : <ChevronsLeft aria-hidden="true" className="size-4" />}
         </button>
       </div>
-      {/* sem overflow no modo recolhido: a dica sai para a direita do menu */}
-      <div className={cn('flex flex-1 flex-col gap-1 py-2', recolhido ? 'px-1.5' : 'overflow-y-auto px-2')}>
+      {/* recolhido: sem overflow para a dica sair à direita do menu, exceto em tela baixa (aí os itens precisam rolar) */}
+      <div className={cn('flex min-h-0 flex-1 flex-col gap-1 py-2', recolhido ? 'px-1.5 [@media(max-height:640px)]:overflow-y-auto' : 'overflow-y-auto px-2')}>
         {gruposDoMenu(props.papel).map((g) => {
           const titulo = g.rotulo ? `menu-grupo-${g.id}` : undefined
           return (

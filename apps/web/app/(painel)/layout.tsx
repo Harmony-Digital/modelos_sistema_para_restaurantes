@@ -8,6 +8,7 @@ import { topicosInbox } from '@/lib/conversas'
 import { SimulatorLauncher } from '@/components/simulator/launcher'
 import { requireStaff } from '@/lib/dal'
 import { MENU_COOKIE, parseMenu } from '@/lib/menu'
+import { PAPEIS_SIMULADOR } from '@/lib/navegacao'
 import { getDb } from '@/lib/server/db'
 import { resumoGastosDoRequest } from '@/lib/server/gastos'
 import { parseTema, THEME_COOKIE } from '@/lib/theme'
@@ -30,8 +31,8 @@ export default async function PainelLayout({ children }: { children: React.React
   const db = getDb()
   const [r] = await db.select({ nome: schema.restaurants.nome, timezone: schema.restaurants.timezone }).from(schema.restaurants)
     .where(eq(schema.restaurants.id, await getSingleRestaurantId(db)))
-  // simulador gasta IA real: só dono e gerente
-  const simulador = session.role === 'atendente'
+  // simulador gasta IA real: mesma regra do item Simulador do menu
+  const simulador = !PAPEIS_SIMULADOR.includes(session.role)
     ? null
     : <SimulatorLauncher restaurante={r?.nome ?? 'Restaurante'} timezone={r?.timezone ?? 'America/Sao_Paulo'} acoes={acoes} />
   // contador de Aguardando (barra e título) e tópicos privados do Realtime que a pessoa pode escutar

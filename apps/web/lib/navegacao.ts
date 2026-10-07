@@ -17,6 +17,8 @@ export type ItemNav = {
 export type GrupoNav = { id: string; rotulo: string | null; itens: ItemNav[] }
 
 const GESTAO: readonly StaffRole[] = ['dono', 'gerente']
+/** O simulador gasta IA real: quem pode abrir (o layout monta o lançador com esta mesma regra). */
+export const PAPEIS_SIMULADOR: readonly StaffRole[] = ['dono', 'gerente']
 
 /** Fonte única do menu lateral (≥ lg) e da barra inferior (< lg). */
 export const GRUPOS_NAV: readonly GrupoNav[] = [
@@ -27,8 +29,7 @@ export const GRUPOS_NAV: readonly GrupoNav[] = [
     itens: [
       { id: 'conversas', rotulo: 'Conversas', href: '/conversas', icone: MessagesSquare, contador: 'aguardando' },
       { id: 'agenda', rotulo: 'Agenda', href: '/agenda', icone: CalendarDays },
-      // o simulador gasta IA real: só dono e gerente (mesma regra do layout)
-      { id: 'simulador', rotulo: 'Simulador', acao: 'simulador', icone: FlaskConical, papeis: GESTAO },
+      { id: 'simulador', rotulo: 'Simulador', acao: 'simulador', icone: FlaskConical, papeis: PAPEIS_SIMULADOR },
     ],
   },
   {

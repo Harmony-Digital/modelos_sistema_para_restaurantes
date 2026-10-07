@@ -90,6 +90,14 @@ describe('MenuLateral', () => {
     render(<MenuLateral papel="dono" restaurante="R" estadoInicial="recolhido" aguardando={0} />)
     expect(screen.getByRole('navigation', { name: 'Menu principal' })).toHaveAttribute('data-estado', 'recolhido')
     expect(screen.getByRole('button', { name: 'Abrir menu' })).toBeInTheDocument()
+    // nome do Simulador vem do texto sr-only, como nos links
+    expect(screen.getByRole('button', { name: 'Simulador' })).not.toHaveAttribute('aria-label')
+  })
+
+  it('recolhido em tela baixa ainda rola (os últimos itens ficam alcançáveis)', () => {
+    render(<MenuLateral papel="dono" restaurante="R" estadoInicial="recolhido" aguardando={0} />)
+    const lista = screen.getByRole('list', { name: 'Gestão' }).parentElement!.parentElement!
+    expect(lista.className).toContain('[@media(max-height:640px)]:overflow-y-auto')
   })
 
   it('só aparece a partir de lg (abaixo disso fica a barra inferior)', () => {

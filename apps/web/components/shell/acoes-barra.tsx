@@ -6,7 +6,8 @@ import { setTheme, signOut } from '@/app/(painel)/actions'
 import type { StaffRole } from '@/lib/access'
 import type { Tema } from '@/lib/theme'
 
-type ValorShell = { tema: Tema; papel: StaffRole }
+/** `faixa`: alertas do painel (ex.: gastos), mostrados abaixo da barra superior a partir de lg. */
+type ValorShell = { tema: Tema; papel: StaffRole; faixa?: React.ReactNode }
 const ShellContexto = createContext<ValorShell | null>(null)
 
 /** Posto pelo AppShell: a barra superior de cada tela lê tema e papel daqui. */
@@ -15,7 +16,18 @@ export function ShellProvider(props: { valor: ValorShell; children: React.ReactN
 }
 
 const PAPEL = { dono: 'Dono', gerente: 'Gerente', atendente: 'Atendente' } as const
-const ICONE = 'flex size-10 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring'
+const ICONE = 'flex size-11 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring'
+
+/**
+ * Faixa de alertas logo abaixo da barra superior (≥ lg, spec §2). Abaixo de lg o AppShell a mantém no topo da tela,
+ * onde ela cobre o recuo do notch.
+ */
+export function FaixaDaBarra() {
+  const shell = useContext(ShellContexto)
+  if (!shell?.faixa) return null
+  // contexto de empilhamento próprio: o z-40 da faixa não passa por cima da barra fixa ao rolar
+  return <div className="relative z-20 hidden lg:block">{shell.faixa}</div>
+}
 
 /** Lado direito da barra superior (≥ lg): busca rápida, tema e conta. Abaixo de lg isso fica em Ajustes. */
 export function AcoesBarra() {

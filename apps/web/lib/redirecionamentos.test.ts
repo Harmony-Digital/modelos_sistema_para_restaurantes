@@ -19,7 +19,7 @@ describe('endereços antigos do painel', () => {
   })
   it.each([
     ['/mais', '/ajustes'],
-    ['/mais/atendimento-humano', '/ajustes'],
+    ['/mais/atendimento-humano', '/ajustes#atendimento-humano'],
     ['/mais/gastos', '/gestao/gastos'],
     ['/mais/equipe', '/gestao/equipe'],
     ['/mais/privacidade', '/gestao/privacidade'],
@@ -34,6 +34,6 @@ describe('endereços antigos do painel', () => {
   })
   it('todo destino é uma página que existe', () => {
     const app = fileURLToPath(new URL('../app/(painel)', import.meta.url))
-    for (const r of REDIRECIONAMENTOS) expect(existsSync(`${app}${r.destination}/page.tsx`), r.destination).toBe(true)
+    for (const r of REDIRECIONAMENTOS) expect(existsSync(`${app}${r.destination.split('#')[0]}/page.tsx`), r.destination).toBe(true)
   })
 })

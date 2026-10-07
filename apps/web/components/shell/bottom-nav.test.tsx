@@ -43,9 +43,16 @@ describe('BottomNav', () => {
     expect(screen.getByRole('link', { name: 'Início' })).not.toHaveAttribute('aria-current')
     expect(document.querySelectorAll('[aria-current]')).toHaveLength(1)
   })
+  it('Agenda fica ativa em /agenda e só nela', () => {
+    pathname.value = '/agenda'
+    render(<BottomNav papel="dono" />)
+    expect(screen.getByRole('link', { name: 'Agenda' })).toHaveAttribute('aria-current', 'page')
+    expect(document.querySelectorAll('[aria-current]')).toHaveLength(1)
+  })
   it('não confunde prefixos parecidos (/conversasX)', () => {
     pathname.value = '/conversasX'
     render(<BottomNav papel="dono" />)
+    expect(screen.getByRole('link', { name: 'Conversas' })).not.toHaveAttribute('aria-current')
     expect(document.querySelectorAll('[aria-current]')).toHaveLength(0)
   })
   it('Início só fica ativo na raiz', () => {

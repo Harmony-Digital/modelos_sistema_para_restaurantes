@@ -6,6 +6,6 @@ export const REDIRECIONAMENTOS = [
   { source: '/mais/gastos', destination: '/gestao/gastos', permanent: true },
   { source: '/mais/equipe', destination: '/gestao/equipe', permanent: true },
   { source: '/mais/privacidade', destination: '/gestao/privacidade', permanent: true },
-  { source: '/mais/atendimento-humano', destination: '/ajustes', permanent: true },
+  { source: '/mais/atendimento-humano', destination: '/ajustes#atendimento-humano', permanent: true },
   { source: '/mais/:resto*', destination: '/ajustes', permanent: true },
 ] as const
