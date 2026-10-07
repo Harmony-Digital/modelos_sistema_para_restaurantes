@@ -84,6 +84,11 @@ describe('Conversa', () => {
     expect(acoes.encerrar).toHaveBeenCalledWith(ID)
   })
 
+  it('lg+: o compositor deixa livre o canto direito do botão/pílula do simulador (Enviar nunca fica embaixo)', () => {
+    montar({ estado: 'humano', atendente: 'Ana', atendenteId: 'eu' })
+    expect(screen.getByRole('region', { name: 'Responder' }).className).toContain('lg:mr-14')
+  })
+
   it('comigo e fora da janela: compositor desabilitado', () => {
     montar({ estado: 'humano', atendente: 'Ana', atendenteId: 'eu', janelaAte: new Date('2026-10-06T11:00:00Z') })
     expect(screen.getByRole('textbox', { name: 'Resposta' })).toBeDisabled()

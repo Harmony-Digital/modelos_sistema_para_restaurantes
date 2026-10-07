@@ -15,7 +15,7 @@ import { TopBar } from '@/components/shell/top-bar'
 import { requireStaff } from '@/lib/dal'
 import { ABAS_CONTEUDO, abaDoConteudo, hrefDoConteudoAntigo } from '@/lib/conteudo'
 import { getDb } from '@/lib/server/db'
-import { BotaoImportar, CabecalhoImportar, SecaoImportar } from './secao-importar'
+import { BotaoImportar, CabecalhoImportar, SecaoImportar } from '@/components/painel/secao-importar'
 
 export const dynamic = 'force-dynamic'
 

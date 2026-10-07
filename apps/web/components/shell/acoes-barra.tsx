@@ -17,7 +17,7 @@ export function ShellProvider(props: { valor: ValorShell; children: React.ReactN
 }
 
 const PAPEL = { dono: 'Dono', gerente: 'Gerente', atendente: 'Atendente' } as const
-const ICONE = 'flex size-11 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring'
+const ICONE = 'flex size-11 items-center justify-center rounded-md text-muted-foreground [@media(hover:hover)]:hover:bg-accent [@media(hover:hover)]:hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring'
 
 /**
  * Faixa de alertas logo abaixo da barra superior (≥ lg, spec §2). Abaixo de lg o AppShell a mantém no topo da tela,
@@ -41,7 +41,7 @@ export function AcoesBarra() {
         type="button"
         onClick={abrirBusca}
         aria-keyshortcuts="Control+K Meta+K"
-        className="mr-2 flex h-9 w-56 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+        className="mr-2 flex h-9 w-56 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm text-muted-foreground [@media(hover:hover)]:hover:bg-accent [@media(hover:hover)]:hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
       >
         <Search aria-hidden="true" className="size-4" />
         <span>Busca rápida</span>

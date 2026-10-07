@@ -118,6 +118,39 @@ describe('BuscaRapida', () => {
     expect(screen.queryByRole('option', { name: /Pizza velha/ })).toBeNull()
   })
 
+  it('enquanto busca o termo novo, mantém os resultados anteriores (não pisca)', async () => {
+    const user = userEvent.setup()
+    let liberar!: () => void
+    montar(vi.fn<Buscar>((t) => t === 'pi'
+      ? Promise.resolve({ ok: true as const, data: [R('item', 'i1', 'Picanha')] })
+      : new Promise<{ ok: true; data: ResultadoBusca[] }>((res) => { liberar = () => res({ ok: true, data: [R('item', 'i2', 'Picanha na chapa')] }) })))
+    await user.keyboard('{Control>}k{/Control}')
+    const campo = screen.getByRole('combobox', { name: 'Buscar no painel' })
+    await user.type(campo, 'pi')
+    expect(await screen.findByRole('option', { name: /Picanha/ })).toBeInTheDocument()
+    await user.type(campo, 'c')
+    await new Promise((r) => setTimeout(r, 300))
+    expect(screen.getByRole('option', { name: /Picanha/ })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Buscando…')
+    await act(async () => liberar())
+    expect(await screen.findByRole('option', { name: /Picanha na chapa/ })).toBeInTheDocument()
+  })
+
+  it('Ctrl+K no campo da paleta fecha (não vai para o navegador); não abre sobre outro diálogo modal', async () => {
+    const user = userEvent.setup()
+    montar()
+    await user.keyboard('{Control>}k{/Control}')
+    const campo = screen.getByRole('combobox', { name: 'Buscar no painel' })
+    const evento = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true })
+    act(() => { campo.dispatchEvent(evento) })
+    expect(evento.defaultPrevented).toBe(true)
+    await waitFor(() => expect(paleta()).toBeNull())
+    const { unmount } = render(<div role="alertdialog" aria-label="Confirmar" />)
+    await user.keyboard('{Control>}k{/Control}')
+    expect(paleta()).toBeNull()
+    unmount()
+  })
+
   it('nada encontrado e falha na busca aparecem na paleta', async () => {
     const user = userEvent.setup()
     montar(vi.fn<Buscar>(async (t) => (t === 'zz' ? { ok: true as const, data: [] } : { ok: false as const, formError: 'x' })))

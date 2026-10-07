@@ -14,7 +14,7 @@ vi.mock('next/navigation', () => ({
   redirect: (url: string) => { throw new Error(`NEXT_REDIRECT ${url}`) },
 }))
 const importador = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }))
-vi.mock('@/app/(painel)/conteudo/secao-importar', () => ({
+vi.mock('@/components/painel/secao-importar', () => ({
   BotaoImportar: (p: { alvo: string; rotulo?: string }) => <a href={`#importar-${p.alvo}`}>{p.rotulo ?? 'Importar'}</a>,
   CabecalhoImportar: (p: { titulo: string; fechar: string }) => <a href={p.fechar}>Fechar: {p.titulo}</a>,
   SecaoImportar: (p: Record<string, unknown>) => { importador.props = p; return <p>importador</p> },

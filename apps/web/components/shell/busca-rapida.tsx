@@ -26,9 +26,15 @@ const GRUPOS: { tipo: ResultadoBusca['tipo']; rotulo: string; icone: LucideIcon 
 type Opcao = { chave: string; tela?: ItemNav; resultado?: ResultadoBusca }
 type Busca = { termo: string; resultados: ResultadoBusca[]; erro: boolean }
 
-/** Ctrl/Cmd+K fora de campo de texto (no campo a tecla é dele) e sem outras teclas. */
+const ehCtrlK = (e: { ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean; key: string }) =>
+  (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k'
+
+/** Diálogo modal aberto (confirmação, folha): a paleta não abre por cima. O simulador flutuante não é modal. */
+const MODAL_ABERTO = '[role="dialog"][aria-modal="true"], [role="dialog"][data-state="open"], [role="alertdialog"]'
+
+/** Ctrl/Cmd+K fora de campo de texto (no campo a tecla é dele), sem outras teclas e sem diálogo modal aberto. */
 function ehAtalhoBusca(e: KeyboardEvent): boolean {
-  return (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && !e.repeat && e.key.toLowerCase() === 'k' && !ehCampoDeTexto(e.target)
+  return ehCtrlK(e) && !e.repeat && !ehCampoDeTexto(e.target) && document.querySelector(MODAL_ABERTO) === null
 }
 
 /**
@@ -76,8 +82,10 @@ export function BuscaRapida(props: { papel: StaffRole; buscar: (termo: string) =
   }, [aberta, consulta])
 
   const atual = busca && busca.termo === consulta ? busca : null
+  // enquanto o termo novo não volta, mantém os últimos resultados na tela (não pisca a cada tecla)
+  const exibida = consulta.length >= MIN_TERMO_BUSCA ? (atual ?? busca) : null
   const telas = useMemo(() => telasDaBusca(props.papel, consulta), [props.papel, consulta])
-  const grupos = GRUPOS.map((g) => ({ ...g, itens: (atual?.resultados ?? []).filter((r) => r.tipo === g.tipo) })).filter((g) => g.itens.length > 0)
+  const grupos = GRUPOS.map((g) => ({ ...g, itens: (exibida?.resultados ?? []).filter((r) => r.tipo === g.tipo) })).filter((g) => g.itens.length > 0)
   const opcoes: Opcao[] = [
     ...telas.map((t) => ({ chave: `tela-${t.id}`, tela: t })),
     ...grupos.flatMap((g) => g.itens.map((r) => ({ chave: `${r.tipo}-${r.id}`, resultado: r }))),
@@ -102,7 +110,11 @@ export function BuscaRapida(props: { papel: StaffRole; buscar: (termo: string) =
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if (ehCtrlK(e)) {
+      // no campo da paleta, Ctrl/Cmd+K fecha (sem cair no atalho do navegador)
+      e.preventDefault()
+      mudarAberta(false)
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
       if (opcoes.length === 0) return
       const passo = e.key === 'ArrowDown' ? 1 : -1

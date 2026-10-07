@@ -42,6 +42,9 @@ export function buscarNoPainel(db: Db, claims: JwtClaims, termoBruto: string): P
   const padrao = literalLike(termo)
   const tsq = consultaTexto(termo)
   return withUserContext(db, claims, async (tx) => {
+    // palavra que é só stopword ("de", "com") vira tsquery vazio e o Postgres manda um NOTICE a cada tecla;
+    // só nesta transação, o cliente recebe de WARNING para cima (constante, sem dado do usuário)
+    await tx.execute(sql`select set_config('client_min_messages', 'warning', true)`)
     const contem = (coluna: SQL | typeof units.nome) => sql`app.f_unaccent(${coluna}) ilike app.f_unaccent(${padrao})`
     const unidades = await tx
       .select({ id: units.id, titulo: units.nome, ativo: units.ativo })

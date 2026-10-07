@@ -208,7 +208,8 @@ export function Conversa(props: {
 
       {comigo
         ? (
-          <section aria-label="Responder" className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] rounded-lg border border-border bg-background p-3 lg:bottom-4">
+          // lg+: mr-14 deixa livre o canto do botão/pílula do simulador (bottom-6 right-6), que não cobre o Enviar
+          <section aria-label="Responder" className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] rounded-lg border border-border bg-background p-3 lg:bottom-4 lg:mr-14">
             <Compositor conversationId={c.id} foraDaJanela={foraDaJanela} respostasRapidas={props.respostasRapidas} enviar={props.acoes.responder} />
           </section>
         )

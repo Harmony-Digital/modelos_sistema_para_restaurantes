@@ -2,7 +2,7 @@
 import { CalendarCheck, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import { somarDias } from '@atd/core/s1'
 import { rotuloTipoEvento } from '@atd/core/s3'
@@ -19,6 +19,7 @@ import {
 } from '@/lib/agenda'
 import { dataDoEvento, haQuanto, type MembroTela } from '@/lib/eventos'
 import { dataBr, limiteDaPrevisao, rotuloDoDia } from '@/lib/previsao'
+import { MIDIA_LG, useMidia } from '@/lib/use-midia'
 import { cn } from '@/lib/utils'
 import { Abas } from './abas'
 import { AvisoForm } from './aviso-form'
@@ -36,19 +37,6 @@ const MAX_PENDENTES = 8
 
 const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`
 const pessoas = (n: number) => plural(n, 'pessoa', 'pessoas')
-
-/** `lg` (≥ 1024 px): o detalhe do pedido fica ao lado; abaixo, em folha. null até saber (evita abrir a folha e trocar). */
-function useLargo(): boolean | null {
-  const [largo, setLargo] = useState<boolean | null>(null)
-  useEffect(() => {
-    const m = window.matchMedia('(min-width: 1024px)')
-    const atualizar = () => setLargo(m.matches)
-    atualizar()
-    m.addEventListener('change', atualizar)
-    return () => m.removeEventListener('change', atualizar)
-  }, [])
-  return largo
-}
 
 export function AgendaDia(props: {
   dia: string
@@ -69,7 +57,8 @@ export function AgendaDia(props: {
   agora: Date
 }) {
   const router = useRouter()
-  const largo = useLargo()
+  // lg (≥ 1024 px): o detalhe do pedido fica ao lado; abaixo, em folha. null até saber (evita abrir a folha e trocar).
+  const largo = useMidia(MIDIA_LG)
   const [novo, setNovo] = useState(false)
   const [cancelando, setCancelando] = useState<AvisoPainel | null>(null)
 

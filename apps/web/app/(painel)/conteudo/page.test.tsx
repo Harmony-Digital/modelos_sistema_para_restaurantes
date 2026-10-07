@@ -22,7 +22,7 @@ vi.mock('@/components/painel/sem-resposta', () => ({
 vi.mock('@/components/painel/modelos', () => ({ Modelos: () => <p>modelos de mensagem</p> }))
 vi.mock('@/components/painel/respostas-rapidas', () => ({ RespostasRapidas: () => <p>respostas rápidas</p> }))
 const importador = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }))
-vi.mock('./secao-importar', () => ({
+vi.mock('@/components/painel/secao-importar', () => ({
   BotaoImportar: (p: { alvo: string }) => <a href={`#importar-${p.alvo}`}>Importar</a>,
   CabecalhoImportar: (p: { titulo: string; fechar: string }) => <a href={p.fechar}>Fechar: {p.titulo}</a>,
   SecaoImportar: (p: Record<string, unknown>) => { importador.props = p; return <p>importador</p> },

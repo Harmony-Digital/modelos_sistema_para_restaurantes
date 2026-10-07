@@ -1,6 +1,9 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import postgres from 'postgres'
+import { drizzle } from 'drizzle-orm/postgres-js'
 import { eq } from 'drizzle-orm'
-import { getTestDb, resetDb, seedRestaurant, seedStaff } from './test-utils.ts'
+import { baseTestUrl, comBanco, getTestDb, resetDb, seedRestaurant, seedStaff, testDbName } from './test-utils.ts'
+import * as schema from './schema/index.ts'
 import type { JwtClaims } from './rls.ts'
 import { buscarNoPainel, MAX_RESULTADOS_BUSCA } from './painel-busca.ts'
 import { conversations, customers, knowledgeFacts, menuCategories, menuItems, restaurants, staff, units } from './schema/index.ts'
@@ -103,5 +106,19 @@ describe('buscarNoPainel', () => {
     const r = await buscarNoPainel(db, as(c.dono), 'pizza')
     expect(r.length).toBeLessThanOrEqual(MAX_RESULTADOS_BUSCA)
     expect(MAX_RESULTADOS_BUSCA).toBe(20)
+  })
+
+  it('palavra que é só stopword ("de", "com") não gera NOTICE do Postgres no log a cada tecla', async () => {
+    const c = await cenario()
+    const avisos = vi.fn()
+    const cliente = postgres(comBanco(baseTestUrl(), testDbName()), { max: 1, onnotice: avisos })
+    try {
+      const comAviso = drizzle({ client: cliente, schema })
+      await buscarNoPainel(comAviso, as(c.dono), 'picanha de')
+      await buscarNoPainel(comAviso, as(c.dono), 'com')
+      expect(avisos).not.toHaveBeenCalled()
+    } finally {
+      await cliente.end()
+    }
   })
 })

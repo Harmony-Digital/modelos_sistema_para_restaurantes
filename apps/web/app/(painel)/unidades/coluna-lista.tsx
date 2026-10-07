@@ -1,7 +1,7 @@
 import { ChevronRight, Store } from 'lucide-react'
 import Link from 'next/link'
 import { carregarUnidadesPainel, podeEditarCardapioGeral, withUserContext } from '@atd/db'
-import { BotaoImportar } from '@/app/(painel)/conteudo/secao-importar'
+import { BotaoImportar } from '@/components/painel/secao-importar'
 import { NovaUnidade } from '@/components/painel/nova-unidade'
 import { SeloUnidade } from '@/components/painel/selo-unidade'
 import { EmptyState } from '@/components/shell/empty-state'

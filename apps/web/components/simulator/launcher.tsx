@@ -3,6 +3,7 @@ import dynamic from 'next/dynamic'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { ehCampoDeTexto, ignorarAtalho } from '@/lib/atalhos'
+import { MIDIA_LG, useMidia } from '@/lib/use-midia'
 import { EVENTO_ABRIR_SIMULADOR } from './abrir'
 import { SimuladorControles } from './controles'
 import { useSimulador, type AcoesSimulador } from './use-simulador'
@@ -24,19 +25,6 @@ const SimuladorFlutuante = dynamic(() => import('./simulador-flutuante'), {
   loading: () => <div role="status" className="fixed bottom-6 right-6 z-40 rounded-md bg-background px-3 py-2 text-sm shadow-xl">Carregando…</div>,
 })
 
-/** `lg` (≥ 1024 px): simulador flutuante; abaixo, a folha de tela cheia. false até saber (como no SSR). */
-function useLargo(): boolean {
-  const [largo, setLargo] = useState(false)
-  useEffect(() => {
-    const m = window.matchMedia('(min-width: 1024px)')
-    const atualizar = () => setLargo(m.matches)
-    atualizar()
-    m.addEventListener('change', atualizar)
-    return () => m.removeEventListener('change', atualizar)
-  }, [])
-  return largo
-}
-
 /** Shift+S (sem Ctrl/Cmd/Alt), fora de campo de texto e de diálogo — o próprio simulador flutuante não conta como diálogo. */
 function ehAtalhoSimulador(e: KeyboardEvent): boolean {
   if (!e.shiftKey || e.key.toLowerCase() !== 's') return false
@@ -49,7 +37,8 @@ export function SimulatorLauncher({ restaurante, timezone, acoes }: { restaurant
   const [aberto, setAberto] = useState(false)
   const [minimizado, setMinimizado] = useState(false)
   const [jaAbriu, setJaAbriu] = useState(false)
-  const largo = useLargo()
+  // lg (≥ 1024 px): simulador flutuante; abaixo, a folha de tela cheia. false até saber (como no SSR).
+  const largo = useMidia(MIDIA_LG) === true
   // < lg: navegar (ex.: link "Gastos e limites" do aviso) fecha a folha, que cobre a tela nova.
   // ≥ lg: o flutuante fica no canto e acompanha a navegação (montado no layout do painel).
   const caminho = usePathname()
@@ -82,8 +71,10 @@ export function SimulatorLauncher({ restaurante, timezone, acoes }: { restaurant
   }, [])
   // minimizado não consulta o servidor (como a aba escondida); ao restaurar, retoma do cursor
   const sim = useSimulador(acoes, aberto && !minimizado, timezone)
+  const flutuante = largo && aberto
   const controles = (
     <SimuladorControles
+      variante={flutuante ? 'flutuante' : 'folha'}
       timezone={timezone}
       offset={sim.offset}
       relogio={sim.relogio}
@@ -94,7 +85,6 @@ export function SimulatorLauncher({ restaurante, timezone, acoes }: { restaurant
       onDetalhes={() => void sim.verDetalhes()}
     />
   )
-  const flutuante = largo && aberto
   return (
     <>
       {!flutuante && (
