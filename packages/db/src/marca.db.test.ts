@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from 'node:fs'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { eq, sql as dsql } from 'drizzle-orm'
 import { getTestDb, resetDb, seedRestaurant, seedStaff } from './test-utils.ts'
@@ -117,6 +118,23 @@ describe('Storage: bucket marca', () => {
     expect(b!.public).toBe(true)
     expect(Number(b!.file_size_limit)).toBe(1024 * 1024)
     expect([...b!.allowed_mime_types].sort()).toEqual(['image/jpeg', 'image/png', 'image/webp'])
+  })
+
+  it('a migração do bucket corrige um bucket marca já existente com outra configuração (hospedado)', async () => {
+    const dir = new URL('../migrations/', import.meta.url)
+    const arq = readdirSync(dir).find((f) => f.startsWith('0047_'))
+    expect(arq).toBeDefined()
+    const mig = readFileSync(new URL(arq!, dir), 'utf8')
+    const r = await sql.begin(async (tx) => {
+      await tx`update storage.buckets set public = false, file_size_limit = 52428800, allowed_mime_types = array['image/svg+xml'] where id = 'marca'`
+      for (const s of mig.split('--> statement-breakpoint').map((x) => x.trim()).filter(Boolean)) await tx.unsafe(s)
+      const [b] = await tx<{ public: boolean; file_size_limit: string; allowed_mime_types: string[] }[]>`
+        select public, file_size_limit, allowed_mime_types from storage.buckets where id = 'marca'`
+      return b!
+    })
+    expect(r.public).toBe(true)
+    expect(Number(r.file_size_limit)).toBe(1024 * 1024)
+    expect([...r.allowed_mime_types].sort()).toEqual(['image/jpeg', 'image/png', 'image/webp'])
   })
 
   it('dono e gerente gravam e apagam na pasta do restaurante; atendente não; outra pasta não; sem MFA não', async () => {

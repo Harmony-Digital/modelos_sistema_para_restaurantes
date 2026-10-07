@@ -69,7 +69,9 @@ describe('avisos do worker', () => {
     const r = await avisosAtivosDoCliente(db, { restaurantId, customerId: c, aPartirDe: '2026-10-05' })
     expect(r.map((x) => x.id)).toEqual([hoje.id, futuro.id])
     expect(r.map((x) => x.id)).not.toContain(passado.id)
-    expect(r[0]).toEqual({ id: hoje.id, unitId, data: '2026-10-05', pessoas: 4, horarioAprox: '20h' })
+    expect(r[0]).toEqual({
+      id: hoje.id, unitId, data: '2026-10-05', pessoas: 4, horarioAprox: '20h', horario: null, nome: 'Ana', temContatoProprio: false,
+    })
     // outro restaurante não enxerga
     const o = await seedRestaurant(db)
     expect(await avisosAtivosDoCliente(db, { restaurantId: o.restaurantId, customerId: c, aPartirDe: '2026-10-01' })).toEqual([])
@@ -81,5 +83,16 @@ describe('avisos do worker', () => {
     await expect(db.transaction((tx) => registrarAviso(tx, base(restaurantId, c, unitId, { pessoas: 0 })))).rejects.toThrow()
     await expect(db.transaction((tx) => registrarAviso(tx, base(restaurantId, c, unitId, { pessoas: 61 })))).rejects.toThrow()
     await expect(db.transaction((tx) => registrarAviso(tx, base(restaurantId, c, unitId, { horarioAprox: 'x'.repeat(41) })))).rejects.toThrow()
+  })
+
+  it('avisosAtivosDoCliente devolve horário, nome e só se há contato próprio (nunca o contato cifrado)', async () => {
+    const { restaurantId, unitId } = await seedRestaurant(db)
+    const c = await cliente(restaurantId, 'h1')
+    await db.insert(attendanceNotices).values({
+      restaurantId, unitId, customerId: c, data: '2026-10-10', pessoas: 3, horario: '19:30', nome: 'Bia', contatoCifrado: 'cifrado', origem: 'ia',
+    })
+    const [r] = await avisosAtivosDoCliente(db, { restaurantId, customerId: c, aPartirDe: '2026-10-01' })
+    expect(r).toMatchObject({ horario: '19:30:00', nome: 'Bia', temContatoProprio: true })
+    expect(JSON.stringify(r)).not.toContain('cifrado')
   })
 })

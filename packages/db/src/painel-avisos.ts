@@ -111,7 +111,9 @@ export function criarAvisoPainel(
     const rows = await tx.execute<{ rid: string | null }>(sql`select app.my_restaurant_id() as rid`)
     const restaurantId = rows[0]?.rid
     if (!restaurantId) return falha('sem_permissao')
-    // unidade fora do acesso do usuário: a RLS esconde (a trava não acha) ⇒ sem permissão, como o insert recusaria
+    // unidade fora do acesso do usuário: a trava não acha a linha, porque o FOR UPDATE do authenticated passa pela policy
+    // `gestao_write` de units (0016: restaurante, papel dono/gerente e acesso à unidade) ⇒ sem permissão, antes de
+    // qualquer conta de lotação (a capacidade de outra unidade nunca vaza)
     const unidade = await travarUnidade(tx, restaurantId, p.unitId)
     if (!unidade) return falha('sem_permissao')
     let id: string
@@ -120,7 +122,8 @@ export function criarAvisoPainel(
         restaurantId, unitId: p.unitId, customerId: null, data: p.data, pessoas: p.pessoas, horario: p.horario, nome: p.nome,
         contatoCifrado: p.contatoCifrado ?? null, simulado: false, origem: 'painel', criadoPor: claims.sub,
       })
-      if (!r.ok) return { ok: false, erro: 'lotado', vagas: r.vagas }
+      if (!r.ok && r.motivo === 'lotado') return { ok: false, erro: 'lotado', vagas: r.vagas }
+      if (!r.ok) throw new Error(r.motivo) // sem cliente nem reservaId: só pode ser lotado
       id = r.id
     } else {
       const ocupadas = await ocupadasNoDia(tx, { restaurantId, unitId: p.unitId, data: p.data, simulado: false })

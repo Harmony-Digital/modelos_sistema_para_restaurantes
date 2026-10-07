@@ -123,6 +123,13 @@ describe('painel de avisos', () => {
     expect(await cancelarAvisoPainel(db, as(c.dono), id, new Date('2026-10-11T02:00:00Z'))).toEqual({ ok: true, valor: null })
   })
 
+  it('criar: gerente restrito em outra unidade recebe sem_permissao antes da lotação (não descobre a capacidade)', async () => {
+    const c = await cenario()
+    await db.update(units).set({ capacidadePessoas: 2 }).where(eq(units.id, c.u2))
+    expect(await criarAvisoPainel(db, as(c.gerenteU1), aviso(c.u2, { pessoas: 5 }))).toEqual({ ok: false, erro: 'sem_permissao' })
+    expect(await criarAvisoPainel(db, as(c.gerenteU1), aviso(c.u2, { pessoas: 5, horario: '20:00', nome: 'Ana' }))).toEqual({ ok: false, erro: 'sem_permissao' })
+  })
+
   it('criar: passa pela lotação da unidade (reservas reais) e grava horário e contato', async () => {
     const c = await cenario()
     await db.update(units).set({ capacidadePessoas: 10 }).where(eq(units.id, c.u1))

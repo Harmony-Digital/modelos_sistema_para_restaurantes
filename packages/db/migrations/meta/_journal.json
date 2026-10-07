@@ -330,6 +330,13 @@
       "when": 1791397728626,
       "tag": "0046_reservas_logo_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1791399172053,
+      "tag": "0047_marca_bucket_config",
+      "breakpoints": true
     }
   ]
 }

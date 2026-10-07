@@ -44,6 +44,55 @@ describe('registrarReserva: lotação', () => {
     expect(await confirmadas(unitId)).toMatchObject([{ pessoas: 6, horario: '21:30:00', contatoCifrado: null }])
   })
 
+  it('mudar sem informar contato, nome ou horário mantém os atuais; null no contato volta para o WhatsApp', async () => {
+    const { restaurantId, unitId } = await cenario(10)
+    const c = await cliente(restaurantId, 'h1')
+    const a = await registrar(reserva(restaurantId, unitId, c, { contatoCifrado: 'cifrado-1', nome: 'Ana', horario: '20:00' }))
+    const id = a.ok ? a.id : ''
+    const so = { restaurantId, unitId, customerId: c, data: DIA, simulado: false, origem: 'ia' as const }
+    expect(await registrar({ ...so, pessoas: 6, reservaId: id })).toEqual({ ok: true, id, atualizou: true })
+    expect(await confirmadas(unitId)).toMatchObject([{ pessoas: 6, horario: '20:00:00', nome: 'Ana', contatoCifrado: 'cifrado-1' }])
+    expect(await registrar({ ...so, pessoas: 6, horario: '21:00' })).toEqual({ ok: true, id, atualizou: true })
+    expect(await confirmadas(unitId)).toMatchObject([{ horario: '21:00:00', nome: 'Ana', contatoCifrado: 'cifrado-1' }])
+    expect(await registrar({ ...so, pessoas: 6, contatoCifrado: null })).toEqual({ ok: true, id, atualizou: true })
+    expect(await confirmadas(unitId)).toMatchObject([{ horario: '21:00:00', contatoCifrado: null }])
+  })
+
+  it('reserva nova sem nome ou sem horário é recusada', async () => {
+    const { restaurantId, unitId } = await cenario(10)
+    const c = await cliente(restaurantId, 'h1')
+    const so = { restaurantId, unitId, customerId: c, data: DIA, pessoas: 2, simulado: false, origem: 'ia' as const }
+    await expect(registrar({ ...so, horario: '20:00' })).rejects.toThrow('nome_obrigatorio')
+    await expect(registrar({ ...so, nome: 'Ana' })).rejects.toThrow('horario_obrigatorio')
+    expect(await db.select().from(attendanceNotices)).toHaveLength(0)
+  })
+
+  it('mudar para unidade/dia onde o cliente já tem confirmada ⇒ ja_existe (nada muda)', async () => {
+    const { restaurantId, unitId } = await cenario(10)
+    const c = await cliente(restaurantId, 'h1')
+    const a = await registrar(reserva(restaurantId, unitId, c, { data: DIA }))
+    const b = await registrar(reserva(restaurantId, unitId, c, { data: '2026-10-11', pessoas: 2 }))
+    const idB = b.ok ? b.id : ''
+    expect(await registrar(reserva(restaurantId, unitId, c, { data: DIA, pessoas: 2, reservaId: idB })))
+      .toEqual({ ok: false, motivo: 'ja_existe', id: a.ok ? a.id : '' })
+    const [linhaB] = await db.select().from(attendanceNotices).where(eq(attendanceNotices.id, idB))
+    expect(linhaB).toMatchObject({ data: '2026-10-11', pessoas: 2 })
+  })
+
+  it('reservaId que não está mais confirmada (cancelada pela equipe) ⇒ reserva_indisponivel, sem criar outra', async () => {
+    const { restaurantId, unitId } = await cenario(10)
+    const c = await cliente(restaurantId, 'h1')
+    const a = await registrar(reserva(restaurantId, unitId, c))
+    const id = a.ok ? a.id : ''
+    await db.update(attendanceNotices).set({ status: 'cancelada' }).where(eq(attendanceNotices.id, id))
+    expect(await registrar(reserva(restaurantId, unitId, c, { pessoas: 6, reservaId: id }))).toEqual({ ok: false, motivo: 'reserva_indisponivel' })
+    expect(await confirmadas(unitId)).toHaveLength(0)
+    // reserva de outro cliente também é indisponível
+    const outro = await cliente(restaurantId, 'h2')
+    const b = await registrar(reserva(restaurantId, unitId, outro))
+    expect(await registrar(reserva(restaurantId, unitId, c, { reservaId: b.ok ? b.id : '' }))).toEqual({ ok: false, motivo: 'reserva_indisponivel' })
+  })
+
   it('lotado: não grava e devolve as vagas que restam (zero quando cheio)', async () => {
     const { restaurantId, unitId } = await cenario(150)
     const c1 = await cliente(restaurantId, 'h1')

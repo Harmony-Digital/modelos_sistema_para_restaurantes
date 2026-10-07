@@ -4,7 +4,18 @@ import type { Tx } from './rls.ts'
 import { units } from './schema/restaurant.ts'
 import { attendanceNotices } from './schema/s2.ts'
 
-export type AvisoAtivo = { id: string; unitId: string; data: string; pessoas: number; horarioAprox: string | null }
+export type AvisoAtivo = {
+  id: string
+  unitId: string
+  data: string
+  pessoas: number
+  horarioAprox: string | null
+  /** HH:MM:SS da reserva (nulo nos avisos antigos). */
+  horario: string | null
+  nome: string | null
+  /** Há número de contato informado (cifrado). O número nunca sai daqui: só pelo "ver contato" auditado. */
+  temContatoProprio: boolean
+}
 
 /** Avisos ativos do cliente de `aPartirDe` (YYYY-MM-DD) em diante. Worker: filtra restaurant_id em toda consulta. */
 export function avisosAtivosDoCliente(
@@ -14,7 +25,8 @@ export function avisosAtivosDoCliente(
   return db
     .select({
       id: attendanceNotices.id, unitId: attendanceNotices.unitId, data: attendanceNotices.data,
-      pessoas: attendanceNotices.pessoas, horarioAprox: attendanceNotices.horarioAprox,
+      pessoas: attendanceNotices.pessoas, horarioAprox: attendanceNotices.horarioAprox, horario: attendanceNotices.horario,
+      nome: attendanceNotices.nome, temContatoProprio: sql<boolean>`(${attendanceNotices.contatoCifrado} is not null)`,
     })
     .from(attendanceNotices)
     .where(and(
@@ -89,11 +101,15 @@ export type GravarReserva = {
   customerId: string | null
   data: string
   pessoas: number
-  /** HH:MM (ou HH:MM:SS). */
-  horario: string
-  nome: string
-  /** `encryptPhone` do número informado; null = o próprio WhatsApp do cliente. Nunca vem do LLM. */
-  contatoCifrado: string | null
+  /** HH:MM (ou HH:MM:SS). Obrigatório na reserva nova; ao mudar uma reserva, omitido = mantém o atual. */
+  horario?: string | undefined
+  /** Obrigatório na reserva nova; ao mudar, omitido = mantém o atual. */
+  nome?: string | undefined
+  /**
+   * `encryptPhone` do número informado; null = o próprio WhatsApp do cliente; omitido = mantém o atual ao mudar (na
+   * reserva nova, omitido = null). Nunca vem do LLM.
+   */
+  contatoCifrado?: string | null | undefined
   simulado: boolean
   origem: 'ia' | 'painel'
   /** Reserva confirmada que está sendo mudada (pessoas/horário). Sem ela, vale a do mesmo cliente/unidade/dia. */
@@ -101,12 +117,18 @@ export type GravarReserva = {
   /** Painel: autor (tem de ser o usuário da sessão, pela policy). */
   criadoPor?: string | null
 }
-export type ResultadoReserva = { ok: true; id: string; atualizou: boolean } | { ok: false; motivo: 'lotado'; vagas: number }
+export type ResultadoReserva =
+  | { ok: true; id: string; atualizou: boolean }
+  | { ok: false; motivo: 'lotado'; vagas: number }
+  /** Mudar para unidade/dia onde o cliente já tem outra reserva confirmada (`id` = essa outra). Nada muda. */
+  | { ok: false; motivo: 'ja_existe'; id: string }
+  /** `reservaId` não está mais confirmada (cancelada pela equipe, "não veio") ou não é do cliente. Nada é gravado. */
+  | { ok: false; motivo: 'reserva_indisponivel' }
 export type OcupacaoUnidade = { ocupadas: number; capacidade: number | null }
 
 /**
  * Trava a linha da unidade até o fim da transação e devolve a capacidade (null = sem lotação); null se a unidade não é
- * do restaurante (ou não é visível). O painel (authenticated) trava direto pela policy de gestão; o worker não tem UPDATE
+ * do restaurante (ou não é visível). O painel (authenticated) trava direto: a policy `gestao_write` (0016) só deixa travar unidade do acesso de dono/gerente; o worker não tem UPDATE
  * em `units` (exigido por FOR UPDATE) e trava pela função `app.travar_unidade_reserva`.
  */
 export async function travarUnidade(tx: Tx, restaurantId: string, unitId: string): Promise<{ capacidade: number | null } | null> {
@@ -176,20 +198,29 @@ export async function ocupacaoDoDia(tx: Tx, restaurantId: string, data: string, 
 
 type Existente = { id: string; unitId: string; data: string; pessoas: number }
 
-async function reservaExistente(tx: Tx, r: GravarReserva): Promise<Existente | null> {
-  const cols = { id: attendanceNotices.id, unitId: attendanceNotices.unitId, data: attendanceNotices.data, pessoas: attendanceNotices.pessoas }
-  const doCliente = r.customerId === null ? undefined : eq(attendanceNotices.customerId, r.customerId)
-  if (r.reservaId) {
-    const [e] = await tx.select(cols).from(attendanceNotices).where(and(
-      eq(attendanceNotices.id, r.reservaId), eq(attendanceNotices.restaurantId, r.restaurantId),
-      eq(attendanceNotices.status, 'confirmada'), doCliente,
-    )).for('update')
-    if (e) return e
-  }
-  if (r.customerId === null) return null
-  const [e] = await tx.select(cols).from(attendanceNotices).where(and(
-    eq(attendanceNotices.restaurantId, r.restaurantId), eq(attendanceNotices.customerId, r.customerId),
-    eq(attendanceNotices.unitId, r.unitId), eq(attendanceNotices.data, r.data), eq(attendanceNotices.status, 'confirmada'),
+const COLS_EXISTENTE = {
+  id: attendanceNotices.id, unitId: attendanceNotices.unitId, data: attendanceNotices.data, pessoas: attendanceNotices.pessoas,
+}
+
+/** Reserva confirmada do cliente na unidade e no dia (travada), fora `excluirId`. */
+async function confirmadaDoCliente(
+  tx: Tx,
+  p: { restaurantId: string; customerId: string; unitId: string; data: string; excluirId?: string },
+): Promise<Existente | null> {
+  const [e] = await tx.select(COLS_EXISTENTE).from(attendanceNotices).where(and(
+    eq(attendanceNotices.restaurantId, p.restaurantId), eq(attendanceNotices.customerId, p.customerId),
+    eq(attendanceNotices.unitId, p.unitId), eq(attendanceNotices.data, p.data), eq(attendanceNotices.status, 'confirmada'),
+    p.excluirId ? ne(attendanceNotices.id, p.excluirId) : undefined,
+  )).for('update')
+  return e ?? null
+}
+
+/** `reservaId` confirmado e do cliente (travado); null se não estiver mais. */
+async function reservaPorId(tx: Tx, r: GravarReserva & { reservaId: string }): Promise<Existente | null> {
+  const [e] = await tx.select(COLS_EXISTENTE).from(attendanceNotices).where(and(
+    eq(attendanceNotices.id, r.reservaId), eq(attendanceNotices.restaurantId, r.restaurantId),
+    eq(attendanceNotices.status, 'confirmada'),
+    r.customerId === null ? undefined : eq(attendanceNotices.customerId, r.customerId),
   )).for('update')
   return e ?? null
 }
@@ -200,31 +231,50 @@ async function reservaExistente(tx: Tx, r: GravarReserva): Promise<Existente | n
  * 1. trava a unidade (`FOR UPDATE`): duas transações pelas mesmas vagas ficam em fila;
  * 2. soma a ocupação do dia com o mesmo `simulado`, sem a reserva que está sendo mudada;
  * 3. grava só se `ocupação + pessoas ≤ capacidade` (ou sem capacidade). Diminuir (ou manter) nunca é bloqueado.
- * O mesmo cliente com reserva confirmada na unidade e dia atualiza essa reserva (`atualizou: true`).
+ * O mesmo cliente com reserva confirmada na unidade e dia atualiza essa reserva (`atualizou: true`). Ao mudar, `nome`,
+ * `horario` e `contatoCifrado` omitidos ficam como estão. Com `reservaId`, a reserva tem de seguir confirmada e ser do
+ * cliente (senão `reserva_indisponivel`, sem criar outra) e o destino não pode ter outra confirmada dele (`ja_existe`).
  */
 export async function registrarReserva(tx: Tx, r: GravarReserva): Promise<ResultadoReserva> {
-  if (r.nome.trim() === '') throw new Error('nome_obrigatorio')
+  const nome = r.nome?.trim()
+  if (nome === '') throw new Error('nome_obrigatorio')
   const unidade = await travarUnidade(tx, r.restaurantId, r.unitId)
   if (!unidade) throw new Error('unidade_inexistente')
-  const existente = await reservaExistente(tx, r)
-  const mesmaVaga = existente !== null && existente.unitId === r.unitId && existente.data === r.data
-  if (!(mesmaVaga && r.pessoas <= existente.pessoas)) {
+  let existente: Existente | null
+  if (r.reservaId) {
+    existente = await reservaPorId(tx, { ...r, reservaId: r.reservaId })
+    if (!existente) return { ok: false, motivo: 'reserva_indisponivel' }
+    // mudar de unidade/dia não pode colidir com outra confirmada do cliente no destino (índice único parcial)
+    const noDestino = r.customerId === null ? null
+      : await confirmadaDoCliente(tx, { ...r, customerId: r.customerId, excluirId: existente.id })
+    if (noDestino) return { ok: false, motivo: 'ja_existe', id: noDestino.id }
+  } else {
+    existente = r.customerId === null ? null : await confirmadaDoCliente(tx, { ...r, customerId: r.customerId })
+  }
+  if (!existente && nome === undefined) throw new Error('nome_obrigatorio')
+  if (!existente && !r.horario) throw new Error('horario_obrigatorio')
+  const semAumentoNaMesmaVaga = existente !== null && existente.unitId === r.unitId && existente.data === r.data
+    && r.pessoas <= existente.pessoas
+  if (!semAumentoNaMesmaVaga) {
     const ocupadas = await ocupadasNoDia(tx, { ...r, excluirId: existente?.id })
     const vagas = vagasSeNaoCouber(unidade.capacidade, ocupadas, r.pessoas)
     if (vagas !== null) return { ok: false, motivo: 'lotado', vagas }
   }
-  const nome = r.nome.trim()
   if (existente) {
+    // undefined = mantém o atual (o Drizzle omite a coluna no SET)
     await tx
       .update(attendanceNotices)
-      .set({ unitId: r.unitId, data: r.data, pessoas: r.pessoas, horario: r.horario, nome, contatoCifrado: r.contatoCifrado, updatedAt: sql`now()` })
+      .set({
+        unitId: r.unitId, data: r.data, pessoas: r.pessoas, horario: r.horario, nome, contatoCifrado: r.contatoCifrado,
+        updatedAt: sql`now()`,
+      })
       .where(eq(attendanceNotices.id, existente.id))
     return { ok: true, id: existente.id, atualizou: true }
   }
   // colunas explícitas: o painel (authenticated) só tem INSERT nas colunas do formulário (0022/0046)
   const v: [string, unknown][] = [
     ['restaurant_id', r.restaurantId], ['unit_id', r.unitId], ['data', r.data], ['pessoas', r.pessoas], ['horario', r.horario],
-    ['nome', nome], ['contato_cifrado', r.contatoCifrado], ['origem', r.origem],
+    ['nome', nome], ['contato_cifrado', r.contatoCifrado ?? null], ['origem', r.origem],
   ]
   if (r.customerId !== null) v.push(['customer_id', r.customerId])
   if (r.simulado) v.push(['simulado', true])
