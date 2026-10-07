@@ -39,3 +39,19 @@ export function horasInventadasS2(texto: string, ctx: ContextoS1, itens: readonl
   )
   return horasInventadas(texto, ctx).filter((h) => !doCliente.has(h))
 }
+
+type ItemComReserva = ItemExtraido & { nome?: string | null; contato_ok?: boolean | null }
+const nomeChave = (n: string | null | undefined) =>
+  (n ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim() || '-'
+
+/** Chave da triage-v7: a do S2 mais, na reserva, o nome (sem acento nem caixa) e a resposta do contato. */
+export function chaveItemReserva(i: ItemComReserva, ctx: ContextoS1, agora: Date): string {
+  const k = chaveItemS2(i, ctx, agora)
+  if (i.servico !== 'aviso_presenca' || i.tipo === 'cancelar') return k
+  return `${k}|${nomeChave(i.nome)}|${i.contato_ok ?? '-'}`
+}
+
+export function extracaoCorretaReserva(esperado: readonly ItemComReserva[], obtido: readonly ItemComReserva[], ctx: ContextoS1, agora: Date): boolean {
+  const k = (lista: readonly ItemComReserva[]) => lista.map((i) => chaveItemReserva(i, ctx, agora)).sort()
+  return JSON.stringify(k(esperado)) === JSON.stringify(k(obtido))
+}
