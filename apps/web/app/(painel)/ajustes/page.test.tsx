@@ -9,12 +9,15 @@ vi.mock('@/lib/server/db', () => ({ getDb: () => 'db' }))
 vi.mock('@/lib/server/restaurante', () => ({ lerRestauranteDoPainel }))
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => undefined }) }))
 vi.mock('@atd/db', () => ({
-  carregarUnidadesPainel: async () => ({ restaurante: { nome: 'Casa Harmonia', politicaFeriado: 'normal', politicaUrl: null, timezone: 'America/Sao_Paulo' } }),
+  carregarUnidadesPainel: async () => ({
+    restaurante: { nome: 'Casa Harmonia', politicaFeriado: 'normal', politicaUrl: null, timezone: 'America/Sao_Paulo', regrasReserva: 'Tolerância de 10 minutos.' },
+  }),
+  REGRAS_RESERVA_PADRAO: 'Texto padrão das regras.',
   lerHorarioHumano: async () => null,
   modoDemonstracao: async () => false,
 }))
 vi.mock('../actions', () => ({ setTheme: vi.fn(), signOut: vi.fn() }))
-vi.mock('./actions', () => ({ salvarModoDemonstracaoAction: vi.fn(), salvarRestauranteAction: vi.fn() }))
+vi.mock('./actions', () => ({ salvarModoDemonstracaoAction: vi.fn(), salvarRestauranteAction: vi.fn(), salvarRegrasReservaAction: vi.fn() }))
 vi.mock('./logo-actions', () => ({ enviarLogoAction: vi.fn(), removerLogoAction: vi.fn() }))
 vi.mock('./atendimento-humano/actions', () => ({ salvarHorarioHumanoAction: vi.fn() }))
 
@@ -38,5 +41,26 @@ describe('Ajustes — logo', () => {
     render(await AjustesPage())
     expect(screen.queryByLabelText(/^Imagem da logo/)).toBeNull()
     expect(screen.queryByRole('button', { name: /logo/i })).toBeNull()
+  })
+})
+
+describe('Ajustes — regras da reserva', () => {
+  beforeEach(() => {
+    lerRestauranteDoPainel.mockResolvedValue({ nome: 'Casa Harmonia', timezone: 'America/Sao_Paulo', logo: null })
+  })
+
+  it.each(['dono', 'gerente'] as const)('%s vê e edita as regras salvas', async (role) => {
+    requireStaff.mockResolvedValue({ role, claims: { sub: 'u' }, restaurantId: 'r' })
+    render(await AjustesPage())
+    expect(screen.getByRole('heading', { name: 'Regras da reserva' })).toBeInTheDocument()
+    expect(screen.getByLabelText(/^Regras enviadas depois da reserva/)).toHaveValue('Tolerância de 10 minutos.')
+    expect(screen.getByLabelText(/^Regras enviadas depois da reserva/)).toBeEnabled()
+  })
+
+  it('atendente não vê as regras', async () => {
+    requireStaff.mockResolvedValue({ role: 'atendente', claims: { sub: 'u' }, restaurantId: 'r' })
+    render(await AjustesPage())
+    expect(screen.queryByRole('heading', { name: 'Regras da reserva' })).toBeNull()
+    expect(screen.queryByLabelText(/^Regras enviadas depois da reserva/)).toBeNull()
   })
 })

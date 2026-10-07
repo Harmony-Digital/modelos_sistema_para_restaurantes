@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { fatoSchema, modeloSchema } from './respostas'
-import { restauranteSchema } from './restaurante'
+import { regrasReservaSchema, restauranteSchema } from './restaurante'
 import { dadosUnidadeSchema, excecaoSchema, horariosSchema } from './unidades'
 
 const unidade = { nome: 'Asa Sul', endereco: '', bairro: '', cidade: '', uf: '', cep: '', telefone: '', apelidos: [], mapsUrl: '', ativo: true }
@@ -17,6 +17,25 @@ describe('schemas do painel', () => {
     })
     const ok = dadosUnidadeSchema.parse({ ...unidade, uf: 'df', cep: '70390-040', telefone: '(61) 3333-4444' })
     expect(ok).toMatchObject({ uf: 'DF', cep: '70390040', telefone: '6133334444' })
+  })
+
+  it('unidade: lotação máxima vazia (sem limite) ou inteiro de 1 a 5000', () => {
+    expect(dadosUnidadeSchema.parse(unidade).capacidadePessoas).toBeNull()
+    expect(dadosUnidadeSchema.parse({ ...unidade, capacidadePessoas: ' ' }).capacidadePessoas).toBeNull()
+    expect(dadosUnidadeSchema.parse({ ...unidade, capacidadePessoas: '150' }).capacidadePessoas).toBe(150)
+    expect(dadosUnidadeSchema.parse({ ...unidade, capacidadePessoas: '5000' }).capacidadePessoas).toBe(5000)
+    for (const v of ['0', '5001', '1.5', '1,5', 'abc', '-3']) {
+      expect(msgs(dadosUnidadeSchema.safeParse({ ...unidade, capacidadePessoas: v })), v).toEqual({
+        capacidadePessoas: 'Informe de 1 a 5000 pessoas, ou deixe em branco para não limitar.',
+      })
+    }
+  })
+
+  it('regras da reserva: obrigatórias, até 600 caracteres, sem espaços nas pontas', () => {
+    expect(regrasReservaSchema.parse({ texto: '  Tolerância de 15 min.  ' }).texto).toBe('Tolerância de 15 min.')
+    expect(regrasReservaSchema.safeParse({ texto: 'x'.repeat(600) }).success).toBe(true)
+    expect(msgs(regrasReservaSchema.safeParse({ texto: 'x'.repeat(601) }))).toEqual({ texto: 'Use no máximo 600 caracteres.' })
+    expect(msgs(regrasReservaSchema.safeParse({ texto: '   ' }))).toEqual({ texto: 'Escreva as regras da reserva.' })
   })
 
   it('horários: erro no dia certo; madrugada invadindo o dia seguinte', () => {

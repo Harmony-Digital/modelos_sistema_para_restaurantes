@@ -3,12 +3,13 @@ import { themes, type ThemeTokens } from './tokens.ts'
 /** Variantes da etiqueta de status (texto mono caixa-alta). Cores só dos tokens existentes. */
 export const VARIANTES_ETIQUETA = [
   'aguarda', 'ia', 'humano', 'novo', 'em_contato', 'confirmado', 'recusado', 'cancelado', 'encerrada', 'simulacao', 'erro', 'ok',
+  'nao_veio',
 ] as const
 export type VarianteEtiqueta = (typeof VARIANTES_ETIQUETA)[number]
 export type TomEtiqueta = 'aviso' | 'sucesso' | 'info' | 'destrutivo' | 'neutro'
 
 export const TOM_DA_VARIANTE: Record<VarianteEtiqueta, TomEtiqueta> = {
-  aguarda: 'aviso', novo: 'aviso',
+  aguarda: 'aviso', novo: 'aviso', nao_veio: 'aviso',
   ia: 'sucesso', confirmado: 'sucesso', ok: 'sucesso',
   humano: 'info', em_contato: 'info',
   erro: 'destrutivo',

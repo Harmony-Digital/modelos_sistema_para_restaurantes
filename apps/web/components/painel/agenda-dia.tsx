@@ -3,20 +3,18 @@ import { CalendarCheck, ChevronLeft, ChevronRight, PartyPopper, Plus, X } from '
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { toast } from 'sonner'
 import { somarDias } from '@atd/core/s1'
 import { rotuloTipoEvento } from '@atd/core/s3'
-import type { AvisoPainel, PedidoPainel, PrevisaoUnidade, StatusPedido } from '@atd/db'
-import { cancelarAvisoAction, criarAvisoAction } from '@/app/(painel)/agenda/actions'
+import type { PedidoPainel, PrevisaoUnidade, StatusPedido, StatusReserva } from '@atd/db'
+import { criarReservaAction } from '@/app/(painel)/agenda/actions'
 import { EmptyState } from '@/components/shell/empty-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { EtiquetaStatus } from '@/components/ui/etiqueta-status'
 import { Numero } from '@/components/ui/numero'
-import { chamarAcao } from '@/lib/action-result'
 import {
-  alternarStatus, ehHorarioHHMM, hrefAgenda, horarioDoAviso, inicioDaAgenda, limiteDaAgenda, linhaDoTempo, pendentesForaDoDia, resumoDoDia,
-  statusDaAgenda, type ItemAgenda, type VerAgenda,
+  alternarStatus, ehHorarioHHMM, horaDaReserva, hrefAgenda, horarioDoAviso, inicioDaAgenda, limiteDaAgenda, linhaDoTempo, pendentesForaDoDia,
+  resumoDoDia, statusDaAgenda, textoOcupacao, type ItemAgenda, type VerAgenda,
 } from '@/lib/agenda'
 import { dataDoEvento, haQuanto, ROTULO_STATUS, type MembroTela } from '@/lib/eventos'
 import { STATUS_PEDIDO } from '@/lib/schemas/eventos'
@@ -24,12 +22,12 @@ import { dataBr, limiteDaPrevisao, rotuloDoDia } from '@/lib/previsao'
 import { MIDIA_LG, useMidia } from '@/lib/use-midia'
 import { cn } from '@/lib/utils'
 import { Abas } from './abas'
-import { AvisoForm } from './aviso-form'
-import { Confirmar } from './confirmar'
 import { FolhaFormulario } from './folha-formulario'
 import { PedidoDetalhe } from './pedido-detalhe'
+import { ReservaDetalhe } from './reserva-detalhe'
+import { ReservaForm } from './reserva-form'
 import { SeloSimulacao } from './selo-simulacao'
-import { SeloStatus } from './selo-status'
+import { SeloStatus, SeloStatusReserva } from './selo-status'
 
 const linkClass =
   'inline-flex size-11 items-center justify-center rounded-md border border-input transition-colors duration-150 [@media(hover:hover)]:hover:bg-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
@@ -47,7 +45,7 @@ const pessoas = (n: number) => plural(n, 'pessoa', 'pessoas')
 export function AgendaDia(props: {
   dia: string
   hoje: string
-  /** Unidades ativas visíveis, com os avisos do dia (`previsaoDoDia`). */
+  /** Unidades ativas visíveis, com as reservas e a lotação do dia (`previsaoDoDia`). */
   unidades: PrevisaoUnidade[]
   /**
    * Pedidos de evento visíveis (`listarPedidos`), de qualquer dia e status: no dia, os do dia entram na linha do tempo
@@ -60,8 +58,10 @@ export function AgendaDia(props: {
   cancelados: boolean
   /** Pedido aberto (`?pedido=`). */
   pedidoId: string | null
+  /** Reserva aberta (`?reserva=`). */
+  reservaId: string | null
   membros: MembroTela[]
-  /** Dono e gerente anotam e cancelam avisos; o pedido de evento a equipe toda trabalha. */
+  /** Dono e gerente anotam reservas e mudam a situação delas; o pedido de evento a equipe toda trabalha. */
   podeEditar: boolean
   /** Instante do carregamento ("há X horas" sem divergir na hidratação). */
   agora: Date
@@ -76,15 +76,15 @@ export function AgendaDia(props: {
   // lg (≥ 1024 px): o detalhe do pedido fica ao lado; abaixo, em folha. null até saber (evita abrir a folha e trocar).
   const largo = useMidia(MIDIA_LG)
   const [novo, setNovo] = useState(false)
-  const [cancelando, setCancelando] = useState<AvisoPainel | null>(null)
 
   const inicio = inicioDaAgenda(props.hoje)
   const limite = limiteDaAgenda(props.hoje)
   const passado = props.dia < props.hoje
-  // aviso pelo painel: de hoje a +30 (mesma regra do formulário e da IA)
+  // reserva pelo painel: de hoje a +30 (mesma regra do formulário e da IA)
   const podeAnotar = props.podeEditar && !passado && props.dia <= limiteDaPrevisao(props.hoje)
   const href = (p: {
-    dia?: string; unidade?: string | null; cancelados?: boolean; pedido?: string | null; ver?: VerAgenda; status?: StatusPedido[]
+    dia?: string; unidade?: string | null; cancelados?: boolean; pedido?: string | null; reserva?: string | null; ver?: VerAgenda
+    status?: StatusPedido[]
   } = {}) =>
     hrefAgenda({
       dia: p.dia ?? props.dia,
@@ -94,6 +94,7 @@ export function AgendaDia(props: {
       ver: p.ver ?? props.ver,
       status: p.status ?? props.status,
       pedido: p.pedido === undefined ? null : p.pedido,
+      reserva: p.reserva === undefined ? null : p.reserva,
     })
   const anterior = props.dia > inicio ? somarDias(props.dia, -1) : null
   const proximo = props.dia < limite ? somarDias(props.dia, 1) : null
@@ -104,9 +105,15 @@ export function AgendaDia(props: {
   const pendentes = pendentesForaDoDia(props.pedidos, props.dia)
   const fila = props.pedidos.filter((p) => props.status.includes(p.status))
   const pedido = props.pedidoId ? (props.pedidos.find((p) => p.id === props.pedidoId) ?? null) : null
+  // reserva aberta: só a do dia (a linha do tempo mostra só este dia) e, sem "mostrar cancelados", só as que aparecem
+  const aberta = props.ver === 'dia' && props.reservaId && !pedido
+    ? itens.find((i): i is Extract<ItemAgenda, { tipo: 'aviso' }> => i.tipo === 'aviso' && i.aviso.id === props.reservaId) ?? null
+    : null
+  const lotacao = props.unidades.filter((u) => props.unidade === null || u.unitId === props.unidade)
   const mostrarUnidade = props.unidade === null && props.unidades.length > 1
   const opcoes = props.unidades.map((u) => ({ id: u.unitId, nome: u.unidade }))
   const fecharPedido = () => router.push(href(), { scroll: false })
+  const detalheAberto = pedido !== null || aberta !== null
 
   const secoes = (
     <Abas
@@ -223,18 +230,39 @@ export function AgendaDia(props: {
         {props.unidades.length > 0 && (
           <p data-testid="resumo-do-dia" className="text-sm text-muted-foreground">
             <strong className="font-semibold text-foreground"><Numero>{pessoas(resumo.pessoas)}</Numero></strong>
-            {' · '}{plural(resumo.avisos, 'aviso', 'avisos')}{' · '}{plural(resumo.eventos, 'evento', 'eventos')}
+            {' · '}{plural(resumo.reservas, 'reserva', 'reservas')}{' · '}{plural(resumo.eventos, 'evento', 'eventos')}
           </p>
         )}
       </div>
-      {passado && <p className="text-sm text-muted-foreground">Dia passado: só consulta.</p>}
+      {passado && <p className="text-sm text-muted-foreground">Dia passado: só consulta (e marcar quem não veio).</p>}
 
       {filtroUnidade}
+
+      {lotacao.length > 0 && (
+        <ul aria-label="Lotação do dia" className="flex flex-wrap gap-2">
+          {lotacao.map((u) => {
+            const cheia = u.capacidade !== null && u.ocupadas >= u.capacidade
+            return (
+              <li key={u.unitId} className="flex min-h-11 flex-wrap items-center gap-x-2 gap-y-0.5 rounded-md border border-border bg-card px-3 py-1.5 text-sm">
+                <span className="font-medium text-foreground">{u.unidade}</span>
+                <Numero className="text-foreground">{textoOcupacao(u)}</Numero>
+                {u.capacidade !== null && <span className="text-muted-foreground">pessoas</span>}
+                {cheia && <EtiquetaStatus variante="erro">Lotada</EtiquetaStatus>}
+                {u.ocupadasSimulacao > 0 && (
+                  <span className="text-muted-foreground">
+                    · Simulação: <Numero>{textoOcupacao({ capacidade: u.capacidade, ocupadas: u.ocupadasSimulacao })}</Numero>
+                  </span>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         {podeAnotar && props.unidades.length > 0 ? (
           <Button onClick={() => setNovo(true)}>
-            <Plus aria-hidden="true" className="size-4" /> Novo aviso
+            <Plus aria-hidden="true" className="size-4" /> Nova reserva
           </Button>
         ) : <span />}
         <Link href={href({ cancelados: !props.cancelados })} className={textoLink}>
@@ -243,12 +271,12 @@ export function AgendaDia(props: {
       </div>
 
       {props.unidades.length === 0 ? (
-        <EmptyState icon={CalendarCheck} title="Cadastre uma unidade" description="Avisos de presença e pedidos de evento aparecem aqui depois que a unidade for cadastrada." />
+        <EmptyState icon={CalendarCheck} title="Cadastre uma unidade" description="Reservas e pedidos de evento aparecem aqui depois que a unidade for cadastrada." />
       ) : itens.length === 0 ? (
         <EmptyState
           icon={CalendarCheck}
           title={props.dia === props.hoje ? 'Nada na agenda para hoje' : `Nada na agenda para ${dataBr(props.dia)}`}
-          description={passado ? 'Ninguém avisou que viria nem pediu evento para este dia.' : 'Quando um cliente avisar que vem ou pedir um evento pelo WhatsApp, aparece aqui.'}
+          description={passado ? 'Ninguém reservou nem pediu evento para este dia.' : 'Quando um cliente reservar ou pedir um evento pelo WhatsApp, aparece aqui.'}
         />
       ) : (
         <ol aria-label="Linha do tempo do dia" className="flex flex-col overflow-hidden rounded-lg border border-border bg-card">
@@ -258,10 +286,9 @@ export function AgendaDia(props: {
               item={i}
               mostrarUnidade={mostrarUnidade}
               agora={props.agora}
-              aberto={i.tipo === 'evento' && i.pedido.id === pedido?.id}
+              aberto={i.tipo === 'evento' ? i.pedido.id === pedido?.id : i.aviso.id === aberta?.aviso.id}
               hrefPedido={(id) => href({ pedido: id })}
-              podeCancelar={podeAnotar}
-              onCancelar={setCancelando}
+              hrefReserva={(id) => href({ reserva: id })}
             />
           ))}
         </ol>
@@ -303,10 +330,28 @@ export function AgendaDia(props: {
     if (largo) router.refresh()
     else fecharPedido()
   }
+  // confirmada (ou com "mostrar cancelados"): a reserva continua aberta e só recarrega (dá para ver e desfazer); cancelada
+  // ou "não veio" com os cancelados ocultos sai da linha do tempo, então o detalhe fecha junto
+  const aoMudarReserva = (status: StatusReserva) => {
+    if (status === 'confirmada' || props.cancelados) router.refresh()
+    else fecharPedido()
+  }
+  const detalheReserva = aberta && (
+    <ReservaDetalhe
+      key={aberta.aviso.id}
+      reserva={aberta.aviso}
+      unidade={aberta.unidade}
+      dia={props.dia}
+      hoje={props.hoje}
+      podeEditar={props.podeEditar}
+      onMudou={aoMudarReserva}
+    />
+  )
+  const DESCRICAO_RESERVA = 'Situação e contato da reserva. Mudar aqui não avisa o cliente.'
 
   return (
     <>
-      <div className={cn('flex flex-col gap-4', pedido && largo && 'lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(340px,400px)] lg:items-start lg:gap-6')}>
+      <div className={cn('flex flex-col gap-4', detalheAberto && largo && 'lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(340px,400px)] lg:items-start lg:gap-6')}>
         {props.ver === 'pedidos' ? todos : lista}
         {pedido && largo === true && (
           <aside
@@ -324,6 +369,21 @@ export function AgendaDia(props: {
             <PedidoDetalhe key={pedido.id} pedido={pedido} membros={props.membros} onSalvo={aoSalvarPedido} />
           </aside>
         )}
+        {aberta && largo === true && (
+          <aside
+            aria-labelledby="reserva-aberta"
+            className="sticky top-[4.5rem] flex max-h-[calc(100dvh-5.5rem)] min-w-0 flex-col gap-4 overflow-y-auto rounded-lg border border-border bg-card p-4"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex flex-col gap-1">
+                <h2 id="reserva-aberta" className="text-base font-semibold">Reserva</h2>
+                <p className="text-sm text-muted-foreground">{DESCRICAO_RESERVA}</p>
+              </div>
+              <Link href={href()} scroll={false} aria-label="Fechar a reserva" className={linkClass}><X aria-hidden="true" className="size-5" /></Link>
+            </div>
+            {detalheReserva}
+          </aside>
+        )}
       </div>
 
       {largo === false && (
@@ -337,34 +397,24 @@ export function AgendaDia(props: {
         </FolhaFormulario>
       )}
 
-      <FolhaFormulario aberto={novo} onAbertoChange={setNovo} titulo="Novo aviso" descricao="Para quando o cliente avisa por outro canal, como telefone ou balcão.">
+      {largo === false && (
+        <FolhaFormulario aberto={aberta !== null} onAbertoChange={(a) => !a && fecharPedido()} titulo="Reserva" descricao={DESCRICAO_RESERVA}>
+          {detalheReserva}
+        </FolhaFormulario>
+      )}
+
+      <FolhaFormulario aberto={novo} onAbertoChange={setNovo} titulo="Nova reserva" descricao="Para quando o cliente reserva por outro canal, como telefone ou balcão.">
         {novo && (
-          <AvisoForm
+          <ReservaForm
             hoje={props.hoje}
             unidades={opcoes}
-            inicial={{ unitId: props.unidade ?? (opcoes.length === 1 ? opcoes[0]!.id : ''), data: props.dia, pessoas: '', horario: '', nome: '' }}
-            acao={criarAvisoAction}
+            inicial={{ unitId: props.unidade ?? (opcoes.length === 1 ? opcoes[0]!.id : ''), data: props.dia, pessoas: '', horario: '', nome: '', contato: '' }}
+            acao={criarReservaAction}
             onSalvo={() => setNovo(false)}
           />
         )}
       </FolhaFormulario>
 
-      <Confirmar
-        aberto={cancelando !== null}
-        onAbertoChange={(a) => !a && setCancelando(null)}
-        titulo="Cancelar este aviso?"
-        descricao={cancelando ? `O aviso de ${pessoas(cancelando.pessoas)} sai da previsão do dia. O cliente não é avisado.` : ''}
-        rotuloConfirmar="Cancelar aviso"
-        rotuloAndamento="Cancelando…"
-        onConfirmar={async () => {
-          if (!cancelando) return
-          const r = await chamarAcao(() => cancelarAvisoAction(cancelando.id))
-          if (r.ok) toast.success('Aviso cancelado.')
-          else toast.error(r.formError ?? 'Não foi possível cancelar. Tente de novo.')
-          setCancelando(null)
-          router.refresh()
-        }}
-      />
     </>
   )
 }
@@ -377,27 +427,20 @@ function Linha(props: {
   agora: Date
   aberto: boolean
   hrefPedido: (id: string) => string
-  podeCancelar: boolean
-  onCancelar: (a: AvisoPainel) => void
+  hrefReserva: (id: string) => string
 }) {
   const i = props.item
+  // etiqueta de sucesso ("Confirmado/Confirmada") só é AA sobre cartão ou tint leve: aberta = cartão + barra laranja
+  const classeLink = cn(
+    linhaClass,
+    'transition-colors duration-150 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+    props.aberto ? 'bg-card shadow-[inset_3px_0_0_var(--primary)]' : '[@media(hover:hover)]:hover:bg-accent/40',
+  )
   if (i.tipo === 'evento') {
     const p = i.pedido
     return (
       <li className="border-b border-border last:border-b-0">
-        <Link
-          href={props.hrefPedido(p.id)}
-          scroll={false}
-          aria-current={props.aberto ? 'true' : undefined}
-          className={cn(
-            linhaClass,
-            'transition-colors duration-150 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
-            // etiqueta de sucesso ("Confirmado") só é AA sobre cartão ou tint leve: aberta = cartão + barra laranja
-            props.aberto
-              ? 'bg-card shadow-[inset_3px_0_0_var(--primary)]'
-              : '[@media(hover:hover)]:hover:bg-accent/40',
-          )}
-        >
+        <Link href={props.hrefPedido(p.id)} scroll={false} aria-current={props.aberto ? 'true' : undefined} className={classeLink}>
           <span className="font-mono text-xs font-semibold uppercase tracking-wide text-muted-foreground">Dia todo</span>
           <span className="flex min-w-0 flex-col gap-0.5">
             <span className="flex flex-wrap items-center gap-2">
@@ -416,30 +459,30 @@ function Linha(props: {
     )
   }
   const a = i.aviso
-  const cancelado = a.status === 'cancelada'
+  const hora = horaDaReserva(a)
   return (
-    <li className={cn(linhaClass, 'border-b border-border last:border-b-0')}>
-      {a.horarioAprox
-        ? ehHorarioHHMM(a.horarioAprox)
-          ? <Numero className="text-sm text-foreground">{horarioDoAviso(a.horarioAprox)}</Numero>
-          : <span className="min-w-0 break-words text-sm text-foreground">{a.horarioAprox}</span>
-        : <span className="font-mono text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sem hora</span>}
-      <span className="flex min-w-0 flex-col gap-0.5">
-        <span className={cn('flex flex-wrap items-center gap-2 font-semibold text-foreground', cancelado && 'line-through decoration-1')}>
-          <span className="min-w-0 break-words">{a.nome ?? 'Sem nome'}</span>
-          {a.simulado && <SeloSimulacao />}
+    <li className="border-b border-border last:border-b-0">
+      <Link href={props.hrefReserva(a.id)} scroll={false} aria-current={props.aberto ? 'true' : undefined} className={classeLink}>
+        {hora
+          ? ehHorarioHHMM(hora)
+            ? <Numero className="text-sm text-foreground">{horarioDoAviso(hora)}</Numero>
+            : <span className="min-w-0 break-words text-sm text-foreground">{hora}</span>
+          : <span className="font-mono text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sem hora</span>}
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className="flex flex-wrap items-center gap-2">
+            <span className={cn('min-w-0 break-words font-semibold text-foreground', a.status === 'cancelada' && 'line-through decoration-1')}>
+              {a.nome ?? 'Sem nome'}
+            </span>
+            {a.simulado && <SeloSimulacao />}
+            <SeloStatusReserva status={a.status} />
+          </span>
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+            <span>Reserva · {pessoas(a.pessoas)}{props.mostrarUnidade ? ` · ${i.unidade}` : ''}</span>
+            <Badge variant="secondary">{a.origem === 'ia' ? 'IA' : 'Painel'}</Badge>
+          </span>
         </span>
-        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-          <span>Aviso · {pessoas(a.pessoas)}{props.mostrarUnidade ? ` · ${i.unidade}` : ''}</span>
-          <Badge variant="secondary">{a.origem === 'ia' ? 'IA' : 'Painel'}</Badge>
-          {cancelado && <EtiquetaStatus variante="cancelado">Cancelado</EtiquetaStatus>}
-        </span>
-      </span>
-      {props.podeCancelar && !cancelado ? (
-        <Button variant="ghost" size="icon" aria-label={`Cancelar aviso de ${a.nome ?? 'sem nome'}, ${pessoas(a.pessoas)}`} onClick={() => props.onCancelar(a)}>
-          <X aria-hidden="true" className="size-5" />
-        </Button>
-      ) : <span />}
+        <ChevronRight aria-hidden="true" className="size-4 text-muted-foreground" />
+      </Link>
     </li>
   )
 }

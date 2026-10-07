@@ -76,7 +76,7 @@ describe('texto do resumo de acesso', () => {
   it('listas vazias e nome ausente ficam explícitos', () => {
     const t = textoResumo({ ...resumo, nomePerfil: null, avisos: [], eventos: [], pedidos: [] }, 'America/Sao_Paulo')
     expect(t).toContain('Nome no WhatsApp: não informado')
-    expect(t).toContain('Avisos de presença: nenhum')
+    expect(t).toContain('Reservas: nenhuma')
     expect(t).toContain('Pedidos de evento: nenhum')
   })
 

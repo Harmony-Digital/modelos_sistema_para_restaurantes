@@ -11,8 +11,8 @@ import { getDb } from '@/lib/server/db'
 export const dynamic = 'force-dynamic'
 
 /**
- * Agenda única por dia: avisos de presença e pedidos de evento numa linha do tempo, pedido aberto ao lado (lg+) ou em
- * folha; `?ver=pedidos` mostra todos os pedidos de evento com filtro de status (a aba Eventos antiga). A junção é
+ * Agenda única por dia: reservas (com a lotação de cada unidade) e pedidos de evento numa linha do tempo, pedido ou
+ * reserva aberta ao lado (lg+) ou em folha; `?ver=pedidos` mostra todos os pedidos de evento com filtro de status (a aba Eventos antiga). A junção é
  * feita aqui, com as leituras da DAL (RLS por unidade e modo demonstração já aplicados nelas).
  */
 export default async function AgendaPage(props: { searchParams: Promise<BuscaAgenda> }) {
@@ -37,7 +37,7 @@ export default async function AgendaPage(props: { searchParams: Promise<BuscaAge
 
   return (
     <>
-      <TopBar title="Agenda" subtitle="Quem vem e quem pediu evento, dia a dia" />
+      <TopBar title="Agenda" subtitle="Reservas e pedidos de evento, dia a dia" />
       <main className="mx-auto flex max-w-xl flex-col gap-4 px-4 py-6 lg:mx-0 lg:max-w-6xl lg:px-8">
         <AgendaDia
           dia={dia}
@@ -47,6 +47,7 @@ export default async function AgendaPage(props: { searchParams: Promise<BuscaAge
           unidade={unidade}
           cancelados={cancelados}
           pedidoId={q.pedido ?? null}
+          reservaId={q.reserva ?? null}
           membros={membros}
           podeEditar={s.role !== 'atendente'}
           agora={new Date()}

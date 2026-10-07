@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AvisoPainel, PedidoPainel, PrevisaoUnidade } from '@atd/db'
-import { agendaDeHoje, cronometro, hrefAvisosDoDia, hrefPedido, importacoesParadas, percentual, pontosDoGrafico } from './inicio'
+import { agendaDeHoje, cronometro, hrefPedido, hrefReserva, importacoesParadas, percentual, pontosDoGrafico } from './inicio'
 
 describe('percentual', () => {
   it('sem perguntas mostra traço; arredonda', () => {
@@ -32,14 +32,15 @@ describe('pontosDoGrafico', () => {
 })
 
 describe('links do Início', () => {
-  it('aviso abre a Agenda no dia e na unidade; pedido abre o pedido na Agenda do dia dele', () => {
-    expect(hrefAvisosDoDia('2026-10-07', 'u 1')).toBe('/agenda?dia=2026-10-07&unidade=u%201')
+  it('reserva abre a reserva na Agenda do dia; pedido abre o pedido na Agenda do dia dele', () => {
+    expect(hrefReserva('2026-10-07', 'r 1')).toBe('/agenda?dia=2026-10-07&reserva=r%201')
     expect(hrefPedido({ id: 'p1', data: '2026-10-07' })).toBe('/agenda?dia=2026-10-07&pedido=p1')
   })
 })
 
+const lot = { capacidade: null, ocupadas: 0, ocupadasSimulacao: 0 }
 const aviso = (p: Partial<AvisoPainel>): AvisoPainel => ({
-  id: 'a', unitId: 'u1', nome: 'Ana', pessoas: 4, horarioAprox: null, horario: null, origem: 'ia', status: 'confirmada', simulado: false, ...p,
+  id: 'a', unitId: 'u1', nome: 'Ana', pessoas: 4, horarioAprox: null, horario: null, origem: 'ia', status: 'confirmada', simulado: false, temContato: false, ...p,
 })
 const pedido = (p: Partial<PedidoPainel>): PedidoPainel => ({
   id: 'p', unitId: 'u1', unidade: 'Asa Sul', spaceId: null, espaco: null, nome: 'Bia', data: '2026-10-07', convidados: 30,
@@ -48,14 +49,21 @@ const pedido = (p: Partial<PedidoPainel>): PedidoPainel => ({
 })
 
 describe('agendaDeHoje', () => {
-  it('junta avisos ativos e pedidos de evento do dia (fora recusados/cancelados), por horário, com o link certo', () => {
+  it('a reserva usa o horário marcado (o aproximado antigo só quando não há)', () => {
+    const l = agendaDeHoje([{ unitId: 'u1', unidade: 'A', totalPessoas: 8, ...lot, avisos: [
+      aviso({ id: 'b', horario: '21:00:00', horarioAprox: '08:00' }), aviso({ id: 'a', horario: '19:30:00' }),
+    ] }], [], '2026-10-07')
+    expect(l.map((x) => [x.id, x.hora])).toEqual([['a', '19:30:00'], ['b', '21:00:00']])
+  })
+
+  it('junta reservas confirmadas e pedidos de evento do dia (fora recusados/cancelados), por horário, com o link certo', () => {
     const previsao: PrevisaoUnidade[] = [
-      { unitId: 'u1', unidade: 'Asa Sul', totalPessoas: 10, avisos: [
+      { unitId: 'u1', unidade: 'Asa Sul', totalPessoas: 10, ...lot, avisos: [
         aviso({ id: 'a1', horarioAprox: '20:00', pessoas: 6 }),
         aviso({ id: 'a2', horarioAprox: null, nome: null }),
         aviso({ id: 'a3', status: 'cancelada' }),
       ] },
-      { unitId: 'u2', unidade: 'Asa Norte', totalPessoas: 2, avisos: [aviso({ id: 'a4', unitId: 'u2', horarioAprox: '12h30', pessoas: 2, simulado: true })] },
+      { unitId: 'u2', unidade: 'Asa Norte', totalPessoas: 2, ...lot, avisos: [aviso({ id: 'a4', unitId: 'u2', horarioAprox: '12h30', pessoas: 2, simulado: true })] },
     ]
     const pedidos = [
       pedido({ id: 'p1' }),
@@ -65,7 +73,7 @@ describe('agendaDeHoje', () => {
     ]
     const linhas = agendaDeHoje(previsao, pedidos, '2026-10-07')
     expect(linhas.map((l) => l.id)).toEqual(['a4', 'a1', 'a2', 'p1', 'p4'])
-    expect(linhas[0]).toMatchObject({ tipo: 'aviso', hora: '12h30', titulo: '2 pessoas', unidade: 'Asa Norte', simulado: true, href: '/agenda?dia=2026-10-07&unidade=u2' })
+    expect(linhas[0]).toMatchObject({ tipo: 'reserva', hora: '12h30', titulo: '2 pessoas', unidade: 'Asa Norte', simulado: true, href: '/agenda?dia=2026-10-07&reserva=a4' })
     expect(linhas[2]).toMatchObject({ hora: null, titulo: '4 pessoas', detalhe: 'Sem nome' })
     expect(linhas[1]).toMatchObject({ detalhe: 'Ana' })
     expect(linhas[3]).toMatchObject({ tipo: 'evento', status: 'novo', titulo: 'Aniversário · 30 convidados', href: '/agenda?dia=2026-10-07&pedido=p1' })
@@ -73,7 +81,7 @@ describe('agendaDeHoje', () => {
   })
 
   it('1 pessoa no singular', () => {
-    const l = agendaDeHoje([{ unitId: 'u1', unidade: 'A', totalPessoas: 1, avisos: [aviso({ pessoas: 1 })] }], [], '2026-10-07')
+    const l = agendaDeHoje([{ unitId: 'u1', unidade: 'A', totalPessoas: 1, ...lot, avisos: [aviso({ pessoas: 1 })] }], [], '2026-10-07')
     expect(l[0]!.titulo).toBe('1 pessoa')
   })
 })

@@ -7,8 +7,16 @@ import { montarUnidades } from './s1.ts'
 import { restaurants, units } from './schema/restaurant.ts'
 import { unitHourExceptions, unitHours } from './schema/s1.ts'
 
-export type UnidadePainel = UnidadeS1 & { ativo: boolean; slug: string; cep: string | null; telefone: string | null }
-export type RestaurantePainel = { id: string; nome: string; timezone: string; politicaFeriado: PoliticaFeriado; politicaUrl: string | null }
+export type UnidadePainel = UnidadeS1 & {
+  ativo: boolean; slug: string; cep: string | null; telefone: string | null
+  /** Lotação máxima de pessoas por dia; null = sem limite. */
+  capacidadePessoas: number | null
+}
+export type RestaurantePainel = {
+  id: string; nome: string; timezone: string; politicaFeriado: PoliticaFeriado; politicaUrl: string | null
+  /** Texto enviado depois de confirmar a reserva (Ajustes → Regras da reserva). */
+  regrasReserva: string
+}
 export type DadosUnidade = {
   nome: string
   endereco: string | null
@@ -41,7 +49,7 @@ export function carregarUnidadesPainel(
 ): Promise<{ restaurante: RestaurantePainel; unidades: UnidadePainel[] }> {
   return withUserContext(db, claims, async (tx) => {
     const [r] = await tx
-      .select({ id: restaurants.id, nome: restaurants.nome, timezone: restaurants.timezone, politicaFeriado: restaurants.politicaFeriado, politicaUrl: restaurants.politicaUrl })
+      .select({ id: restaurants.id, nome: restaurants.nome, timezone: restaurants.timezone, politicaFeriado: restaurants.politicaFeriado, politicaUrl: restaurants.politicaUrl, regrasReserva: restaurants.regrasReserva })
       .from(restaurants)
       .limit(1)
     if (!r) throw new Error('Restaurante não encontrado')
@@ -61,7 +69,7 @@ export function carregarUnidadesPainel(
     const linhas = new Map(us.map((u) => [u.id, u]))
     const unidades = montarUnidades(us, hs, exs).map((b) => {
       const u = linhas.get(b.id)!
-      return { ...b, ativo: u.ativo, slug: u.slug, cep: u.cep, telefone: u.telefone }
+      return { ...b, ativo: u.ativo, slug: u.slug, cep: u.cep, telefone: u.telefone, capacidadePessoas: u.capacidadePessoas }
     })
     return { restaurante: r, unidades }
   })

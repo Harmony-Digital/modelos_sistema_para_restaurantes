@@ -11,12 +11,12 @@ import { chamarAcao, type ActionResult } from '@/lib/action-result'
 import { dadosUnidadeSchema, type DadosUnidadeForm as Valores } from '@/lib/schemas/unidades'
 
 export const UNIDADE_VAZIA: Valores = {
-  nome: '', endereco: '', bairro: '', cidade: '', uf: '', cep: '', telefone: '', apelidos: [], mapsUrl: '', ativo: true,
+  nome: '', endereco: '', bairro: '', cidade: '', uf: '', cep: '', telefone: '', apelidos: [], mapsUrl: '', ativo: true, capacidadePessoas: '',
 }
 
 const ROTULOS = {
   nome: 'Nome da unidade', endereco: 'Endereço', bairro: 'Bairro', cidade: 'Cidade', uf: 'UF', cep: 'CEP',
-  telefone: 'Telefone', apelidos: 'Apelidos', mapsUrl: 'Link do Google Maps',
+  telefone: 'Telefone', apelidos: 'Apelidos', mapsUrl: 'Link do Google Maps', capacidadePessoas: 'Lotação máxima (pessoas por dia)',
 }
 
 export function DadosUnidadeForm(props: {
@@ -95,6 +95,14 @@ export function DadosUnidadeForm(props: {
             </p>
           )}
         </div>
+        <Field
+          id={`${p}capacidadePessoas`}
+          label={ROTULOS.capacidadePessoas}
+          hint="Total de pessoas com reserva num mesmo dia. Em branco, sem limite. A IA só aceita reservas até esse total."
+          error={errors.capacidadePessoas?.message}
+        >
+          {(a) => <TextInput {...a} inputMode="numeric" autoComplete="off" placeholder="Ex.: 150" className="max-w-40" {...form.register('capacidadePessoas')} />}
+        </Field>
         <Controller
           name="ativo"
           control={form.control}

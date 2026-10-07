@@ -41,7 +41,7 @@ export function ModoDemonstracao(props: {
         <Switch id={id} checked={ligado} disabled={props.somenteLeitura || salvando} onCheckedChange={(v) => void alternar(v)} aria-describedby={`${id}-ajuda`} />
       </div>
       <p id={`${id}-ajuda`} className="text-sm text-muted-foreground">
-        Ligado: conversas, avisos e pedidos de evento do simulador aparecem no painel como se fossem reais, marcados
+        Ligado: conversas, reservas e pedidos de evento do simulador aparecem no painel como se fossem reais, marcados
         {' '}“Simulação”. Desligue quando começar a atender clientes reais.
         {props.somenteLeitura && ' Só o dono muda.'}
       </p>

@@ -8,7 +8,7 @@ import type { LinhaAgendaHoje } from '@/lib/inicio'
 
 const LINK = 'inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 [@media(hover:hover)]:hover:underline'
 
-/** Coluna "Agenda de hoje" do Início: avisos de presença e pedidos de evento do dia; cada linha abre o item na Agenda. */
+/** Coluna "Agenda de hoje" do Início: reservas e pedidos de evento do dia; cada linha abre o item na Agenda. */
 export function AgendaHoje(props: { linhas: readonly LinhaAgendaHoje[]; hoje: string }) {
   return (
     <section aria-labelledby="agenda-hoje" className="flex min-w-0 flex-col rounded-lg border border-border bg-card">
@@ -17,13 +17,13 @@ export function AgendaHoje(props: { linhas: readonly LinhaAgendaHoje[]; hoje: st
         <Link href={`/agenda?dia=${props.hoje}`} className={LINK}>Abrir agenda</Link>
       </div>
       {props.linhas.length === 0 ? (
-        <p className="px-4 pb-4 text-sm text-muted-foreground">Nenhum aviso ou evento para hoje</p>
+        <p className="px-4 pb-4 text-sm text-muted-foreground">Nenhuma reserva ou evento para hoje</p>
       ) : (
         <Tabela aria-labelledby="agenda-hoje" className="mt-1">
           <TabelaCabecalho>
             <tr>
               <TabelaCelulaCabecalho className="w-16">Hora</TabelaCelulaCabecalho>
-              <TabelaCelulaCabecalho>Aviso ou evento</TabelaCelulaCabecalho>
+              <TabelaCelulaCabecalho>Reserva ou evento</TabelaCelulaCabecalho>
             </tr>
           </TabelaCabecalho>
           <TabelaCorpo>

@@ -16,5 +16,6 @@ export function valoresDadosUnidade(u: UnidadePainel): DadosUnidadeForm {
     apelidos: u.apelidos,
     mapsUrl: u.mapsUrl ?? '',
     ativo: u.ativo,
+    capacidadePessoas: u.capacidadePessoas === null ? '' : String(u.capacidadePessoas),
   }
 }

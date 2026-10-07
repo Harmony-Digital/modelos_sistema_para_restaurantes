@@ -259,7 +259,7 @@ test('pedido do titular: resumo de acesso e exclusão confirmada apagam os dados
   await expect(confirmar).toBeDisabled()
   await dialogo.getByLabel(/^Para confirmar, digite EXCLUIR/).fill('excluir')
   await confirmar.click()
-  await expect(page.getByText(/^Dados excluídos: 1 mensagem, 1 conversa, 1 aviso/)).toBeVisible()
+  await expect(page.getByText(/^Dados excluídos: 1 mensagem, 1 conversa, 1 reserva/)).toBeVisible()
   await expect(itemExclusao).toHaveCount(0)
 
   // os dados somem: cadastro e conversa apagados; aviso anonimizado na agenda; pedidos concluídos

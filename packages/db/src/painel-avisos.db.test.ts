@@ -47,6 +47,31 @@ describe('painel de avisos', () => {
     expect(r2.map((x) => [x.unidade, x.totalPessoas, x.avisos.length])).toEqual([['Asa Norte', 5, 1], ['Asa Sul', 4, 2]])
   })
 
+  it('previsaoDoDia: lotação da unidade, ocupação real e simulada separadas, e se há contato para ver', async () => {
+    const c = await cenario()
+    await db.update(units).set({ capacidadePessoas: 150 }).where(eq(units.id, c.u1))
+    const [cli] = await db.insert(customers).values({ restaurantId: c.restaurantId, waIdHash: 'h', telefoneCifrado: 'x' }).returning()
+    const base = { restaurantId: c.restaurantId, data: DIA, origem: 'ia' as const }
+    await db.insert(attendanceNotices).values([
+      ...[60, 60, 20].map((pessoas) => ({ ...base, unitId: c.u1, pessoas, nome: 'Grupo', horario: '20:00' })),
+      { ...base, unitId: c.u1, pessoas: 7, customerId: cli!.id, nome: 'Ana', horario: '19:30' },
+      { ...base, unitId: c.u1, pessoas: 3, status: 'cancelada', contatoCifrado: 'cifrado' },
+      { ...base, unitId: c.u1, pessoas: 2, status: 'nao_veio' },
+      { ...base, unitId: c.u1, pessoas: 6, simulado: true },
+    ])
+    const r = await previsaoDoDia(db, as(c.dono), { data: DIA, incluirCancelados: true })
+    const u1 = r.find((u) => u.unitId === c.u1)!
+    expect(u1).toMatchObject({ capacidade: 150, ocupadas: 147, ocupadasSimulacao: 0 })
+    expect(r.find((u) => u.unitId === c.u2)).toMatchObject({ capacidade: null, ocupadas: 0 })
+    expect(u1.avisos.map((a) => [a.pessoas, a.temContato]).sort((a, b) => Number(b[0]) - Number(a[0])))
+      .toEqual([[60, false], [60, false], [20, false], [7, true], [3, true], [2, false]])
+    await db.update(restaurants).set({ modoDemonstracao: true })
+    const lig = (await previsaoDoDia(db, as(c.dono), { data: DIA, incluirCancelados: false })).find((u) => u.unitId === c.u1)!
+    expect(lig).toMatchObject({ ocupadas: 147, ocupadasSimulacao: 6 })
+    // cliente do simulador não tem número de verdade: sem "ver contato"
+    expect(lig.avisos.find((a) => a.simulado)!.temContato).toBe(false)
+  })
+
   it('gerente restrito vê só sua unidade; atendente lê; unidade inativa some', async () => {
     const c = await cenario()
     await db.insert(attendanceNotices).values([

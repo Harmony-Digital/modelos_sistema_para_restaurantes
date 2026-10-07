@@ -133,7 +133,7 @@ function ResumoAcesso(props: {
 function textoContagens(c: Record<string, number>) {
   const n = (k: string) => c[k] ?? 0
   return `Dados excluídos: ${plural(n('mensagens'), 'mensagem', 'mensagens')}, ${plural(n('conversas'), 'conversa', 'conversas')}, ` +
-    `${plural(n('avisos'), 'aviso', 'avisos')} e ${plural(n('eventos'), 'pedido de evento', 'pedidos de evento')}.`
+    `${plural(n('avisos'), 'reserva', 'reservas')} e ${plural(n('eventos'), 'pedido de evento', 'pedidos de evento')}.`
 }
 
 function ConfirmarExclusao(props: { pedidoId: string; excluir: AcoesPrivacidade['excluir']; onFechar: () => void }) {
@@ -166,7 +166,7 @@ function ConfirmarExclusao(props: { pedidoId: string; excluir: AcoesPrivacidade[
         </DialogHeader>
         <ul className="list-disc space-y-1 pl-5 text-sm text-foreground">
           <li>As conversas e mensagens do cliente serão apagadas, inclusive uma conversa em atendimento.</li>
-          <li>Avisos de presença e pedidos de evento ficam anonimizados: somem nome, observações e notas, mas a data e o número de pessoas continuam na agenda.</li>
+          <li>Reservas e pedidos de evento ficam anonimizados: somem nome, contato, observações e notas, mas a data e o número de pessoas continuam na agenda.</li>
           <li>O cadastro do cliente (telefone e nome no WhatsApp) é apagado.</li>
           <li>O pedido fica concluído e a exclusão é registrada sem dados pessoais.</li>
         </ul>

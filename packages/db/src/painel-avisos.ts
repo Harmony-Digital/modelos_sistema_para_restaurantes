@@ -26,6 +26,11 @@ export type AvisoPainel = {
   origem: 'ia' | 'painel'
   status: StatusReserva
   simulado: boolean
+  /**
+   * Há número para o "ver contato": o informado na reserva ou o WhatsApp de um cliente real (o do simulador não é número
+   * de verdade). O número em si nunca vem aqui.
+   */
+  temContato: boolean
 }
 export type StatusReserva = 'confirmada' | 'cancelada' | 'nao_veio'
 /** Erros das ações de reserva no painel: `lotado` traz as vagas que restam. */
@@ -34,7 +39,18 @@ export type ResultadoReservaPainel<T = null> =
   | ResultadoPainel<T>
   | { ok: false; erro: Exclude<ErroReservaPainel, ErroPainel> }
   | { ok: false; erro: 'lotado'; vagas: number }
-export type PrevisaoUnidade = { unitId: string; unidade: string; totalPessoas: number; avisos: AvisoPainel[] }
+export type PrevisaoUnidade = {
+  unitId: string
+  unidade: string
+  totalPessoas: number
+  /** Lotação máxima de pessoas por dia; null = sem limite. */
+  capacidade: number | null
+  /** Pessoas das reservas confirmadas reais (as que contam na lotação real). */
+  ocupadas: number
+  /** Pessoas das confirmadas do simulador (só aparecem com o modo demonstração; contam lotação só entre si). */
+  ocupadasSimulacao: number
+  avisos: AvisoPainel[]
+}
 
 /** Previsão do dia por unidade ativa visível (mesma ordem do S1). Simulados só no modo demonstração; o total é só de ativos. */
 export function previsaoDoDia(
@@ -44,7 +60,7 @@ export function previsaoDoDia(
 ): Promise<PrevisaoUnidade[]> {
   return withUserContext(db, claims, async (tx) => {
     const us = await tx
-      .select({ id: units.id, nome: units.nome })
+      .select({ id: units.id, nome: units.nome, capacidade: units.capacidadePessoas })
       .from(units)
       .where(eq(units.ativo, true))
       .orderBy(asc(units.ordem), asc(units.nome))
@@ -55,6 +71,8 @@ export function previsaoDoDia(
         id: attendanceNotices.id, unitId: attendanceNotices.unitId, nome: attendanceNotices.nome,
         pessoas: attendanceNotices.pessoas, horarioAprox: attendanceNotices.horarioAprox, horario: attendanceNotices.horario,
         origem: attendanceNotices.origem, status: attendanceNotices.status, simulado: attendanceNotices.simulado,
+        temContato: sql<boolean>`(${attendanceNotices.contatoCifrado} is not null
+          or (${attendanceNotices.customerId} is not null and not ${attendanceNotices.simulado}))`,
       })
       .from(attendanceNotices)
       .where(and(
@@ -64,12 +82,17 @@ export function previsaoDoDia(
         p.incluirCancelados ? undefined : eq(attendanceNotices.status, 'confirmada'),
       ))
       .orderBy(asc(attendanceNotices.createdAt), asc(attendanceNotices.id))
+    const soma = (avisos: AvisoPainel[], f: (a: AvisoPainel) => boolean) =>
+      avisos.reduce((s, a) => s + (a.status === 'confirmada' && f(a) ? a.pessoas : 0), 0)
     return us.map((u) => {
       const avisos = rows.filter((r) => r.unitId === u.id)
       return {
         unitId: u.id,
         unidade: u.nome,
-        totalPessoas: avisos.reduce((s, a) => s + (a.status === 'confirmada' ? a.pessoas : 0), 0),
+        totalPessoas: soma(avisos, () => true),
+        capacidade: u.capacidade,
+        ocupadas: soma(avisos, (a) => !a.simulado),
+        ocupadasSimulacao: soma(avisos, (a) => a.simulado),
         avisos,
       }
     })

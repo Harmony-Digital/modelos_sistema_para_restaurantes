@@ -5,6 +5,7 @@ import type { JwtClaims } from './rls.ts'
 import {
   carregarUnidadesPainel, removerExcecao, salvarExcecao, salvarHorarios, salvarRestaurante, salvarUnidade, type DadosUnidade,
 } from './painel-unidades.ts'
+import { REGRAS_RESERVA_PADRAO } from './schema/restaurant.ts'
 import { auditLog, restaurants, staff, unitHourExceptions, unitHours, units } from './schema/index.ts'
 
 const { db, sql } = getTestDb()
@@ -46,7 +47,7 @@ describe('painel — unidades', () => {
     expect((await salvarExcecao(db, as(c.dono), c.restaurantId, id, { data: '2026-12-25', fechado: true, turnos: [], motivo: 'Natal' })).ok).toBe(true)
 
     const { unidades, restaurante } = await carregarUnidadesPainel(db, as(c.dono), AGORA)
-    expect(restaurante).toMatchObject({ id: c.restaurantId, politicaFeriado: 'como_domingo' })
+    expect(restaurante).toMatchObject({ id: c.restaurantId, politicaFeriado: 'como_domingo', regrasReserva: REGRAS_RESERVA_PADRAO })
     const u = unidades.find((x) => x.id === id)!
     expect(u).toMatchObject({ nome: 'Lago Sul', slug: 'lago-sul', ativo: true, cep: '71625205', apelidos: ['lago'], lat: -15.84 })
     expect(u.semanal[6]).toEqual([{ abre: '18:00', fecha: '02:00' }])
@@ -115,6 +116,9 @@ describe('painel — unidades', () => {
     expect(await cap()).toBe(150)
     expect((await salvarUnidade(db, as(c.dono), c.restaurantId, c.u1, { ...dados('Asa Sul'), capacidadePessoas: null })).ok).toBe(true)
     expect(await cap()).toBeNull()
+    expect((await carregarUnidadesPainel(db, as(c.dono), AGORA)).unidades.find((u) => u.id === c.u1)!.capacidadePessoas).toBeNull()
+    await salvarUnidade(db, as(c.dono), c.restaurantId, c.u1, { ...dados('Asa Sul'), capacidadePessoas: 80 })
+    expect((await carregarUnidadesPainel(db, as(c.dono), AGORA)).unidades.find((u) => u.id === c.u1)!.capacidadePessoas).toBe(80)
     expect(await salvarUnidade(db, as(c.atendente), c.restaurantId, c.u1, { ...dados('Asa Sul'), capacidadePessoas: 10 })).toEqual({ ok: false, erro: 'sem_permissao' })
   })
 })

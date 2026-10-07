@@ -106,31 +106,38 @@ test('sem pessoas, pergunta "Para quantas pessoas?" e anota com a resposta sem c
   expect(falso!.chamadas.slice(antes)).toEqual([`vou amanhã na ${UNIDADE}`])
 })
 
-test('painel: novo aviso aparece na previsão e some ao cancelar', async ({ page }) => {
+test('painel: nova reserva aparece na agenda, com a lotação, e sai ao cancelar', async ({ page }) => {
+  await getSql()`update units set capacidade_pessoas = 50 where id = ${unitId}`
   await entrarComoGestor(page)
   await previsaoDaUnidade(page)
   await expect(page.getByText('Nada na agenda para hoje')).toBeVisible()
-  await page.getByRole('button', { name: 'Novo aviso' }).click()
+  await expect(page.getByRole('list', { name: 'Lotação do dia' })).toContainText('0/50')
+  await page.getByRole('button', { name: 'Nova reserva' }).click()
   await page.getByLabel(/^Pessoas/).fill('6')
+  // a unidade abre 00:00–23:59: o último minuto do dia ainda não passou quando o teste roda
+  await page.getByLabel(/^Horário/).fill('23:58')
   await page.getByLabel(/^Nome/).fill(NOME_PAINEL)
-  await page.getByRole('button', { name: 'Anotar aviso' }).click()
-  await expect(page.getByText('Aviso anotado.')).toBeVisible()
+  await page.getByRole('button', { name: 'Salvar reserva' }).click()
+  await expect(page.getByText('Reserva anotada.')).toBeVisible()
 
   const secao = page.getByRole('list', { name: 'Linha do tempo do dia' })
-  await expect(secao.getByRole('listitem').filter({ hasText: NOME_PAINEL })).toContainText('6 pessoas')
-  await expect(page.getByTestId('resumo-do-dia')).toContainText('6 pessoas · 1 aviso')
+  const linha = secao.getByRole('listitem').filter({ hasText: NOME_PAINEL })
+  await expect(linha).toContainText('6 pessoas')
+  await expect(linha).toContainText('Confirmada')
+  await expect(page.getByTestId('resumo-do-dia')).toContainText('6 pessoas · 1 reserva')
+  await expect(page.getByRole('list', { name: 'Lotação do dia' })).toContainText('6/50')
 
-  await secao.getByRole('button', { name: `Cancelar aviso de ${NOME_PAINEL}, 6 pessoas` }).click()
-  await page.getByRole('button', { name: 'Cancelar aviso', exact: true }).click()
-  await expect(page.getByText('Aviso cancelado.')).toBeVisible()
-  await expect(page.getByText(NOME_PAINEL)).toHaveCount(0)
-  await expect(page.getByText('Nada na agenda para hoje')).toBeVisible()
+  await linha.getByRole('link').click()
+  const detalhe = page.getByRole('dialog', { name: 'Reserva' })
+  await detalhe.getByRole('button', { name: 'Cancelada' }).click()
+  await expect(page.getByText('Reserva marcada como “Cancelada”.')).toBeVisible()
+  await expect(page.getByRole('list', { name: 'Lotação do dia' })).toContainText('0/50')
 
-  const [a] = await getSql()`select status, origem, simulado from attendance_notices where nome = ${NOME_PAINEL}`
-  expect(a).toEqual({ status: 'cancelada', origem: 'painel', simulado: false })
+  const [a] = await getSql()`select status, origem, simulado, horario from attendance_notices where nome = ${NOME_PAINEL}`
+  expect(a).toEqual({ status: 'cancelada', origem: 'painel', simulado: false, horario: '23:58:00' })
 })
 
-test('atendente vê a previsão, sem "Novo aviso" nem cancelar', async ({ page }) => {
+test('atendente vê a agenda, sem "Nova reserva" nem mudar a situação', async ({ page }) => {
   const [r] = await getSql()`select id from restaurants limit 1`
   await getSql()`insert into attendance_notices (restaurant_id, unit_id, nome, data, pessoas, origem)
     values (${r!.id}, ${unitId}, ${NOME_ATENDENTE}, (now() at time zone 'America/Sao_Paulo')::date, 2, 'painel')`
@@ -139,7 +146,10 @@ test('atendente vê a previsão, sem "Novo aviso" nem cancelar', async ({ page }
   await expect(page.getByRole('heading', { level: 1, name: 'Início' })).toBeVisible()
   await page.getByRole('link', { name: 'Agenda', exact: true }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Agenda' })).toBeVisible()
-  await expect(page.getByRole('listitem').filter({ hasText: NOME_ATENDENTE })).toContainText('2 pessoas')
-  await expect(page.getByRole('button', { name: 'Novo aviso' })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: /^Cancelar aviso/ })).toHaveCount(0)
+  const linha = page.getByRole('listitem').filter({ hasText: NOME_ATENDENTE })
+  await expect(linha).toContainText('2 pessoas')
+  await expect(page.getByRole('button', { name: 'Nova reserva' })).toHaveCount(0)
+  await linha.getByRole('link').click()
+  await expect(page.getByRole('dialog', { name: 'Reserva' })).toContainText(NOME_ATENDENTE)
+  await expect(page.getByRole('group', { name: 'Mudar a situação' })).toHaveCount(0)
 })

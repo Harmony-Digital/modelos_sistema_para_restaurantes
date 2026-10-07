@@ -23,7 +23,7 @@ export const ROTULO_STATUS_DSR: Record<StatusDsr, string> = {
 
 export const ROTULO_DADO_RETENCAO: Record<DadoRetencao, { titulo: string; descricao: string }> = {
   messages: { titulo: 'Mensagens das conversas', descricao: 'Apagadas depois do prazo.' },
-  attendance_notices: { titulo: 'Avisos de presença', descricao: 'Anonimizados depois do prazo (conta a data do aviso).' },
+  attendance_notices: { titulo: 'Reservas', descricao: 'Anonimizadas depois do prazo (conta a data da reserva).' },
   event_requests: { titulo: 'Pedidos de evento', descricao: 'Anonimizados depois do prazo (conta a data do evento).' },
   ai_runs: { titulo: 'Registros de uso da IA', descricao: 'Apagados depois do prazo.' },
   customers_inativos: { titulo: 'Clientes sem contato', descricao: 'Apagados depois do prazo sem nenhuma interação.' },
@@ -85,9 +85,9 @@ export function textoResumo(r: ResumoTitular, timeZone: string): string {
     `Mensagens: ${r.mensagens}`,
     '',
   ]
-  if (r.avisos.length === 0) linhas.push('Avisos de presença: nenhum')
+  if (r.avisos.length === 0) linhas.push('Reservas: nenhuma')
   else {
-    linhas.push('Avisos de presença:')
+    linhas.push('Reservas:')
     for (const a of r.avisos) {
       linhas.push(`- ${dataBr(a.data as DataIso)} · ${a.unidade} · ${plural(a.pessoas, 'pessoa', 'pessoas')} · ${ROTULO_STATUS_AVISO[a.status] ?? a.status}`)
     }

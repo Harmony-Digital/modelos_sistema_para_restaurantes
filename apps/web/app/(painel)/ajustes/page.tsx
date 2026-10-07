@@ -1,10 +1,11 @@
-import { carregarUnidadesPainel, lerHorarioHumano, modoDemonstracao } from '@atd/db'
+import { carregarUnidadesPainel, lerHorarioHumano, modoDemonstracao, REGRAS_RESERVA_PADRAO } from '@atd/db'
 import { LogOut } from 'lucide-react'
 import { cookies } from 'next/headers'
 import { Button } from '@/components/ui/button'
 import { HorarioHumano } from '@/components/painel/horario-humano'
 import { LogoForm } from '@/components/painel/logo-form'
 import { ModoDemonstracao } from '@/components/painel/modo-demonstracao'
+import { RegrasReservaForm } from '@/components/painel/regras-reserva-form'
 import { RestauranteForm } from '@/components/painel/restaurante-form'
 import { TopBar } from '@/components/shell/top-bar'
 import { requireStaff } from '@/lib/dal'
@@ -13,7 +14,7 @@ import { getDb } from '@/lib/server/db'
 import { lerRestauranteDoPainel } from '@/lib/server/restaurante'
 import { parseTema, THEME_COOKIE } from '@/lib/theme'
 import { setTheme, signOut } from '../actions'
-import { salvarModoDemonstracaoAction, salvarRestauranteAction } from './actions'
+import { salvarModoDemonstracaoAction, salvarRegrasReservaAction, salvarRestauranteAction } from './actions'
 import { salvarHorarioHumanoAction } from './atendimento-humano/actions'
 import { enviarLogoAction, removerLogoAction } from './logo-actions'
 import { ThemeForm } from './theme-form'
@@ -22,7 +23,7 @@ export const dynamic = 'force-dynamic'
 
 const PAPEL = { dono: 'Dono', gerente: 'Gerente', atendente: 'Atendente' } as const
 
-/** Restaurante, horário de atendimento humano, modo demonstração, tema e conta (antes em "Mais"). */
+/** Restaurante, regras da reserva, horário de atendimento humano, modo demonstração, tema e conta (antes em "Mais"). */
 export default async function AjustesPage() {
   const session = await requireStaff()
   const db = getDb()
@@ -56,6 +57,12 @@ export default async function AjustesPage() {
             <ModoDemonstracao ligado={demonstracao} acao={salvarModoDemonstracaoAction} somenteLeitura={!dono} />
           )}
         </section>
+        {gestao && (
+          <section aria-labelledby="regras-reserva-titulo" className="flex flex-col gap-3">
+            <h2 id="regras-reserva-titulo" className="text-sm font-medium text-foreground">Regras da reserva</h2>
+            <RegrasReservaForm inicial={restaurante.regrasReserva} padrao={REGRAS_RESERVA_PADRAO} acao={salvarRegrasReservaAction} />
+          </section>
+        )}
         {horario !== null && (
           <section id="atendimento-humano" aria-labelledby="atendimento-humano-titulo" className="flex scroll-mt-20 flex-col gap-3">
             <h2 id="atendimento-humano-titulo" className="text-sm font-medium text-foreground">Horário de atendimento humano</h2>

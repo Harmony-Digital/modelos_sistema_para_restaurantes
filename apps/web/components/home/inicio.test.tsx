@@ -62,7 +62,7 @@ describe('EsperaAoVivo', () => {
 })
 
 const linhas: LinhaAgendaHoje[] = [
-  { tipo: 'aviso', id: 'a1', hora: '20:00', titulo: '6 pessoas', detalhe: 'Ana', unidade: 'Asa Sul', simulado: false, href: '/agenda?dia=2026-10-07&unidade=u1' },
+  { tipo: 'reserva', id: 'a1', hora: '20:00', titulo: '6 pessoas', detalhe: 'Ana', unidade: 'Asa Sul', simulado: false, href: '/agenda?dia=2026-10-07&reserva=a1' },
   { tipo: 'evento', id: 'p1', hora: null, titulo: 'Aniversário · 30 convidados', detalhe: 'Bia', unidade: 'Asa Norte', simulado: true, href: '/agenda?dia=2026-10-07&pedido=p1', status: 'novo' },
 ]
 
@@ -70,8 +70,9 @@ describe('AgendaHoje', () => {
   it('cada linha leva à Agenda já no item; evento com etiqueta do status; simulado com selo', () => {
     render(<AgendaHoje linhas={linhas} hoje="2026-10-07" />)
     const tabela = screen.getByRole('table', { name: 'Agenda de hoje' })
-    const aviso = within(tabela).getByRole('link', { name: /6 pessoas/ })
-    expect(aviso).toHaveAttribute('href', '/agenda?dia=2026-10-07&unidade=u1')
+    expect(within(tabela).getByRole('columnheader', { name: 'Reserva ou evento' })).toBeInTheDocument()
+    const reserva = within(tabela).getByRole('link', { name: /6 pessoas/ })
+    expect(reserva).toHaveAttribute('href', '/agenda?dia=2026-10-07&reserva=a1')
     expect(within(tabela).getByText('20:00')).toBeInTheDocument()
     const evento = within(tabela).getByRole('link', { name: /Aniversário/ })
     expect(evento).toHaveAttribute('href', '/agenda?dia=2026-10-07&pedido=p1')
@@ -89,7 +90,7 @@ describe('AgendaHoje', () => {
   })
   it('dia vazio', () => {
     render(<AgendaHoje linhas={[]} hoje="2026-10-07" />)
-    expect(screen.getByText('Nenhum aviso ou evento para hoje')).toBeInTheDocument()
+    expect(screen.getByText('Nenhuma reserva ou evento para hoje')).toBeInTheDocument()
   })
 })
 
