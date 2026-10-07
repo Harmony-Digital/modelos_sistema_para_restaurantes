@@ -21,4 +21,22 @@ describe('AppShell', () => {
     expect(desktop!.parentElement!.className).toContain('lg:block')
     expect(screen.getByRole('banner').compareDocumentPosition(desktop!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
+
+  it('com faixa, reserva a altura dela (--faixa-alertas) para o simulador flutuante começar abaixo; sem faixa, nada', () => {
+    const { unmount } = render(
+      <AppShell papel="dono" restaurante="R" tema="escuro" menu="aberto" faixa={<section aria-label="Alerta de gastos">x</section>}
+        floating={<div data-testid="flutuante" />}>
+        <TopBar title="Início" />
+      </AppShell>,
+    )
+    const comFaixa = screen.getByTestId('flutuante').closest<HTMLElement>('[style]')
+    expect(comFaixa?.style.getPropertyValue('--faixa-alertas')).toBe('4rem')
+    unmount()
+    render(
+      <AppShell papel="dono" restaurante="R" tema="escuro" menu="aberto" floating={<div data-testid="flutuante" />}>
+        <TopBar title="Início" />
+      </AppShell>,
+    )
+    expect(screen.getByTestId('flutuante').closest<HTMLElement>('[style]')?.style.getPropertyValue('--faixa-alertas') ?? '').toBe('')
+  })
 })

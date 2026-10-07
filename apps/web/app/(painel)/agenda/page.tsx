@@ -1,17 +1,19 @@
 import { redirect } from 'next/navigation'
-import { listarPedidos, membrosDaEquipe, previsaoDoDia } from '@atd/db'
+import { contarPedidosNovos, listarPedidos, membrosDaEquipe, previsaoDoDia } from '@atd/db'
 import { AgendaDia } from '@/components/painel/agenda-dia'
 import { TopBar } from '@/components/shell/top-bar'
-import { diaDaAgenda, hrefDaAgendaAntiga, statusDaAgenda, type BuscaAgenda } from '@/lib/agenda'
+import { diaDaAgenda, hrefDaAgendaAntiga, statusDaFila, type BuscaAgenda } from '@/lib/agenda'
 import { requireStaff } from '@/lib/dal'
 import { hojeLocal } from '@/lib/previsao'
+import { STATUS_PEDIDO } from '@/lib/schemas/eventos'
 import { getDb } from '@/lib/server/db'
 
 export const dynamic = 'force-dynamic'
 
 /**
  * Agenda única por dia: avisos de presença e pedidos de evento numa linha do tempo, pedido aberto ao lado (lg+) ou em
- * folha. A junção é feita aqui, com as duas leituras da DAL (RLS por unidade e modo demonstração já aplicados nelas).
+ * folha; `?ver=pedidos` mostra todos os pedidos de evento com filtro de status (a aba Eventos antiga). A junção é
+ * feita aqui, com as leituras da DAL (RLS por unidade e modo demonstração já aplicados nelas).
  */
 export default async function AgendaPage(props: { searchParams: Promise<BuscaAgenda> }) {
   const q = await props.searchParams
@@ -22,13 +24,16 @@ export default async function AgendaPage(props: { searchParams: Promise<BuscaAge
   const hoje = hojeLocal(new Date())
   const dia = diaDaAgenda(q.dia, hoje)
   const cancelados = q.cancelados === '1'
-  const [unidades, membros] = await Promise.all([
+  const ver = q.ver === 'pedidos' ? 'pedidos' : 'dia'
+  const [unidades, membros, novos] = await Promise.all([
     previsaoDoDia(getDb(), s.claims, { data: dia, incluirCancelados: cancelados }),
     membrosDaEquipe(getDb(), s.claims),
+    contarPedidosNovos(getDb(), s.claims),
   ])
   // só unidade ativa e visível vale como filtro; o resto vira "todas"
   const unidade = q.unidade && unidades.some((u) => u.unitId === q.unidade) ? q.unidade : null
-  const pedidos = await listarPedidos(getDb(), s.claims, { status: statusDaAgenda(cancelados), unitId: unidade })
+  // todos os status: a tela separa o que vai na linha do tempo (cancelados) e na lista de todos os pedidos (filtro)
+  const pedidos = await listarPedidos(getDb(), s.claims, { status: [...STATUS_PEDIDO], unitId: unidade })
 
   return (
     <>
@@ -45,6 +50,9 @@ export default async function AgendaPage(props: { searchParams: Promise<BuscaAge
           membros={membros}
           podeEditar={s.role !== 'atendente'}
           agora={new Date()}
+          ver={ver}
+          status={statusDaFila(q.status)}
+          novos={novos}
         />
       </main>
     </>

@@ -228,10 +228,10 @@ test('atendente vê a fila e muda o status, mas não cadastra espaço', async ({
   const { email, senha } = await criarMembro('atendente')
   await entrar(page, email, senha)
   await expect(page.getByRole('heading', { level: 1, name: 'Início' })).toBeVisible()
-  // endereço antigo redireciona para a Agenda do dia; o pedido de amanhã está entre os pendentes
+  // endereço antigo da aba Eventos leva à lista de todos os pedidos da Agenda; o pedido de amanhã está nela
   await page.goto('/agenda?aba=eventos')
-  await expect(page).toHaveURL(/\/agenda$/)
-  await page.getByRole('region', { name: 'Pedidos para responder em outros dias' }).getByRole('link', { name: new RegExp(CLIENTE) }).click()
+  await expect(page).toHaveURL(/\/agenda\?ver=pedidos$/)
+  await page.getByRole('list', { name: 'Todos os pedidos de evento' }).getByRole('link', { name: new RegExp(CLIENTE) }).click()
   // celular: folha; desktop: painel ao lado
   const folha = page.getByRole('dialog', { name: 'Pedido de evento' }).or(page.getByRole('complementary', { name: 'Pedido de evento' }))
   await folha.getByLabel(/^Status/).selectOption('confirmado')

@@ -27,7 +27,7 @@ export function FaixaDaBarra() {
   const shell = useContext(ShellContexto)
   if (!shell?.faixa) return null
   // contexto de empilhamento próprio: o z-40 da faixa não passa por cima da barra fixa ao rolar
-  return <div className="relative z-20 hidden lg:block">{shell.faixa}</div>
+  return <div className="relative z-20 hidden shrink-0 lg:block">{shell.faixa}</div>
 }
 
 /** Lado direito da barra superior (≥ lg): busca rápida, tema e conta. Abaixo de lg isso fica em Ajustes. */
@@ -41,7 +41,7 @@ export function AcoesBarra() {
         type="button"
         onClick={abrirBusca}
         aria-keyshortcuts="Control+K Meta+K"
-        className="mr-2 flex h-9 w-56 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm text-muted-foreground [@media(hover:hover)]:hover:bg-accent [@media(hover:hover)]:hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+        className="mr-2 flex h-11 w-56 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm text-muted-foreground [@media(hover:hover)]:hover:bg-accent [@media(hover:hover)]:hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
       >
         <Search aria-hidden="true" className="size-4" />
         <span>Busca rápida</span>

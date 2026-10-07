@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  diaDaAgenda, horarioDoAviso, hrefAgenda, hrefDaAgendaAntiga, inicioDaAgenda, limiteDaAgenda, linhaDoTempo, pendentesForaDoDia,
-  resumoDoDia, statusDaAgenda,
+  alternarStatus, diaDaAgenda, horarioDoAviso, hrefAgenda, hrefDaAgendaAntiga, inicioDaAgenda, limiteDaAgenda, linhaDoTempo, pendentesForaDoDia,
+  resumoDoDia, statusDaAgenda, statusDaFila,
 } from './agenda'
 
 const U1 = '00000000-0000-4000-8000-000000000001'
@@ -34,17 +34,37 @@ describe('agenda: dia e links', () => {
     expect(hrefAgenda({ dia: '2026-10-05', hoje: '2026-10-05', unidade: null, cancelados: false, pedido: null })).toBe('/agenda')
   })
 
-  it('endereço antigo (?aba, ?data) vira o novo preservando dia, unidade, cancelados e pedido', () => {
+  it('hrefAgenda da lista de todos os pedidos: ver=pedidos e o filtro de status só quando não é o padrão', () => {
+    expect(hrefAgenda({ dia: '2026-10-05', hoje: '2026-10-05', ver: 'pedidos' })).toBe('/agenda?ver=pedidos')
+    expect(hrefAgenda({ dia: '2026-10-05', hoje: '2026-10-05', ver: 'pedidos', status: ['novo', 'em_contato'] })).toBe('/agenda?ver=pedidos')
+    expect(hrefAgenda({ dia: '2026-10-05', hoje: '2026-10-05', unidade: U1, ver: 'pedidos', status: ['confirmado', 'novo'], pedido: 'p1' }))
+      .toBe(`/agenda?unidade=${U1}&ver=pedidos&status=novo%2Cconfirmado&pedido=p1`)
+    // no dia, o filtro de status não vai na URL
+    expect(hrefAgenda({ dia: '2026-10-05', hoje: '2026-10-05', ver: 'dia', status: ['confirmado'] })).toBe('/agenda')
+  })
+
+  it('filtro de status da lista: padrão novo + em contato; ignora lixo; alternar nunca deixa vazio', () => {
+    expect(statusDaFila(undefined)).toEqual(['novo', 'em_contato'])
+    expect(statusDaFila('confirmado,lixo,novo')).toEqual(['novo', 'confirmado'])
+    expect(statusDaFila('lixo')).toEqual(['novo', 'em_contato'])
+    expect(alternarStatus(['novo'], 'confirmado')).toEqual(['novo', 'confirmado'])
+    expect(alternarStatus(['novo', 'confirmado'], 'novo')).toEqual(['confirmado'])
+    expect(alternarStatus(['novo'], 'novo')).toEqual(['novo'])
+  })
+
+  it('endereço antigo (?aba, ?data) vira o novo preservando dia, unidade, cancelados, pedido e o filtro de status', () => {
     expect(hrefDaAgendaAntiga({})).toBeNull()
     expect(hrefDaAgendaAntiga({ dia: '2026-10-06', unidade: U1 })).toBeNull()
     expect(hrefDaAgendaAntiga({ aba: 'previsao' })).toBe('/agenda')
     expect(hrefDaAgendaAntiga({ aba: 'previsao', data: '2026-10-06', unidade: U1, cancelados: '1' }))
       .toBe(`/agenda?dia=2026-10-06&unidade=${U1}&cancelados=1`)
-    expect(hrefDaAgendaAntiga({ aba: 'eventos', unidade: U1, status: 'novo,confirmado' })).toBe(`/agenda?unidade=${U1}`)
+    // a aba Eventos antiga vira a lista de todos os pedidos, com o mesmo filtro de status
+    expect(hrefDaAgendaAntiga({ aba: 'eventos' })).toBe('/agenda?ver=pedidos')
+    expect(hrefDaAgendaAntiga({ aba: 'eventos', unidade: U1, status: 'novo,confirmado' })).toBe(`/agenda?unidade=${U1}&ver=pedidos&status=novo%2Cconfirmado`)
     expect(hrefDaAgendaAntiga({ data: '2026-10-06' })).toBe('/agenda?dia=2026-10-06')
     // data inválida não vai adiante; o dia novo vence o antigo
     expect(hrefDaAgendaAntiga({ aba: 'previsao', data: 'lixo' })).toBe('/agenda')
-    expect(hrefDaAgendaAntiga({ aba: 'eventos', dia: '2026-10-07', data: '2026-10-06', pedido: 'p1' })).toBe('/agenda?dia=2026-10-07&pedido=p1')
+    expect(hrefDaAgendaAntiga({ aba: 'eventos', dia: '2026-10-07', data: '2026-10-06', pedido: 'p1' })).toBe('/agenda?dia=2026-10-07&ver=pedidos&pedido=p1')
   })
 
   it('status dos pedidos: sem cancelados, só os que estão de pé; com cancelados, todos', () => {

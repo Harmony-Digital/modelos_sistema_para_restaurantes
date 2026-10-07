@@ -1,12 +1,12 @@
 'use client'
-import { CalendarCheck, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react'
+import { CalendarCheck, ChevronLeft, ChevronRight, PartyPopper, Plus, X } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { somarDias } from '@atd/core/s1'
 import { rotuloTipoEvento } from '@atd/core/s3'
-import type { AvisoPainel, PedidoPainel, PrevisaoUnidade } from '@atd/db'
+import type { AvisoPainel, PedidoPainel, PrevisaoUnidade, StatusPedido } from '@atd/db'
 import { cancelarAvisoAction, criarAvisoAction } from '@/app/(painel)/agenda/actions'
 import { EmptyState } from '@/components/shell/empty-state'
 import { Badge } from '@/components/ui/badge'
@@ -15,9 +15,11 @@ import { EtiquetaStatus } from '@/components/ui/etiqueta-status'
 import { Numero } from '@/components/ui/numero'
 import { chamarAcao } from '@/lib/action-result'
 import {
-  ehHorarioHHMM, hrefAgenda, horarioDoAviso, inicioDaAgenda, limiteDaAgenda, linhaDoTempo, pendentesForaDoDia, resumoDoDia, type ItemAgenda,
+  alternarStatus, ehHorarioHHMM, hrefAgenda, horarioDoAviso, inicioDaAgenda, limiteDaAgenda, linhaDoTempo, pendentesForaDoDia, resumoDoDia,
+  statusDaAgenda, type ItemAgenda, type VerAgenda,
 } from '@/lib/agenda'
-import { dataDoEvento, haQuanto, type MembroTela } from '@/lib/eventos'
+import { dataDoEvento, haQuanto, ROTULO_STATUS, type MembroTela } from '@/lib/eventos'
+import { STATUS_PEDIDO } from '@/lib/schemas/eventos'
 import { dataBr, limiteDaPrevisao, rotuloDoDia } from '@/lib/previsao'
 import { MIDIA_LG, useMidia } from '@/lib/use-midia'
 import { cn } from '@/lib/utils'
@@ -34,6 +36,10 @@ const linkClass =
 const desativado = 'inline-flex size-11 items-center justify-center rounded-md border border-input opacity-40'
 const textoLink = 'inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 [@media(hover:hover)]:hover:underline'
 const MAX_PENDENTES = 8
+const chip =
+  'inline-flex min-h-11 items-center whitespace-nowrap rounded-full border px-4 text-sm font-medium transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+const linhaPedidoClass =
+  'flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2 text-sm transition-colors duration-150 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring [@media(hover:hover)]:hover:bg-accent'
 
 const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`
 const pessoas = (n: number) => plural(n, 'pessoa', 'pessoas')
@@ -43,7 +49,11 @@ export function AgendaDia(props: {
   hoje: string
   /** Unidades ativas visíveis, com os avisos do dia (`previsaoDoDia`). */
   unidades: PrevisaoUnidade[]
-  /** Pedidos de evento visíveis (`listarPedidos`), de qualquer dia: os do dia entram na linha do tempo, os pendentes de outros dias vão para a lista ao lado. */
+  /**
+   * Pedidos de evento visíveis (`listarPedidos`), de qualquer dia e status: no dia, os do dia entram na linha do tempo
+   * (recusados e cancelados só com "mostrar cancelados") e os pendentes de outros dias vão para a lista abaixo; em
+   * "Todos os pedidos", os do filtro de status.
+   */
   pedidos: PedidoPainel[]
   /** Id da unidade escolhida (null = todas). */
   unidade: string | null
@@ -55,6 +65,12 @@ export function AgendaDia(props: {
   podeEditar: boolean
   /** Instante do carregamento ("há X horas" sem divergir na hidratação). */
   agora: Date
+  /** `dia`: linha do tempo do dia; `pedidos`: todos os pedidos de evento, com filtro de status (a aba Eventos antiga). */
+  ver: VerAgenda
+  /** Filtro de status da lista de todos os pedidos. */
+  status: StatusPedido[]
+  /** Pedidos novos visíveis (contador da alternância). */
+  novos: number
 }) {
   const router = useRouter()
   // lg (≥ 1024 px): o detalhe do pedido fica ao lado; abaixo, em folha. null até saber (evita abrir a folha e trocar).
@@ -67,27 +83,114 @@ export function AgendaDia(props: {
   const passado = props.dia < props.hoje
   // aviso pelo painel: de hoje a +30 (mesma regra do formulário e da IA)
   const podeAnotar = props.podeEditar && !passado && props.dia <= limiteDaPrevisao(props.hoje)
-  const href = (p: { dia?: string; unidade?: string | null; cancelados?: boolean; pedido?: string | null } = {}) =>
+  const href = (p: {
+    dia?: string; unidade?: string | null; cancelados?: boolean; pedido?: string | null; ver?: VerAgenda; status?: StatusPedido[]
+  } = {}) =>
     hrefAgenda({
       dia: p.dia ?? props.dia,
       hoje: props.hoje,
       unidade: p.unidade === undefined ? props.unidade : p.unidade,
       cancelados: p.cancelados ?? props.cancelados,
+      ver: p.ver ?? props.ver,
+      status: p.status ?? props.status,
       pedido: p.pedido === undefined ? null : p.pedido,
     })
   const anterior = props.dia > inicio ? somarDias(props.dia, -1) : null
   const proximo = props.dia < limite ? somarDias(props.dia, 1) : null
 
-  const itens = linhaDoTempo(props.unidades, props.pedidos, { dia: props.dia, unidade: props.unidade })
+  const doDia = statusDaAgenda(props.cancelados)
+  const itens = linhaDoTempo(props.unidades, props.pedidos.filter((p) => doDia.includes(p.status)), { dia: props.dia, unidade: props.unidade })
   const resumo = resumoDoDia(itens)
   const pendentes = pendentesForaDoDia(props.pedidos, props.dia)
+  const fila = props.pedidos.filter((p) => props.status.includes(p.status))
   const pedido = props.pedidoId ? (props.pedidos.find((p) => p.id === props.pedidoId) ?? null) : null
   const mostrarUnidade = props.unidade === null && props.unidades.length > 1
   const opcoes = props.unidades.map((u) => ({ id: u.unitId, nome: u.unidade }))
   const fecharPedido = () => router.push(href(), { scroll: false })
 
+  const secoes = (
+    <Abas
+      rotulo="Seções da agenda"
+      itens={[
+        { href: href({ ver: 'dia' }), rotulo: 'Dia', ativo: props.ver === 'dia' },
+        {
+          href: href({ ver: 'pedidos' }),
+          rotulo: props.novos > 0 ? `Todos os pedidos (${props.novos} ${props.novos === 1 ? 'novo' : 'novos'})` : 'Todos os pedidos',
+          ativo: props.ver === 'pedidos',
+        },
+      ]}
+    />
+  )
+  const filtroUnidade = props.unidades.length > 1 && (
+    <Abas
+      rotulo="Filtrar por unidade"
+      itens={[
+        { href: href({ unidade: null }), rotulo: 'Todas', ativo: props.unidade === null },
+        ...props.unidades.map((u) => ({ href: href({ unidade: u.unitId }), rotulo: u.unidade, ativo: props.unidade === u.unitId })),
+      ]}
+    />
+  )
+
+  const todos = (
+    <div className="flex min-w-0 flex-col gap-4">
+      {secoes}
+      <nav aria-label="Filtrar por status" className="-mx-4 overflow-x-auto px-4 lg:mx-0 lg:px-0">
+        <ul className="flex gap-2">
+          {STATUS_PEDIDO.map((s) => {
+            const on = props.status.includes(s)
+            return (
+              <li key={s}>
+                <Link
+                  href={href({ status: alternarStatus(props.status, s) })}
+                  aria-current={on ? 'true' : undefined}
+                  className={cn(chip, on ? 'border-transparent bg-secondary text-foreground' : 'border-border text-muted-foreground [@media(hover:hover)]:hover:text-foreground')}
+                >
+                  {ROTULO_STATUS[s]}
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
+      </nav>
+      {filtroUnidade}
+      {fila.length === 0 ? (
+        <EmptyState
+          icon={PartyPopper}
+          title="Nenhum pedido de evento com esse status"
+          description="Quando um cliente pedir um evento pelo WhatsApp, ele aparece nesta lista."
+        />
+      ) : (
+        <ul aria-label="Todos os pedidos de evento" className="flex flex-col overflow-hidden rounded-lg border border-border bg-card">
+          {fila.map((p) => (
+            <li key={p.id} className="border-b border-border last:border-b-0">
+              <Link
+                href={href({ pedido: p.id })}
+                scroll={false}
+                aria-current={p.id === pedido?.id ? 'true' : undefined}
+                className={cn(linhaPedidoClass, p.id === pedido?.id && 'bg-card shadow-[inset_3px_0_0_var(--primary)]')}
+              >
+                <span className="flex min-w-0 flex-col gap-0.5">
+                  <span className="break-words font-semibold text-foreground">{p.nome ?? 'Sem nome'}</span>
+                  <span className="text-muted-foreground">
+                    {dataDoEvento(p.data)} · {plural(p.convidados, 'convidado', 'convidados')} · {rotuloTipoEvento(p.tipo, p.tipoTexto)}
+                    {mostrarUnidade ? ` · ${p.unidade}` : ''}{p.espaco ? ` · ${p.espaco}` : ''} · {haQuanto(p.criadoEm, props.agora)}
+                  </span>
+                </span>
+                <span className="flex items-center gap-2">
+                  {p.simulado && <SeloSimulacao />}
+                  <SeloStatus status={p.status} />
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+
   const lista = (
     <div className="flex min-w-0 flex-col gap-4">
+      {secoes}
       <div className="flex items-center gap-2 lg:max-w-md">
         {anterior ? (
           <Link href={href({ dia: anterior })} aria-label="Dia anterior" className={linkClass}><ChevronLeft aria-hidden="true" className="size-5" /></Link>
@@ -126,15 +229,7 @@ export function AgendaDia(props: {
       </div>
       {passado && <p className="text-sm text-muted-foreground">Dia passado: só consulta.</p>}
 
-      {props.unidades.length > 1 && (
-        <Abas
-          rotulo="Filtrar por unidade"
-          itens={[
-            { href: href({ unidade: null }), rotulo: 'Todas', ativo: props.unidade === null },
-            ...props.unidades.map((u) => ({ href: href({ unidade: u.unitId }), rotulo: u.unidade, ativo: props.unidade === u.unitId })),
-          ]}
-        />
-      )}
+      {filtroUnidade}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         {podeAnotar && props.unidades.length > 0 ? (
@@ -180,7 +275,7 @@ export function AgendaDia(props: {
               <li key={p.id} className="border-b border-border last:border-b-0">
                 <Link
                   href={hrefAgenda({ dia: p.data, hoje: props.hoje, unidade: props.unidade, cancelados: props.cancelados, pedido: p.id })}
-                  className="flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2 text-sm transition-colors duration-150 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring [@media(hover:hover)]:hover:bg-accent"
+                  className={linhaPedidoClass}
                 >
                   <span className="min-w-0 break-words">
                     <span className="font-semibold text-foreground">{p.nome ?? 'Sem nome'}</span>
@@ -195,7 +290,9 @@ export function AgendaDia(props: {
             ))}
           </ul>
           {pendentes.length > MAX_PENDENTES && (
-            <p className="text-sm text-muted-foreground">E mais {pendentes.length - MAX_PENDENTES}: navegue pelos dias para ver todos.</p>
+            <Link href={href({ ver: 'pedidos', status: ['novo', 'em_contato'] })} className={textoLink}>
+              Ver todos os pedidos ({pendentes.length})
+            </Link>
           )}
         </section>
       )}
@@ -210,11 +307,12 @@ export function AgendaDia(props: {
   return (
     <>
       <div className={cn('flex flex-col gap-4', pedido && largo && 'lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(340px,400px)] lg:items-start lg:gap-6')}>
-        {lista}
+        {props.ver === 'pedidos' ? todos : lista}
         {pedido && largo === true && (
           <aside
             aria-labelledby="pedido-aberto"
-            className="sticky top-4 flex max-h-[calc(100dvh-6rem)] min-w-0 flex-col gap-4 overflow-y-auto rounded-lg border border-border bg-card p-4"
+            // abaixo da barra superior fixa (~57 px) ao rolar a página
+            className="sticky top-[4.5rem] flex max-h-[calc(100dvh-5.5rem)] min-w-0 flex-col gap-4 overflow-y-auto rounded-lg border border-border bg-card p-4"
           >
             <div className="flex items-start justify-between gap-2">
               <div className="flex flex-col gap-1">

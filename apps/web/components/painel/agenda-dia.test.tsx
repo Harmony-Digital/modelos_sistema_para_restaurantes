@@ -37,8 +37,9 @@ const unidades = [
 const base = {
   dia: '2026-10-05', hoje: '2026-10-05', unidades, pedidos: [pedido()], unidade: null as string | null, cancelados: false,
   pedidoId: null as string | null, membros: [{ id: M1, nome: 'Bia', todas: true, unidades: [] }], podeEditar: true,
-  agora: new Date('2026-10-05T15:00:00Z'),
+  agora: new Date('2026-10-05T15:00:00Z'), ver: 'dia' as 'dia' | 'pedidos', status: ['novo', 'em_contato'] as StatusPedidoTeste[], novos: 0,
 }
+type StatusPedidoTeste = 'novo' | 'em_contato' | 'confirmado' | 'recusado' | 'cancelado'
 const linhas = () => within(screen.getByRole('list', { name: 'Linha do tempo do dia' })).getAllByRole('listitem')
 
 const matchMediaOriginal = window.matchMedia
@@ -150,6 +151,74 @@ describe('AgendaDia: linha do tempo', () => {
   })
 })
 
+describe('AgendaDia: todos os pedidos', () => {
+  const fila = () => [
+    pedido({ id: 'a1', nome: 'Ana', data: '2026-10-20', status: 'novo' }),
+    pedido({ id: 'a2', nome: 'Beto', data: '2026-11-02', status: 'confirmado' }),
+    pedido({ id: 'a3', nome: 'Cida', data: '2026-09-01', status: 'recusado' }),
+    pedido({ id: 'a4', nome: 'Duda', data: '2026-12-01', status: 'em_contato' }),
+  ]
+
+  it('alternância Dia | Todos os pedidos com o contador de novos', () => {
+    render(<AgendaDia {...base} novos={3} />)
+    const secoes = screen.getByRole('navigation', { name: 'Seções da agenda' })
+    expect(within(secoes).getByRole('link', { name: 'Dia' })).toHaveAttribute('aria-current', 'page')
+    expect(within(secoes).getByRole('link', { name: 'Todos os pedidos (3 novos)' })).toHaveAttribute('href', '/agenda?ver=pedidos')
+  })
+
+  it('lista todos os pedidos do filtro (padrão: novo e em contato), de qualquer dia, sem a linha do tempo', () => {
+    render(<AgendaDia {...base} ver="pedidos" pedidos={fila()} novos={1} />)
+    expect(screen.queryByRole('list', { name: 'Linha do tempo do dia' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Escolher o dia')).not.toBeInTheDocument()
+    const lista = screen.getByRole('list', { name: 'Todos os pedidos de evento' })
+    const nomes = within(lista).getAllByRole('link').map((l) => l.textContent)
+    expect(nomes).toHaveLength(2)
+    expect(nomes[0]).toContain('Ana')
+    expect(nomes[1]).toContain('Duda')
+    // abre o pedido ao lado (lg) ou em folha, sem sair da lista
+    expect(within(lista).getByRole('link', { name: /Ana/ })).toHaveAttribute('href', '/agenda?ver=pedidos&pedido=a1')
+    expect(within(lista).getByRole('link', { name: /Ana/ })).toHaveTextContent('20/10/2026')
+  })
+
+  it('filtro de status: chips ligam e desligam pela URL; confirmados e recusados aparecem quando escolhidos', () => {
+    render(<AgendaDia {...base} ver="pedidos" pedidos={fila()} status={['confirmado', 'recusado']} />)
+    const filtro = screen.getByRole('navigation', { name: 'Filtrar por status' })
+    expect(within(filtro).getByRole('link', { name: 'Confirmado' })).toHaveAttribute('aria-current', 'true')
+    expect(within(filtro).getByRole('link', { name: 'Novo' })).not.toHaveAttribute('aria-current')
+    expect(within(filtro).getByRole('link', { name: 'Novo' })).toHaveAttribute('href', '/agenda?ver=pedidos&status=novo%2Cconfirmado%2Crecusado')
+    expect(within(filtro).getByRole('link', { name: 'Confirmado' })).toHaveAttribute('href', '/agenda?ver=pedidos&status=recusado')
+    const lista = screen.getByRole('list', { name: 'Todos os pedidos de evento' })
+    // na ordem em que a DAL entrega (a tela não reordena)
+    expect(within(lista).getAllByRole('link').map((l) => l.textContent)).toEqual([expect.stringContaining('Beto'), expect.stringContaining('Cida')])
+  })
+
+  it('nenhum pedido no filtro: estado vazio', () => {
+    render(<AgendaDia {...base} ver="pedidos" pedidos={fila()} status={['cancelado']} />)
+    expect(screen.getByText('Nenhum pedido de evento com esse status')).toBeInTheDocument()
+  })
+
+  it('no dia, mais de 8 pendentes em outros dias: link para a lista completa em vez de mandar navegar dia a dia', () => {
+    const muitos = Array.from({ length: 10 }, (_, i) => pedido({ id: `p${i}`, nome: `P${i}`, data: `2026-11-${String(i + 10)}` }))
+    render(<AgendaDia {...base} pedidos={muitos} />)
+    const secao = screen.getByRole('region', { name: 'Pedidos para responder em outros dias' })
+    expect(within(secao).getAllByRole('listitem')).toHaveLength(8)
+    expect(within(secao).getByRole('link', { name: 'Ver todos os pedidos (10)' })).toHaveAttribute('href', '/agenda?ver=pedidos')
+  })
+
+  it('no dia, sem "mostrar cancelados", o pedido recusado do dia fica fora da linha do tempo', () => {
+    render(<AgendaDia {...base} pedidos={[pedido(), pedido({ id: 'r1', nome: 'Recusado', status: 'recusado' })]} />)
+    expect(screen.queryByText('Recusado', { selector: 'span' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Caio/ })).toBeInTheDocument()
+  })
+
+  it('no desktop, o pedido aberto da lista fica ao lado dela', async () => {
+    comoDesktop()
+    render(<AgendaDia {...base} ver="pedidos" pedidos={fila()} pedidoId="a2" status={['confirmado']} />)
+    const lado = await screen.findByRole('complementary', { name: 'Pedido de evento' })
+    expect(within(lado).getByRole('link', { name: 'Fechar o pedido' })).toHaveAttribute('href', '/agenda?ver=pedidos&status=confirmado')
+  })
+})
+
 describe('AgendaDia: avisos', () => {
   it('atendente não vê Novo aviso nem Cancelar', () => {
     render(<AgendaDia {...base} podeEditar={false} />)
@@ -227,6 +296,8 @@ describe('AgendaDia: detalhe do pedido', () => {
     render(<AgendaDia {...base} pedidoId={P1} />)
     const lado = await screen.findByRole('complementary', { name: 'Pedido de evento' })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    // fixo ao rolar, abaixo da barra superior (sticky top-0, ~57 px), e não por baixo dela
+    expect(lado.className).toContain('top-[4.5rem]')
     const linha = screen.getByRole('link', { name: /Caio/ })
     expect(linha).toHaveAttribute('aria-current', 'true')
     // etiqueta de sucesso ("Confirmado") fica AA: linha aberta em fundo de cartão + barra laranja, nunca accent/muted

@@ -17,6 +17,8 @@ describe('AcoesBarra (barra superior no desktop)', () => {
     const busca = screen.getByRole('button', { name: /Busca rápida/ })
     expect(busca).toBeEnabled()
     expect(busca).toHaveAttribute('aria-keyshortcuts', 'Control+K Meta+K')
+    // alvo de toque ≥ 44 px (iPad em paisagem usa esta barra)
+    expect(busca.className.split(' ')).toContain('h-11')
     const ouvir = vi.fn()
     window.addEventListener(EVENTO_ABRIR_BUSCA, ouvir)
     fireEvent.click(busca)

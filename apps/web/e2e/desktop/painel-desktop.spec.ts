@@ -21,6 +21,10 @@ function triagem(mensagem: string): TriagemFalsa {
   if (m.startsWith('hoje vou')) {
     return { itens: [{ ...vazio, servico: 'aviso_presenca', tipo: 'registrar', data: 'hoje', pessoas: 6, horario: 'à noite' } as Item], fora_escopo: false }
   }
+  // sem unidade e com mais de 3 unidades: a resposta vem com a lista interativa "Ver unidades"
+  if (m.startsWith('está aberto')) {
+    return { itens: [{ ...vazio, unidade: null, servico: 'horario_unidades', tipo: 'aberto_agora' } as Item], fora_escopo: false }
+  }
   if (m.includes('aniversário para 30')) {
     return {
       itens: [{ ...vazio, servico: 'evento', tipo: 'pedido', data: 'amanhã', convidados: 30, tipoEvento: 'aniversário', espaco: null } as Item],
@@ -40,6 +44,8 @@ let worker: ChildProcess | undefined
 let falso: Awaited<ReturnType<typeof iniciarOpenRouterFalso>> | undefined
 let restaurantId = ''
 let unitId = ''
+/** Alerta de gasto inserido para o arquivo todo (faixa de alertas na barra): removido no afterAll se foi este teste que criou. */
+let alertaId: string | null = null
 
 test.beforeAll(async () => {
   const sql = getSql()
@@ -59,6 +65,18 @@ test.beforeAll(async () => {
     await sql`insert into unit_hours (restaurant_id, unit_id, weekday, turno, abre, fecha)
       values (${restaurantId}, ${unitId}, ${weekday}, 1, '00:00', '23:59')`
   }
+  // mais 3 unidades (nomes fora do padrão "Desk", para a busca rápida achar só a principal): pergunta sem unidade vira lista
+  for (const n of [1, 2, 3]) {
+    await sql`insert into units (restaurant_id, nome, slug, endereco)
+      values (${restaurantId}, ${`E2E Lista ${SUFIXO} ${n}`}, ${`e2e-lista-${SUFIXO}-${n}`}, 'Rua da Lista, 1')`
+  }
+  // faixa de alertas ativa em todas as telas deste arquivo (é o caso da demonstração: o limite da simulação estoura
+  // cedo): o layout tem de caber com ela. 80% do WhatsApp no mês: não muda orçamento nem modo econômico.
+  const [a] = await sql`insert into budget_alerts (restaurant_id, escopo, periodo, inicio_periodo, nivel)
+    select ${restaurantId}, 'whatsapp', 'mes', date_trunc('month', now() at time zone r.timezone)::date, 80
+      from restaurants r where r.id = ${restaurantId}
+    on conflict do nothing returning id`
+  alertaId = (a?.id as string | undefined) ?? null
   falso = await iniciarOpenRouterFalso(triagem)
   worker = await iniciarWorkerE2e(falso.url)
 })
@@ -67,6 +85,7 @@ test.afterAll(async () => {
   await pararWorkerE2e(worker)
   await falso?.fechar()
   const sql = getSql()
+  if (alertaId) await sql`delete from budget_alerts where id = ${alertaId}`
   // as outras specs contam com o isolamento: o modo volta a ficar desligado
   if (restaurantId) await sql`update restaurants set modo_demonstracao = false where id = ${restaurantId}`
   const doTeste = sql`split_part(cu.wa_id_hash, ':', 2) in (select id::text from auth.users where email like '%@teste.local')`
@@ -141,6 +160,19 @@ async function clicavel(alvo: Locator) {
   await alvo.click({ trial: true, timeout: 5_000 })
 }
 
+const faixa = (page: Page) => page.getByRole('region', { name: 'Alerta de gastos' }).locator('visible=true')
+
+/** Com a faixa de alertas na tela: a página não rola (só as colunas) e o Enviar está inteiro na janela. */
+async function compositorNaTela(page: Page, enviar: Locator) {
+  await expect(faixa(page)).toBeVisible()
+  await expect(enviar).toBeInViewport({ ratio: 1 })
+  const { altura, visivel } = await page.evaluate(() => ({
+    altura: document.documentElement.scrollHeight,
+    visivel: document.documentElement.clientHeight,
+  }))
+  expect(altura).toBeLessThanOrEqual(visivel)
+}
+
 test('menu lateral: navega pelas seções, marca a atual, recolhe e volta recolhido do cookie sem piscar', async ({ page, context }) => {
   await entrarComoGestor(page)
   await expect(menu(page)).toBeVisible()
@@ -203,7 +235,7 @@ test('Início: seis indicadores numa linha e as três colunas lado a lado; sem r
 
   const aguardando = page.getByRole('region', { name: 'Aguardando atendimento' })
   const agenda = page.getByRole('region', { name: 'Agenda de hoje' })
-  const alertas = page.getByRole('region', { name: 'Alertas' })
+  const alertas = page.getByRole('region', { name: 'Alertas', exact: true })
   await expect(aguardando).toBeVisible()
   await ladoALado(aguardando, agenda)
   await ladoALado(agenda, alertas)
@@ -246,7 +278,10 @@ test('Conversas lado a lado: a conversa chega na lista ao vivo, abre ao lado, as
   await detalhe.getByRole('button', { name: 'Assumir' }).click()
   await expect(page.getByText('Conversa assumida. Agora é com você.')).toBeVisible()
   await detalhe.getByRole('textbox', { name: 'Resposta' }).fill(RESPOSTA)
-  await detalhe.getByRole('region', { name: 'Responder' }).getByRole('button', { name: 'Enviar', exact: true }).click()
+  const enviar = detalhe.getByRole('region', { name: 'Responder' }).getByRole('button', { name: 'Enviar', exact: true })
+  // 1440×900 com a faixa de alertas: o compositor continua na tela, sem rolagem dupla
+  await compositorNaTela(page, enviar)
+  await enviar.click()
   await expect(page.getByRole('status').filter({ hasText: 'Enviado' })).toBeVisible()
   await expect
     .poll(async () => (await getSql()`select status_envio from messages
@@ -257,9 +292,10 @@ test('Conversas lado a lado: a conversa chega na lista ao vivo, abre ao lado, as
   await minimizado(page).getByRole('button', { name: 'Restaurar simulador' }).click()
   await expect(simulador(page).getByText(RESPOSTA)).toBeVisible({ timeout: 20_000 })
 
-  // fechar a conversa volta ao estado vazio, com a lista no lugar (≥ xl a pílula do painel aberto fica sobre o
-  // fechar da conversa: minimiza antes)
-  await simulador(page).getByRole('button', { name: 'Minimizar simulador' }).click()
+  // o painel aberto começa abaixo da faixa e do cabeçalho da conversa: "Fechar conversa" e "Ajustar limites" livres
+  await clicavel(faixa(page).getByRole('link', { name: 'Ajustar limites' }))
+  await clicavel(page.getByRole('link', { name: 'Fechar conversa' }))
+  // fechar a conversa volta ao estado vazio, com a lista no lugar
   await page.getByRole('link', { name: 'Fechar conversa' }).click()
   await expect(page).toHaveURL(/\/conversas(\?|$)/)
   await expect(page.getByRole('region', { name: 'Conversa aberta' })).toContainText('Escolha uma conversa')
@@ -354,6 +390,24 @@ test('simulador flutuante: não modal, minimiza, Shift+S restaura, Esc minimiza 
   await expect(simulador(page).getByRole('textbox', { name: 'Mensagem' })).toBeFocused()
   await expect(simulador(page).getByRole('textbox', { name: 'Mensagem' })).toHaveValue('rascunho')
 
+  // a lista interativa ("Ver unidades") abre dentro do celular, não no pé da janela
+  await simulador(page).getByRole('textbox', { name: 'Mensagem' }).fill('')
+  await perguntar(page, 'está aberto agora?')
+  const verUnidades = simulador(page).getByRole('button', { name: 'Ver unidades' }).last()
+  await expect(verUnidades).toBeVisible({ timeout: 20_000 })
+  await verUnidades.click()
+  const folhaLista = simulador(page).getByRole('dialog', { name: 'Ver unidades' })
+  await expect(folhaLista).toBeVisible()
+  const [caixaFolha, caixaCelular] = [await folhaLista.boundingBox(), await simulador(page).locator('[data-celular]').boundingBox()]
+  expect(caixaFolha!.x).toBeGreaterThanOrEqual(caixaCelular!.x - 1)
+  expect(caixaFolha!.x + caixaFolha!.width).toBeLessThanOrEqual(caixaCelular!.x + caixaCelular!.width + 1)
+  expect(caixaFolha!.y).toBeGreaterThanOrEqual(caixaCelular!.y - 1)
+  expect(caixaFolha!.y + caixaFolha!.height).toBeLessThanOrEqual(caixaCelular!.y + caixaCelular!.height + 1)
+  await folhaLista.getByRole('button', { name: 'Cancelar' }).click()
+  await expect(folhaLista).toHaveCount(0)
+
+  // Esc com o foco no painel minimiza
+  await simulador(page).getByRole('textbox', { name: 'Mensagem' }).focus()
   await page.keyboard.press('Escape')
   await expect(simulador(page)).toBeHidden()
   await expect(minimizado(page)).toBeVisible()
@@ -421,6 +475,8 @@ test.describe('1024×768 com o menu aberto', () => {
     await expect(page.getByText('Conversa assumida. Agora é com você.')).toBeVisible()
     const enviar = detalhe.getByRole('region', { name: 'Responder' }).getByRole('button', { name: 'Enviar', exact: true })
     await detalhe.getByRole('textbox', { name: 'Resposta' }).fill(RESPOSTA)
+    // 1024×768 com a faixa de alertas: o compositor continua na tela, sem rolagem dupla
+    await compositorNaTela(page, enviar)
 
     // aberto (< xl: compacto): Sair e Enviar continuam livres
     await page.getByRole('button', { name: 'Abrir simulador de WhatsApp' }).click()
@@ -453,6 +509,10 @@ test.describe('1024×768 com o menu aberto', () => {
     const caixaBarra = (await barra.boundingBox())!
     const pilula = simulador(page).getByRole('button', { name: 'Minimizar simulador' })
     expect((await pilula.boundingBox())!.y).toBeGreaterThanOrEqual(caixaBarra.y + caixaBarra.height)
+    // e abaixo da faixa de alertas
+    const caixaFaixa = (await faixa(page).boundingBox())!
+    expect((await pilula.boundingBox())!.y).toBeGreaterThanOrEqual(caixaFaixa.y + caixaFaixa.height)
+    await clicavel(faixa(page).getByRole('link', { name: 'Ajustar limites' }))
     const celular = simulador(page).getByRole('textbox', { name: 'Mensagem' })
     expect((await celular.boundingBox())!.y + (await celular.boundingBox())!.height).toBeLessThanOrEqual(768)
     await clicavel(sair)

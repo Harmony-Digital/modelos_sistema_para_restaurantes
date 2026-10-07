@@ -152,7 +152,8 @@ describe('SimulatorLauncher', () => {
   it('polling pausa com a aba escondida e volta quando ela fica visível', async () => {
     const acoes = acoesFalsas()
     await abrir(acoes)
-    await waitFor(() => expect(acoes.buscar).toHaveBeenCalled())
+    // primeira busca do polling: sob carga (testes em paralelo) passa de 1 s
+    await waitFor(() => expect(acoes.buscar).toHaveBeenCalled(), { timeout: 3000 })
     const escondida = (v: boolean) => {
       Object.defineProperty(document, 'hidden', { configurable: true, get: () => v })
       document.dispatchEvent(new Event('visibilitychange'))

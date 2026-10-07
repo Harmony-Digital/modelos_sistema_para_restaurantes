@@ -19,17 +19,47 @@ export function diaDaAgenda(param: string | undefined, hoje: DataIso): DataIso {
   return param < inicio ? inicio : param > limite ? limite : param
 }
 
+/** Visão da Agenda: o dia (linha do tempo) ou a lista de todos os pedidos de evento, com filtro de status. */
+export type VerAgenda = 'dia' | 'pedidos'
+
+/** Filtro padrão da lista de todos os pedidos: os que ainda pedem trabalho (como a aba Eventos antiga). */
+export const STATUS_FILA_PADRAO: readonly StatusPedido[] = ['novo', 'em_contato']
+
+/** `?status=novo,em_contato`: ignora valor desconhecido; ausente ou só lixo ⇒ padrão. */
+export function statusDaFila(param: string | undefined): StatusPedido[] {
+  if (param === undefined) return [...STATUS_FILA_PADRAO]
+  const pedidos = new Set(param.split(','))
+  const ok = STATUS_PEDIDO.filter((s) => pedidos.has(s))
+  return ok.length > 0 ? ok : [...STATUS_FILA_PADRAO]
+}
+
+/** Liga/desliga um status do filtro; nunca deixa o filtro vazio (o último não sai). */
+export function alternarStatus(atual: readonly StatusPedido[], s: StatusPedido): StatusPedido[] {
+  if (!atual.includes(s)) return STATUS_PEDIDO.filter((x) => x === s || atual.includes(x))
+  return atual.length === 1 ? [...atual] : atual.filter((x) => x !== s)
+}
+
+const ehPadrao = (status: readonly StatusPedido[]) =>
+  status.length === STATUS_FILA_PADRAO.length && STATUS_FILA_PADRAO.every((s) => status.includes(s))
+
 export function hrefAgenda(p: {
   dia: DataIso
   hoje: DataIso
   unidade?: string | null | undefined
   cancelados?: boolean | undefined
+  ver?: VerAgenda | undefined
+  /** Filtro de status da lista de todos os pedidos (só com `ver: 'pedidos'`). */
+  status?: readonly StatusPedido[] | undefined
   pedido?: string | null | undefined
 }): string {
   const q = new URLSearchParams()
   if (p.dia !== p.hoje) q.set('dia', p.dia)
   if (p.unidade) q.set('unidade', p.unidade)
   if (p.cancelados) q.set('cancelados', '1')
+  if (p.ver === 'pedidos') {
+    q.set('ver', 'pedidos')
+    if (p.status && !ehPadrao(p.status)) q.set('status', STATUS_PEDIDO.filter((s) => p.status!.includes(s)).join(','))
+  }
   if (p.pedido) q.set('pedido', p.pedido)
   const s = q.toString()
   return s ? `/agenda?${s}` : '/agenda'
@@ -43,11 +73,13 @@ export type BuscaAgenda = {
   cancelados?: string | undefined
   pedido?: string | undefined
   status?: string | undefined
+  ver?: string | undefined
 }
 
 /**
  * Endereços antigos (`/agenda?aba=previsao|eventos`, `?data=`, e o `/previsao`) → endereço novo, ou null quando já é
- * o novo. Preserva dia (o `dia` novo vence a `data` antiga), unidade, cancelados e pedido; o filtro de status some.
+ * o novo. Preserva dia (o `dia` novo vence a `data` antiga), unidade, cancelados e pedido; a aba Eventos vira a lista
+ * de todos os pedidos (`ver=pedidos`), com o mesmo filtro de status.
  */
 export function hrefDaAgendaAntiga(q: BuscaAgenda): string | null {
   if (q.aba === undefined && q.data === undefined) return null
@@ -56,6 +88,11 @@ export function hrefDaAgendaAntiga(q: BuscaAgenda): string | null {
   if (dia) p.set('dia', dia)
   if (q.unidade) p.set('unidade', q.unidade)
   if (q.cancelados === '1') p.set('cancelados', '1')
+  if (q.aba === 'eventos') {
+    p.set('ver', 'pedidos')
+    const status = statusDaFila(q.status)
+    if (!ehPadrao(status)) p.set('status', status.join(','))
+  }
   if (q.pedido) p.set('pedido', q.pedido)
   const s = p.toString()
   return s ? `/agenda?${s}` : '/agenda'

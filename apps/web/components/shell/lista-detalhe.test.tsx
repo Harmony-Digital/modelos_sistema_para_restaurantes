@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/app/(painel)/actions', () => ({ setTheme: vi.fn(), signOut: vi.fn() }))
 
+import { ShellProvider } from './acoes-barra'
 import { ListaDetalhe } from './lista-detalhe'
 import { TopBar } from './top-bar'
 
@@ -20,7 +21,30 @@ describe('ListaDetalhe (layout de Conversas e Unidades)', () => {
     const detalhe = screen.getByRole('region', { name: 'Detalhe' })
     expect(lista.parentElement).toBe(detalhe.parentElement)
     expect(lista.parentElement!.className).toMatch(/lg:flex/)
-    expect(lista.parentElement!.className).toMatch(/lg:h-\[calc\(100dvh/)
+    // altura pelo flex (barra + faixa + o resto), sem calc com a altura da barra fixa no código
+    expect(lista.parentElement!.className).not.toMatch(/calc\(/)
+    expect(lista.parentElement!.className.split(' ')).toEqual(expect.arrayContaining(['lg:min-h-0', 'lg:flex-1']))
+    const tela = lista.parentElement!.parentElement!
+    expect(tela.className.split(' ')).toEqual(expect.arrayContaining(['lg:flex', 'lg:h-dvh', 'lg:flex-col']))
+    expect(barra.parentElement).toBe(tela)
+    expect(barra.className.split(' ')).toContain('shrink-0')
+  })
+
+  it('lg+: a faixa de alertas fica entre a barra e as colunas, sem encolher, e as colunas ocupam só o resto', () => {
+    render(
+      <ShellProvider valor={{ tema: 'claro', papel: 'dono', faixa: <section aria-label="Alerta de gastos">alerta</section> }}>
+        <ListaDetalhe titulo="Conversas" lista={<section aria-label="Lista">lista</section>}>
+          <section aria-label="Detalhe">detalhe</section>
+        </ListaDetalhe>
+      </ShellProvider>,
+    )
+    const faixa = screen.getByRole('region', { name: 'Alerta de gastos' }).parentElement!
+    const colunas = screen.getByRole('region', { name: 'Lista' }).parentElement!
+    const tela = colunas.parentElement!
+    const filhos = [...tela.children]
+    expect(filhos.indexOf(faixa)).toBeGreaterThan(-1)
+    expect(filhos.indexOf(faixa)).toBeLessThan(filhos.indexOf(colunas))
+    expect(faixa.className.split(' ')).toContain('shrink-0')
   })
 
   it('TopBar aceita classe extra (some < lg ou ≥ lg conforme a coluna)', () => {

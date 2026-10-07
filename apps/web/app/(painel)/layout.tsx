@@ -45,7 +45,8 @@ export default async function PainelLayout({ children }: { children: React.React
     session.role === 'atendente' ? null : resumoGastosDoRequest(session.claims),
   ])
   const avisos = <Avisos aguardando={aguardando} topicos={acesso ? topicosInbox(acesso) : []} />
-  const faixa = gastos ? <FaixaAlertaGastos alertas={gastos.alertas} /> : null
+  // só com alerta: o AppShell reserva a altura da faixa para o simulador flutuante
+  const faixa = gastos && gastos.alertas.length > 0 ? <FaixaAlertaGastos alertas={gastos.alertas} /> : null
   // menu recolhido/aberto e tema lidos no servidor: a página já nasce no estado certo, sem piscar
   const jar = await cookies()
   return (

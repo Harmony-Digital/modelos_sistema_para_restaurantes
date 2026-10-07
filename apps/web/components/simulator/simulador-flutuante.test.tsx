@@ -37,11 +37,13 @@ function Montar() {
 const painel = () => screen.queryByRole('dialog', { name: 'Simulador de WhatsApp' })
 
 describe('SimuladorFlutuante', () => {
-  it('fica abaixo da barra superior e acima da borda de baixo; a área vazia não captura clique, só o painel', () => {
+  it('fica abaixo da barra, da faixa de alertas e do cabeçalho da coluna e acima da borda de baixo; a área vazia não captura clique, só o painel', () => {
     largura(true)
     render(<Montar />)
     const p = painel()!
-    expect(p.className).toMatch(/\btop-16\b/) // barra superior em lg: 56 px (min-h-14) + margem
+    // barra (56 px) + cabeçalho da conversa aberta (~73 px): a pílula não cobre o "Fechar conversa"; com a faixa de
+    // alertas, desce a altura dela (--faixa-alertas, posta pelo AppShell) e não cobre o "Ajustar limites"
+    expect(p.className).toContain('top-[calc(8.5rem_+_var(--faixa-alertas,0rem))]')
     // < xl (ex.: 1024×768 com o menu aberto) termina acima do compositor de Conversas: o Enviar fica livre
     expect(p.className).toMatch(/(^|\s)bottom-28(\s|$)/)
     expect(p.className).toMatch(/(^|\s)xl:bottom-4(\s|$)/)
@@ -55,10 +57,18 @@ describe('SimuladorFlutuante', () => {
     largura(true)
     render(<Montar />)
     const celular = painel()!.querySelector('[data-celular]')!
-    expect(celular.className).toContain('md:h-[min(760px,calc(100dvh-15rem))]')
-    expect(celular.className).toContain('xl:h-[min(760px,calc(100dvh-9rem))]')
+    expect(celular.className).toContain('md:h-[min(760px,calc(100dvh_-_19.5rem_-_var(--faixa-alertas,0rem)))]')
+    expect(celular.className).toContain('xl:h-[min(760px,calc(100dvh_-_13.5rem_-_var(--faixa-alertas,0rem)))]')
     expect(celular.className).toContain('md:w-[320px]')
     expect(celular.className).toContain('xl:w-[360px]')
+  })
+
+  it('o celular é o bloco de contenção das folhas fixas do chat (lista "Ver unidades" presa ao celular, não à janela)', () => {
+    largura(true)
+    render(<Montar />)
+    const celular = painel()!.querySelector('[data-celular]')!
+    // `transform` cria o bloco de contenção de `position: fixed` (a folha da lista usa fixed inset-x-0 bottom-0)
+    expect(celular.className).toContain('[transform:translateZ(0)]')
   })
 
   it('≥ xl: controles sempre ao lado do celular, sem botão para recolher', () => {

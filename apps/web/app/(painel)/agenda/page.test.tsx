@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const redirect = vi.hoisted(() => vi.fn((url: string) => { throw new Error(`NEXT_REDIRECT ${url}`) }))
 vi.mock('next/navigation', () => ({ redirect }))
-const db = vi.hoisted(() => ({ previsaoDoDia: vi.fn(), listarPedidos: vi.fn(), membrosDaEquipe: vi.fn() }))
+const db = vi.hoisted(() => ({ previsaoDoDia: vi.fn(), listarPedidos: vi.fn(), membrosDaEquipe: vi.fn(), contarPedidosNovos: vi.fn() }))
 vi.mock('@atd/db', () => db)
 const sessao = vi.hoisted(() => ({ role: 'gerente', claims: { sub: 'u' } }))
 vi.mock('@/lib/dal', () => ({ requireStaff: vi.fn(async () => sessao) }))
@@ -26,14 +26,23 @@ beforeEach(() => {
   db.previsaoDoDia.mockResolvedValue(unidades)
   db.listarPedidos.mockResolvedValue([{ id: 'p1' }])
   db.membrosDaEquipe.mockResolvedValue([])
+  db.contarPedidosNovos.mockResolvedValue(2)
 })
 
 describe('Agenda: página', () => {
-  it('junta avisos do dia e pedidos de evento da unidade escolhida', async () => {
+  it('junta avisos do dia e pedidos de evento (todos os status: a tela separa) da unidade escolhida, com o contador de novos', async () => {
     await abrir({ dia: '2026-12-20', unidade: U1, pedido: 'p1' })
     expect(db.previsaoDoDia).toHaveBeenCalledWith('db', sessao.claims, { data: '2026-12-20', incluirCancelados: false })
-    expect(db.listarPedidos).toHaveBeenCalledWith('db', sessao.claims, { status: ['novo', 'em_contato', 'confirmado'], unitId: U1 })
-    expect(agendaProps.atual).toMatchObject({ dia: '2026-12-20', unidade: U1, pedidoId: 'p1', cancelados: false, podeEditar: true, unidades, pedidos: [{ id: 'p1' }] })
+    expect(db.listarPedidos).toHaveBeenCalledWith('db', sessao.claims, { status: ['novo', 'em_contato', 'confirmado', 'recusado', 'cancelado'], unitId: U1 })
+    expect(agendaProps.atual).toMatchObject({
+      dia: '2026-12-20', unidade: U1, pedidoId: 'p1', cancelados: false, podeEditar: true, unidades, pedidos: [{ id: 'p1' }],
+      ver: 'dia', status: ['novo', 'em_contato'], novos: 2,
+    })
+  })
+
+  it('?ver=pedidos&status=…: a lista de todos os pedidos com o filtro de status da URL', async () => {
+    await abrir({ ver: 'pedidos', status: 'confirmado,lixo' })
+    expect(agendaProps.atual).toMatchObject({ ver: 'pedidos', status: ['confirmado'] })
   })
 
   it('unidade fora do alcance vira "todas"; cancelados busca todos os status; atendente não edita avisos', async () => {
@@ -48,7 +57,7 @@ describe('Agenda: página', () => {
     await expect(abrir({ aba: 'previsao', data: '2026-10-06', unidade: U1 })).rejects.toThrow('NEXT_REDIRECT')
     expect(redirect).toHaveBeenCalledWith(`/agenda?dia=2026-10-06&unidade=${U1}`)
     await expect(abrir({ aba: 'eventos', status: 'novo' })).rejects.toThrow('NEXT_REDIRECT')
-    expect(redirect).toHaveBeenLastCalledWith('/agenda')
+    expect(redirect).toHaveBeenLastCalledWith('/agenda?ver=pedidos&status=novo')
     expect(db.previsaoDoDia).not.toHaveBeenCalled()
   })
 

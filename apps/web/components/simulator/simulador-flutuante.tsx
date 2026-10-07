@@ -13,7 +13,9 @@ const BOTAO = 'flex size-11 items-center justify-center rounded-full text-muted-
 
 /**
  * Simulador flutuante (≥ lg): "celular" ancorado no canto direito, sobre a tela, sem bloquear o painel (não modal).
- * Fica entre a barra superior (top-16) e a borda de baixo (< xl, acima da faixa do compositor de Conversas, para o
+ * Começa abaixo da barra superior e do cabeçalho da coluna aberta (8,5rem; mais a faixa de alertas, quando houver, pela
+ * variável --faixa-alertas que o AppShell põe), para a pílula não cobrir "Fechar conversa" nem "Ajustar limites", e
+ * termina na borda de baixo (< xl, acima da faixa do compositor de Conversas, para o
  * Enviar continuar clicável com o painel aberto); a altura do celular cabe no que sobra e a área vazia
  * ao redor deixa o clique passar (pointer-events-none; só a pílula e o celular capturam).
  * ≥ xl: controles ao lado do celular. < xl (ex.: 1024 px com o menu aberto): compacto — celular mais estreito,
@@ -73,7 +75,7 @@ export default function SimuladorFlutuante(props: {
           e.preventDefault()
           props.onMinimizado(true)
         }}
-        className="pointer-events-none fixed bottom-28 right-4 top-16 z-40 flex flex-col items-end justify-end gap-2 xl:bottom-4"
+        className="pointer-events-none fixed bottom-28 right-4 top-[calc(8.5rem_+_var(--faixa-alertas,0rem))] z-40 flex flex-col items-end justify-end gap-2 xl:bottom-4"
       >
         <div className="pointer-events-auto flex shrink-0 items-center gap-1 rounded-full border border-border bg-background py-0.5 pl-4 pr-0.5 text-sm shadow-lg">
           <span className="mr-2 font-medium text-foreground">Simulador</span>
@@ -110,10 +112,15 @@ export default function SimuladorFlutuante(props: {
             {props.controles}
           </div>
           {/*
-            altura: 100dvh − top-16 (4rem) − pílula (~3,1rem) − gap (0,5rem) − fundo. ≥ xl o fundo é bottom-4 (1rem) ≈ 9rem;
-            < xl é bottom-28 (7rem) ≈ 15rem: o compositor de Conversas (sticky no pé, ~70 px) e o Enviar ficam livres
+            altura: 100dvh − topo (8,5rem + faixa) − pílula (~3,1rem) − gap (0,5rem) − fundo. ≥ xl o fundo é bottom-4 (1rem)
+            ≈ 13,5rem; < xl é bottom-28 (7rem) ≈ 19,5rem: o compositor de Conversas (sticky no pé, ~70 px) e o Enviar ficam
+            livres. transform: o celular é o bloco de contenção das folhas `fixed` do chat (lista "Ver unidades"), como o
+            DialogContent na folha < lg; sem ele a folha abriria no pé da janela, fora do celular.
           */}
-          <PhoneFrame data-celular="" className="md:h-[min(760px,calc(100dvh-15rem))] xl:h-[min(760px,calc(100dvh-9rem))] md:w-[320px] xl:w-[360px] md:rounded-[44px] md:border-[10px]">
+          <PhoneFrame
+            data-celular=""
+            className="[transform:translateZ(0)] md:h-[min(760px,calc(100dvh_-_19.5rem_-_var(--faixa-alertas,0rem)))] xl:h-[min(760px,calc(100dvh_-_13.5rem_-_var(--faixa-alertas,0rem)))] md:w-[320px] xl:w-[360px] md:rounded-[44px] md:border-[10px]"
+          >
             <WhatsAppChat restaurante={props.restaurante} mensagens={props.mensagens} digitando={props.digitando} onEnviar={props.onEnviar} onEscolher={props.onEscolher} />
           </PhoneFrame>
         </div>
