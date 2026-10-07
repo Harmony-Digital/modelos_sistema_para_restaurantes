@@ -1393,16 +1393,7 @@ exports[`evals S4 — camada 2 (resolução + composição, determinística) > m
 
 exports[`evals S4 — camada 2 (resolução + composição, determinística) > m09: vou na asa sul amanhã com 4 e quero ver o cardápio 1`] = `
 {
-  "acoesS2": [
-    {
-      "atualiza": false,
-      "data": "2026-10-06",
-      "horarioAprox": null,
-      "pessoas": 4,
-      "tipo": "registrar_aviso",
-      "unitId": "u-asa-sul",
-    },
-  ],
+  "acoesS2": [],
   "acoesS3": [],
   "acoesS4": [
     {
@@ -1416,12 +1407,30 @@ exports[`evals S4 — camada 2 (resolução + composição, determinística) > m
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarReserva": null,
-  "respondidos": 2,
-  "texto": "Anotado: Asa Sul, amanhã, 4 pessoas. Se mudar de ideia, é só me avisar.
+  "perguntarReserva": {
+    "campo": "horario",
+    "item": {
+      "consulta": null,
+      "convidados": null,
+      "data": "2026-10-06",
+      "espaco": null,
+      "horario": null,
+      "pessoas": 4,
+      "servico": "aviso_presenca",
+      "tag": null,
+      "tema": null,
+      "tipo": "registrar",
+      "tipoEvento": null,
+      "unidade": "Asa Sul",
+    },
+    "tentativasNumero": 0,
+    "unitId": "u-asa-sul",
+  },
+  "respondidos": 1,
+  "texto": "Aqui está o nosso cardápio.
 
-Aqui está o nosso cardápio.",
-  "validos": 2,
+Para que horas é a reserva?",
+  "validos": 1,
 }
 `;
 

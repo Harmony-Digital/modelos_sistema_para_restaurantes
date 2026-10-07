@@ -10,6 +10,7 @@ import type { SendResult } from '@atd/whatsapp'
 import { createLogger } from '../logger.ts'
 import { comMidiaProibida, storageProibido } from './midia-fake.ts'
 import { processConversation, type ProcessDeps } from './process-conversation.ts'
+import { comoV7 } from './triagem-falsa.ts'
 
 // defeitos simulados do core/leitura: pedidos de outro cliente; espaço atribuído à unidade errada
 const injecao = vi.hoisted(() => ({
@@ -40,7 +41,7 @@ const noopEnqueue: Enqueue = async () => undefined
 const log = createLogger('silent')
 const SEG_14H = new Date('2026-10-05T14:00:00-03:00')
 
-type Item = TriageV5['itens'][number]
+type Item = TriageV5['itens'][number] & { nome?: string | null; contato_ok?: boolean | null }
 const ev = (extra: Partial<Item> = {}): Item => ({
   servico: 'evento', tipo: 'pedido', unidade: null, data: null, tema: null, pessoas: null, horario: null,
   convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null, ...extra,
@@ -93,7 +94,7 @@ function fakeLlm(script: TriageV5[], aoChamar?: () => Promise<void>) {
       calls.push(p.user)
       if (aoChamar) await aoChamar()
       return {
-        ok: true as const, data: p.parse({ frustracao: false, ...script[Math.min(calls.length - 1, script.length - 1)] }), model: 'fake/m',
+        ok: true as const, data: p.parse(comoV7(script[Math.min(calls.length - 1, script.length - 1)]!)), model: 'fake/m',
         usage: { tokensIn: 100, tokensOut: 20, tokensCache: 0, costUsd: '0.000200' }, latencyMs: 10,
       }
     },
@@ -123,7 +124,7 @@ const acoesAudit = async () =>
     .filter((a) => a.acao.startsWith('evento.') || a.acao.startsWith('conversa.'))
 
 describe('S3 no worker', () => {
-  it('pedido completo numa mensagem ⇒ "Recebemos seu pedido…", linha novo, triage-v6 e audit_log', async () => {
+  it('pedido completo numa mensagem ⇒ "Recebemos seu pedido…", linha novo, triage-v7 e audit_log', async () => {
     const { restaurantId, ids } = await setup()
     const conv = await receive(restaurantId, 'quero fazer um aniversário pra 40 pessoas na asa sul dia 20/10')
     const { llm, calls } = fakeLlm([triagem(ev(COMPLETO))])
@@ -142,7 +143,7 @@ describe('S3 no worker', () => {
     })
     expect(p!.customerId).toBe((await conversa(conv)).customerId)
     const [run] = await db.select().from(schema.aiRuns)
-    expect(run).toMatchObject({ promptVersion: 'triage-v6', intent: 'evento:pedido', itensValidos: 1, itensRespondidos: 1 })
+    expect(run).toMatchObject({ promptVersion: 'triage-v7', intent: 'evento:pedido', itensValidos: 1, itensRespondidos: 1 })
     expect(await acoesAudit()).toEqual([{ acao: 'evento.pedido_criado', entidade: 'event_request', atorTipo: 'ia', entidadeId: p!.id }])
     expect((await conversa(conv)).pendente).toBeNull()
   })
@@ -456,10 +457,10 @@ describe('S3 no worker', () => {
     expect(calls[1]).not.toContain('<pergunta_pendente>')
   })
 
-  it('pendente de pessoas (S2) também vai à triagem v5 com a pergunta e o que já se sabe (horário normalizado)', async () => {
+  it('pendente da reserva (S2) também vai à triagem com a pergunta e o que já se sabe (horário normalizado)', async () => {
     const { restaurantId } = await setup()
     const conv = await receive(restaurantId, 'vou hoje lá pelas 20h')
-    const av = ev({ servico: 'aviso_presenca', tipo: 'registrar', horario: 'lá pelas 20h' })
+    const av = ev({ servico: 'aviso_presenca', tipo: 'registrar', data: 'hoje', horario: 'lá pelas 20h' })
     const { llm, calls } = fakeLlm([triagem(av), triagem(av)])
     const wa = fakeWa()
     await processConversation(deps(llm, wa), conv)
@@ -535,21 +536,25 @@ describe('S3 no worker — correções da homologação (Etapa 05)', () => {
 })
 
 describe('S3 no worker — pendências da Etapa 04 (Etapa 06)', () => {
-  it('pendência 2: "pessoas" + evento na mesma mensagem ⇒ depois das pessoas, pergunta o que falta do evento', async () => {
+  it('pendência 2: reserva + evento na mesma mensagem ⇒ terminada a reserva, pergunta o que falta do evento', async () => {
     const { restaurantId, ids } = await setup()
-    const conv = await receive(restaurantId, 'vou hoje na asa sul e quero fazer um aniversário lá dia 20/10')
-    const aviso = ev({ servico: 'aviso_presenca', tipo: 'registrar', unidade: 'asa sul', data: 'hoje' })
+    const conv = await receive(restaurantId, 'reserva hoje na asa sul às 20h em nome de Maria e quero fazer um aniversário lá dia 20/10')
+    const aviso = ev({ servico: 'aviso_presenca', tipo: 'registrar', unidade: 'asa sul', data: 'hoje', horario: '20h', nome: 'Maria' })
     const { llm, calls } = fakeLlm([triagem(aviso, ev({ unidade: 'asa sul', data: '20/10', tipoEvento: 'aniversário' }))])
     const wa = fakeWa()
     await processConversation(deps(llm, wa), conv)
     expect(ultimoTexto(wa)).toMatch(/Para quantas pessoas\?$/)
     expect((await conversa(conv)).pendente).toMatchObject({
-      tipo: 'pessoas', eventoAdiado: { campo: 'convidados', unitId: ids['Asa Sul'], texto: 'Para quantos convidados?' },
+      tipo: 'reserva', campo: 'pessoas', eventoAdiado: { campo: 'convidados', unitId: ids['Asa Sul'], texto: 'Para quantos convidados?' },
     })
 
     await receive(restaurantId, '4')
     await processConversation(deps(llm, wa), conv)
-    expect(calls).toHaveLength(1) // resposta de pessoas sem LLM
+    // a pergunta do evento continua guardada enquanto a reserva pergunta
+    expect((await conversa(conv)).pendente).toMatchObject({ tipo: 'reserva', campo: 'contato', eventoAdiado: { campo: 'convidados' } })
+    await receive(restaurantId, 'pode sim')
+    await processConversation(deps(llm, wa), conv)
+    expect(calls).toHaveLength(1) // respostas curtas sem LLM
     expect(ultimoTexto(wa)).toMatch(/4 pessoas[\s\S]*\n\nPara quantos convidados\?$/)
     expect(await db.select().from(schema.attendanceNotices)).toHaveLength(1)
     expect((await conversa(conv)).pendente).toMatchObject({
@@ -560,12 +565,16 @@ describe('S3 no worker — pendências da Etapa 04 (Etapa 06)', () => {
   it('pendência 2: adiada pela lista de unidade de outro item ⇒ retomada depois da escolha', async () => {
     const { restaurantId, ids } = await setup(4)
     const conv = await receive(restaurantId, 'vou sábado e quero um aniversário na asa sul dia 20/10')
-    const aviso = ev({ servico: 'aviso_presenca', tipo: 'registrar', data: 'sábado', pessoas: 4 })
+    const aviso = ev({ servico: 'aviso_presenca', tipo: 'registrar', data: 'sábado', pessoas: 4, horario: '13h', nome: 'Maria' })
     const { llm } = fakeLlm([triagem(aviso, ev({ unidade: 'asa sul', data: '20/10', tipoEvento: 'aniversário' }))])
     const wa = fakeWa()
     await processConversation(deps(llm, wa), conv)
     expect((await conversa(conv)).pendente).toMatchObject({ tipo: 'unidade', eventoAdiado: { campo: 'convidados' } })
     await receive(restaurantId, 'Lago Sul', ids['Lago Sul']!)
+    await processConversation(deps(llm, wa), conv)
+    // a reserva pergunta o contato (um dado por vez); depois dela, a pergunta do evento
+    expect(ultimoTexto(wa)).toBe('Posso usar este número do WhatsApp para falar com você sobre a reserva?')
+    await receive(restaurantId, 'sim')
     await processConversation(deps(llm, wa), conv)
     expect(ultimoTexto(wa)).toMatch(/\n\nPara quantos convidados\?$/)
     expect((await conversa(conv)).pendente).toMatchObject({ tipo: 'pedido_evento', campo: 'convidados', unitId: ids['Asa Sul'] })

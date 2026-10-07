@@ -1,11 +1,12 @@
 /**
- * Evals S3 — camada 1: extração de pedidos de evento e respostas a pergunta pendente (padrão triage-v6) com modelo real via OpenRouter ou OpenAI (--provider ou AI_PROVIDER; padrão openrouter).
- * Uso: pnpm --filter @atd/ai eval:s3 [--modelos a,b,c] [--provider openrouter|openai] [--teto 0.50] [--triagem v6|v5|v4] (padrão v6)
+ * Evals S3 — camada 1: extração de pedidos de evento e respostas a pergunta pendente (padrão triage-v7) com modelo real via OpenRouter ou OpenAI (--provider ou AI_PROVIDER; padrão openrouter).
+ * Uso: pnpm --filter @atd/ai eval:s3 [--modelos a,b,c] [--provider openrouter|openai] [--teto 0.50] [--triagem v7|v6|v5|v4] (padrão v7)
  * Custo real, com teto por execução. Grava o relatório em evals/s3/resultados/AAAA-MM-DD-extracao.md.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
-import { triageV4, triageV5, triageV6 } from '../../src/triage.ts'
+import { triageV4, triageV5, triageV6, triageV7 } from '../../src/triage.ts'
+import { gabaritoDa } from '../s2/reserva.ts'
 import { lerTriagem } from '../triagem.ts'
 import { custoDaChamada } from '../s1/custo.ts'
 import { FRASES } from './casos.ts'
@@ -14,9 +15,9 @@ import { CONTEXTO, ESPACOS } from './fixture.ts'
 import { clienteDoEval } from '../provedor.ts'
 
 const { values } = parseArgs({ options: { modelos: { type: 'string' }, provider: { type: 'string' }, triagem: { type: 'string' }, teto: { type: 'string', default: '0.50' }, 'max-chamadas': { type: 'string', default: '500' } } })
-/** padrão v6 (produção); --triagem v5|v4 mede as versões anteriores */
+/** padrão v7 (produção); --triagem v6|v5|v4 mede as versões anteriores */
 const triagem = lerTriagem(values.triagem, 'v4')
-const extrair = triagem === 'v6' ? triageV6 : triagem === 'v5' ? triageV5 : triageV4
+const extrair = triagem === 'v7' ? triageV7 : triagem === 'v6' ? triageV6 : triagem === 'v5' ? triageV5 : triageV4
 const modelos = (values.modelos ?? process.env.AI_TRIAGE_MODELS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
 if (modelos.length === 0) throw new Error('Informe --modelos ou AI_TRIAGE_MODELS')
 const teto = Number(values.teto)
@@ -60,7 +61,7 @@ for (const modelo of modelos) {
       erros.push(`- ${caso.id}: falha da chamada (${r.error})`)
       continue
     }
-    if (extracaoCorretaS3(caso.itens, r.data.itens, CONTEXTO, new Date(caso.agora), ESPACOS)) acertos++
+    if (extracaoCorretaS3(gabaritoDa(triagem, caso.id, caso.itens), r.data.itens, CONTEXTO, new Date(caso.agora), ESPACOS)) acertos++
     else erros.push(`- ${caso.id} "${caso.mensagem}": ${JSON.stringify(r.data.itens)}`)
   }
   if (feitos < FRASES.length || (100 * acertos) / Math.max(feitos, 1) < META) {

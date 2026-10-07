@@ -24,8 +24,9 @@ export type VagasUnidade = { ocupadas: number; capacidade: number | null }
 export type RespostaNumero = { valor: string | null; tentativas: number }
 
 /**
- * O que a reserva precisa além do S1. Sem ele, o S2 segue o aviso de presença antigo (worker anterior à reserva).
- * `vagas`: por dia e unidade; dia ou unidade ausente = sem limite conhecido (o banco confere de novo no commit).
+ * O que a reserva precisa além do S1 (o worker sempre passa; sem ele, os evals e testes resolvem sem lotação conhecida
+ * e sem regras). `vagas`: por dia e unidade; dia ou unidade ausente = sem limite conhecido (o banco confere de novo no
+ * commit).
  */
 export type ContextoReserva = {
   vagas: ReadonlyMap<DataIso, ReadonlyMap<string, VagasUnidade>>
@@ -66,15 +67,13 @@ export type AcaoS2 =
     tipo: 'registrar'; unitId: string; data: DataIso; pessoas: number; horario: string; nome: string; contato: ContatoReserva
     atualiza: boolean; reservaId?: string; texto: string; textoSeLotado: string
   }
-  /** Aviso de presença antigo (sem `ContextoReserva`); sai com a troca do worker para a reserva. */
-  | { tipo: 'registrar_aviso'; unitId: string; data: DataIso; pessoas: number; horarioAprox: string | null; atualiza: boolean }
   /** `texto` é o trecho da resposta; se o banco não cancelar (corrida), o worker o troca por `textoSeFalhar`. */
   | { tipo: 'cancelar'; avisoId: string; texto: string; textoSeFalhar: string }
 
 export type ResultadoS2 = {
   texto: string | null
   acoes: AcaoS2[]
-  /** reserva esperando um campo (no aviso antigo, só `pessoas`) */
+  /** reserva esperando um campo */
   perguntarReserva: PerguntaReserva | null
   /** itens S2 que esperam a escolha da unidade na lista do S1 */
   pendenteUnidade: ItemExtraido[]

@@ -1,22 +1,24 @@
 import { and, asc, count, eq, gt, gte, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import {
-  agoraLocal, encontrarUnidade, escolhaDeUnidade, ESPACO_QUALQUER, itemDoPedidoNaUnidade, normalizarHorario, normalizeText, lerPessoas,
-  MAX_PESSOAS, normalizarTipoEvento, prefilter, redactPii, temAgradecimentoOuDespedida, renderModelo, renderReply, resolverAtendimento, resolverS4, retomarPerguntaEvento,
+  agoraLocal, capturarTelefone, continuarReserva, decryptPhone, diasDaReserva, encontrarUnidade, encryptPhone, escolhaDeUnidade,
+  ESPACO_QUALQUER, itemDoPedidoNaUnidade, MAX_NOME_RESERVA, normalizarHorario, normalizeText, normalizeWaId, lerPessoas,
+  normalizarTipoEvento, prefilter, redactPii, temAgradecimentoOuDespedida, renderModelo, renderReply, resolverAtendimento, resolverS4, retomarPerguntaEvento,
   rotuloTipoEvento, SERVICOS, TAGS_CARDAPIO, TIPOS_S1, TIPOS_S2, TIPOS_S3, TIPOS_S4, unidadesOrdenadas, validarModelo,
-  type AcaoS2, type AcaoS3, type AcaoS4, type ChaveModelo, type ContextoAtendimentoS4, type ContextoS1, type InboundItem, type ItemExtraido,
-  type UnidadeS1, type Lacuna, type ListaUnidades, type Localizacao, type ReplyKey, type ResultadoAtendimento,
+  type AcaoS2, type AcaoS3, type AcaoS4, type ChaveModelo, type ContextoAtendimentoS4, type ContextoReserva, type ContextoS1,
+  type InboundItem, type ItemExtraido, type PerguntaReserva, type RespostaNumero, type UnidadeS1, type Lacuna, type ListaUnidades,
+  type Localizacao, type ReplyKey, type ResultadoAtendimento, type VagasUnidade,
 } from '@atd/core'
 import { horarioHumanoSchema, proximoHorarioHumano, textoProximoHorario, type HandoffMotivo } from '@atd/core/conversa'
 import {
   arquivoParaEnvio, avisosAtivosDoCliente, buscarCardapio, cancelarAvisoDoCliente, cancelarPedidoDoCliente, statusPedidoDoCliente,
-  carregarContextoS1, espacosAtivos, observarPedidoDoCliente, pedidosDoCliente, registrarAviso,
+  carregarContextoS1, espacosAtivos, observarPedidoDoCliente, ocupacaoDoDia, pedidosDoCliente, registrarReserva,
   registrarLacunas, registrarPedidoEvento, releaseBudget, reserveBudget, resumoCardapio, schema, settleBudget, type ArquivoCardapio,
   type Db, type ItemEncontrado, type Reservation, type ResumoCardapioDb, type Tx,
 } from '@atd/db'
 import {
-  TRIAGE_BUDGET_ESTIMATE_USD, TRIAGE_V6_PROMPT_VERSION, triageV6, type JsonCallResult, type LlmClient, type PendenteTriagem,
-  type TriageV6,
+  TRIAGE_BUDGET_ESTIMATE_USD, TRIAGE_V7_PROMPT_VERSION, triageV7, type JsonCallResult, type LlmClient, type PendenteTriagem,
+  type TriageV7,
 } from '@atd/ai'
 import { deliver, type DeliverDeps } from './deliver.ts'
 
@@ -65,6 +67,9 @@ const itemSchema = z.object({
   // cardápio (Etapa 05): idem
   consulta: z.string().max(120).nullable().default(null),
   tag: z.enum(TAGS_CARDAPIO).nullable().default(null),
+  // reserva (triage-v7): nome limpo pelo core e a resposta ao "pode usar este WhatsApp?". O número nunca fica aqui.
+  nome: z.string().max(MAX_NOME_RESERVA).nullable().default(null),
+  contato_ok: z.boolean().nullable().default(null),
 })
 // pergunta do pedido de evento escondida por outra pergunta (pessoas ou lista): feita depois da resposta (pendência 2)
 const eventoAdiadoSchema = z.object({
@@ -73,7 +78,7 @@ const eventoAdiadoSchema = z.object({
   unitId: z.string().nullable(),
   texto: z.string().max(MAX_PERGUNTA_ENVIADA),
 })
-// Em `unidade` e `pessoas`, `pergunta` é a mensagem do cliente (mascarada, para as lacunas) e `perguntaEnviada` é o
+// Em `unidade` e `reserva`, `pergunta` é a mensagem do cliente (mascarada, para as lacunas) e `perguntaEnviada` é o
 // texto nosso que espera a resposta (contexto da triagem; vazio em pendentes antigos).
 // pendente antigo (sem `tipo`) é lido como 'unidade'
 const pendenteUnidadeSchema = z.object({
@@ -85,7 +90,25 @@ const pendenteUnidadeSchema = z.object({
   expiraEm: z.iso.datetime(),
   eventoAdiado: eventoAdiadoSchema.optional(),
 })
-const pendentePessoasSchema = z.object({
+/**
+ * Reserva esperando um campo (um por vez) ou depois do lotado (`lotado`: "e no domingo?" continua daqui). `item` traz o
+ * que o core já validou (nome limpo incluso); `tentativasNumero`: números inválidos já recebidos. O número de contato
+ * nunca entra aqui: ele é capturado do texto bruto na resposta e vai cifrado na ação.
+ */
+const pendenteReservaSchema = z.object({
+  tipo: z.literal('reserva'),
+  campo: z.enum(['data', 'pessoas', 'horario', 'nome', 'contato', 'contato_numero', 'lotado']),
+  pergunta: z.string().max(300).default(''),
+  perguntaEnviada: z.string().max(MAX_PERGUNTA_ENVIADA).default(''),
+  item: itemSchema,
+  unitId: z.string().nullable(),
+  tentativasNumero: z.number().int().min(0).max(1).default(0),
+  expiraEm: z.iso.datetime(),
+  eventoAdiado: eventoAdiadoSchema.optional(),
+})
+// "Para quantas pessoas?" do aviso de presença antigo (gravado antes da reserva, em conversa em andamento): lido como a
+// reserva esperando as pessoas. Nunca é gravado de novo.
+const pendentePessoasAntigoSchema = z.object({
   tipo: z.literal('pessoas'),
   pergunta: z.string().max(300).default(''),
   perguntaEnviada: z.string().max(MAX_PERGUNTA_ENVIADA).default(''),
@@ -93,7 +116,7 @@ const pendentePessoasSchema = z.object({
   unitId: z.string(),
   expiraEm: z.iso.datetime(),
   eventoAdiado: eventoAdiadoSchema.optional(),
-})
+}).transform((p) => ({ ...p, tipo: 'reserva' as const, campo: 'pessoas' as const, tentativasNumero: 0 }))
 // coleta guiada do pedido de evento (Etapa 04): `pergunta` é o texto nosso; `item` traz o que o core já validou
 const pendentePedidoEventoSchema = z.object({
   tipo: z.literal('pedido_evento'),
@@ -103,8 +126,12 @@ const pendentePedidoEventoSchema = z.object({
   unitId: z.string().nullable().default(null),
   expiraEm: z.iso.datetime(),
 })
-const pendenteSchema = z.union([pendentePessoasSchema, pendentePedidoEventoSchema, pendenteUnidadeSchema])
+const pendenteSchema = z.union([pendenteReservaSchema, pendentePessoasAntigoSchema, pendentePedidoEventoSchema, pendenteUnidadeSchema])
 type Pendente = z.infer<typeof pendenteSchema>
+/** O que gravamos (o lido pode ter campos que só o Zod completa, como `nome` em pendentes antigos). */
+type PendenteGravado = z.input<typeof pendenteSchema>
+type PendenteReserva = Extract<Pendente, { tipo: 'reserva' }>
+type ReservaGravada = Extract<PendenteGravado, { tipo: 'reserva' }>
 const interativoSchema = z.object({ interativoId: z.string() })
 
 const PENDENTE_MIN = 30
@@ -135,11 +162,13 @@ type Decision = {
   saidas?: Saida[]
   lacunas?: Lacuna[]
   pergunta?: string
-  avisos?: AcaoS2[]
+  avisos?: AcaoReserva[]
   acoesS3?: AcaoS3[]
+  /** mensagens do cliente com o número de contato: guardadas mascaradas (o número fica só cifrado na reserva) */
+  mascarar?: { id: number; texto: string }[]
   contagem?: { validos: number; respondidos: number }
   /** undefined = não mexe; null = limpa; objeto = grava */
-  pendente?: Pendente | null
+  pendente?: PendenteGravado | null
   /** unidade resolvida nesta resposta (`unidade_contexto_id`); ausente = mantém a anterior */
   unidadeId?: string | undefined
 }
@@ -260,8 +289,8 @@ async function classify(deps: ProcessDeps, ctx: Ctx, pending: Pending[], now: Da
   if (pre.kind === 'pass') {
     const daLista = await respostaDaLista(deps, ctx, pending, now)
     if (daLista) return daLista
-    const pessoas = await respostaDePessoas(deps, ctx, pending, now)
-    if (pessoas) return pessoas
+    const daReserva = await respostaCurtaDaReserva(deps, ctx, pending, now)
+    if (daReserva) return daReserva
   }
   switch (pre.kind) {
     case 'handoff':
@@ -274,7 +303,7 @@ async function classify(deps: ProcessDeps, ctx: Ctx, pending: Pending[], now: Da
     case 'unsupported_media':
       return { replies: ['midiaNaoSuportada'], autor: 'sistema' }
     case 'pass':
-      return triageDecision(deps, ctx, pre.text, now)
+      return triageDecision(deps, ctx, pre.text, pending, now)
   }
 }
 
@@ -408,7 +437,25 @@ function midiasS4(acoes: readonly AcaoS4[], dados: DadosS4 | undefined, s1: Cont
   })
 }
 
-/** Resolve S1–S4 da mesma mensagem (lê o cardápio antes, se houver item de cardápio). */
+/**
+ * Ação da reserva como o worker a executa no commit: o contato já cifrado (`undefined` = mantém o da reserva; null = o
+ * próprio WhatsApp) — o número em claro não passa daqui. `seLotado`: pendente gravado quando o banco recusa por
+ * lotação (corrida), para "e no domingo?" continuar; `textoSeIndisponivel`: a reserva mudou de estado no meio.
+ */
+type AcaoReserva =
+  | Exclude<AcaoS2, { tipo: 'registrar' }>
+  | (Omit<Extract<AcaoS2, { tipo: 'registrar' }>, 'contato'> & {
+    contatoCifrado: string | null | undefined
+    seLotado: ReservaGravada
+    textoSeIndisponivel: string
+  })
+
+/** O que a mensagem responde da reserva pendente: a pergunta e o número capturado do texto bruto. */
+type RespostaDaReserva = { pergunta?: PerguntaReserva; numero?: RespostaNumero }
+
+type Atendido = { r: ResultadoAtendimento; midias: Saida[]; unidadeId: string | undefined; avisos: AcaoReserva[] }
+
+/** Resolve S1–S4 da mesma mensagem (lê o cardápio e a ocupação dos dias da reserva antes). */
 async function atender(
   deps: ProcessDeps,
   ctx: Ctx,
@@ -416,15 +463,56 @@ async function atender(
   itens: readonly ItemExtraido[],
   now: Date,
   escolhidaId: string | undefined,
-): Promise<{ r: ResultadoAtendimento; midias: Saida[]; unidadeId: string | undefined }> {
+  resposta: RespostaDaReserva = {},
+): Promise<Atendido> {
   const s4 = await carregarS4(deps, ctx, itens, s1, escolhidaId)
-  const r = resolverAtendimento(itens, s1, now, avisos, escolhidaId, s3, s4?.contexto)
-  return { r, midias: midiasS4(r.acoesS4, s4, s1), unidadeId: unidadeDaResposta(r, itens, s1.unidades, escolhidaId) }
+  const reserva = await contextoReserva(deps, ctx, itens, s1, avisos, now, resposta)
+  const r = resolverAtendimento(itens, s1, now, avisos, escolhidaId, s3, s4?.contexto, reserva)
+  return {
+    r, midias: midiasS4(r.acoesS4, s4, s1), unidadeId: unidadeDaResposta(r, itens, s1.unidades, escolhidaId),
+    avisos: r.acoesS2.map((a) => acaoDoWorker(a, deps.phoneKey, s1, now)),
+  }
+}
+
+/**
+ * Lotação dos dias citados nas reservas da mensagem, de todas as unidades ativas (a oferta de lotado cita outras
+ * unidades com vaga), com o mesmo `simulado` da conversa. Leitura sem trava: o commit confere de novo.
+ */
+async function contextoReserva(
+  deps: ProcessDeps,
+  ctx: Ctx,
+  itens: readonly ItemExtraido[],
+  s1: ContextoS1,
+  avisos: Atendimento['avisos'],
+  now: Date,
+  resposta: RespostaDaReserva,
+): Promise<ContextoReserva> {
+  const vagas = new Map<string, ReadonlyMap<string, VagasUnidade>>()
+  for (const dia of diasDaReserva(itens, s1, now, avisos)) {
+    vagas.set(dia, await ocupacaoDoDia(deps.db, ctx.restaurant.id, dia, ctx.conv.simulada))
+  }
+  return {
+    vagas, regras: ctx.restaurant.regrasReserva, pergunta: resposta.pergunta ?? null, ...(resposta.numero ? { numero: resposta.numero } : {}),
+  }
+}
+
+/** Cifra o contato informado (o número em claro não sai daqui) e prepara as respostas do commit para a reserva. */
+function acaoDoWorker(a: AcaoS2, phoneKey: Buffer, s1: ContextoS1, now: Date): AcaoReserva {
+  if (a.tipo !== 'registrar') return a
+  const { contato, ...resto } = a
+  const contatoCifrado = contato === 'manter' ? undefined : contato === 'whatsapp' ? null : encryptPhone(contato.numero, phoneKey)
+  const unidade = s1.unidades.find((u) => u.id === a.unitId)?.nome ?? null
+  const item = { ...ITEM_RESERVA, unidade, data: a.data, pessoas: a.pessoas, horario: a.horario, nome: a.nome }
+  const seLotado: ReservaGravada = {
+    tipo: 'reserva', campo: 'lotado', pergunta: '', perguntaEnviada: a.textoSeLotado.slice(0, MAX_PERGUNTA_ENVIADA), item, unitId: null,
+    tentativasNumero: 0, expiraEm: new Date(now.getTime() + PENDENTE_MIN * 60_000).toISOString(),
+  }
+  return { ...resto, contatoCifrado, seLotado, textoSeIndisponivel: renderModelo('reserva_indisponivel', {}, s1.modelos) }
 }
 
 /**
  * Unidade de contexto da conversa (`unidade_contexto_id`, visibilidade na inbox): a escolhida na lista, a dos pendentes
- * (pessoas, evento), a das ações (aviso, pedido de evento, cardápio) ou a citada num item — sempre uma unidade ativa.
+ * (reserva, evento), a das ações (reserva, pedido de evento, cardápio) ou a citada num item — sempre uma unidade ativa.
  * Restaurante de uma unidade só: a dela, se algo foi atendido. Nenhuma ⇒ mantém a anterior.
  */
 function unidadeDaResposta(
@@ -474,7 +562,8 @@ function pendenteDaTriagem(p: Pendente | null, now: Date): PendenteTriagem | nul
   if (!p || new Date(p.expiraEm) <= now) return null
   if (p.tipo === 'pedido_evento') return { pergunta: p.pergunta, conhecido: conhecidoDe(p.item, true) }
   if (!p.perguntaEnviada) return null
-  if (p.tipo === 'pessoas') return { pergunta: p.perguntaEnviada, conhecido: conhecidoDe(p.item, true) }
+  // o nome guardado não vai ao modelo (a continuação o recupera do pendente)
+  if (p.tipo === 'reserva') return { pergunta: p.perguntaEnviada, conhecido: conhecidoDe(p.item, true) }
   return { pergunta: p.perguntaEnviada, conhecido: conhecidoDe(p.itens[0]!, false) }
 }
 
@@ -542,13 +631,13 @@ async function respostaDaLista(deps: ProcessDeps, ctx: Ctx, pending: Pending[], 
   const escolhida = idLista ? opcoes.find((u) => u.id === idLista) : escolhaDeUnidade(texto, opcoes)
   if (!escolhida) return null
   // o pedido de evento sem unidade segue a coleta: a decisão guarda o pendente do próximo campo
-  const { r, midias, unidadeId } = await atender(deps, ctx, atendimento, p.itens, now, escolhida.id)
+  const a = await atender(deps, ctx, atendimento, p.itens.map(semContatoOk), now, escolhida.id)
   const run: AiRunRow = {
     etapa: 'resposta', modelo: 'deterministico', promptVersion: 's1-lista', costUsd: '0', intent: 'escolha_unidade', resultado: 'ok',
   }
-  // o pendente da decisão vale: o aviso escolhido sem pessoas passa a esperar "Para quantas pessoas?"; a pergunta do
-  // evento escondida pela lista sai agora (pendência 2)
-  return { ...decisaoAtendimento(retomarPerguntaEvento(r, p.eventoAdiado), now, p.pergunta, midias), unidadeId, runs: [run] }
+  // o pendente da decisão vale: a reserva escolhida passa a esperar o próximo campo; a pergunta do evento escondida
+  // pela lista sai agora (pendência 2)
+  return { ...decisaoDe(a, now, p.pergunta, p.eventoAdiado), runs: [run] }
 }
 
 type PendentePedidoEvento = Extract<Pendente, { tipo: 'pedido_evento' }>
@@ -565,30 +654,149 @@ async function escolhaParaPedidoEvento(
   const unidade = atendimento.s1.unidades.find((u) => u.id === idLista)
   if (!unidade) return null
   const item = itemDoPedidoNaUnidade({ campo: p.campo, item: p.item, unitId: p.unitId }, unidade)
-  const { r, midias, unidadeId } = await atender(deps, ctx, atendimento, [item], now, unidade.id)
+  const a = await atender(deps, ctx, atendimento, [item], now, unidade.id)
   const run: AiRunRow = {
     etapa: 'resposta', modelo: 'deterministico', promptVersion: 's1-lista', costUsd: '0', intent: 'escolha_unidade_evento', resultado: 'ok',
   }
-  return { ...decisaoAtendimento(r, now, '', midias), unidadeId, runs: [run] }
+  return { ...decisaoDe(a, now, ''), runs: [run] }
 }
 
-/** Resposta curta ("4", "só eu") ao "Para quantas pessoas?": registra o aviso guardado sem chamar o LLM. */
-async function respostaDePessoas(deps: ProcessDeps, ctx: Ctx, pending: Pending[], now: Date): Promise<Decision | null> {
+const ITEM_RESERVA: ItemExtraido = {
+  servico: 'aviso_presenca', tipo: 'registrar', unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null,
+  tipoEvento: null, espaco: null, consulta: null, tag: null, nome: null, contato_ok: null,
+}
+/** `contato_ok` só vale respondendo à pergunta de contato (o core também confere): fora dela, o modelo não decide. */
+const semContatoOk = (i: ItemExtraido): ItemExtraido => (i.servico === 'aviso_presenca' ? { ...i, contato_ok: null } : i)
+
+const perguntaDoPendente = (p: PendenteReserva): PerguntaReserva =>
+  ({ campo: p.campo, item: p.item, unitId: p.unitId, tentativasNumero: p.tentativasNumero })
+
+/** Telefone do próprio WhatsApp do cliente em E.164 (null no simulador ou se a cifra não abrir). Nunca vai a log. */
+function telefoneDoCliente(ctx: Ctx, phoneKey: Buffer): string | null {
+  try {
+    return `+${normalizeWaId(decryptPhone(ctx.customer.telefoneCifrado, phoneKey))}`
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Pergunta de contato pendente: o número vem do texto **bruto** (antes da redação; o modelo só vê [TELEFONE]). Um número
+ * válido responde também ao "Posso usar este WhatsApp?" ("não, usa o 61 9…") sem pedir de novo; o do próprio WhatsApp
+ * vale como "sim". `contatoOk` substitui o que o modelo disse.
+ */
+type Contato = RespostaDaReserva & { pergunta: PerguntaReserva; contatoOk?: boolean; capturou: boolean }
+function contatoDaResposta(p: PendenteReserva, textoBruto: string, proprio: string | null): Contato {
+  const pergunta = perguntaDoPendente(p)
+  if (p.campo !== 'contato' && p.campo !== 'contato_numero') return { pergunta, capturou: false }
+  const valor = capturarTelefone(textoBruto)
+  const tentativas = p.campo === 'contato_numero' ? p.tentativasNumero : 0
+  if (valor && valor === proprio) return { pergunta: { ...pergunta, campo: 'contato' }, contatoOk: true, capturou: true }
+  if (valor) {
+    return {
+      pergunta: { ...pergunta, campo: 'contato_numero', item: { ...p.item, contato_ok: false } },
+      numero: { valor, tentativas }, contatoOk: false, capturou: true,
+    }
+  }
+  return p.campo === 'contato_numero' ? { pergunta, numero: { valor: null, tentativas }, capturou: false } : { pergunta, capturou: false }
+}
+
+/**
+ * Continua a reserva pendente com o primeiro item de reserva da mensagem (`continuarReserva`: o que o cliente disse
+ * agora vale, o resto vem do guardado). Sem pendente, nenhum item traz `contato_ok`. A unidade guardada vale pelo id
+ * quando a mensagem só responde à pergunta (não reabre a lista nem confunde nomes).
+ */
+function continuarDoPendente(
+  itens: readonly ItemExtraido[],
+  p: PendenteReserva | null,
+  contato: Contato | null,
+): { itens: ItemExtraido[]; escolhidaId: string | undefined } {
+  const limpos = itens.map(semContatoOk)
+  const i = itens.findIndex((x) => x.servico === 'aviso_presenca' && x.tipo !== 'cancelar')
+  if (!p || !contato || i < 0) return { itens: limpos, escolhidaId: undefined }
+  const novo = contato.contatoOk === undefined ? itens[i]! : { ...itens[i]!, contato_ok: contato.contatoOk }
+  limpos[i] = continuarReserva(contato.pergunta, novo)
+  const soResposta = itens.length === 1 && !itens[i]!.unidade && p.unitId !== null
+  return { itens: limpos, escolhidaId: soResposta ? p.unitId! : undefined }
+}
+
+// respostas curtas sem o modelo (normalizadas): sim/não ao "Posso usar este WhatsApp?"
+const CONTATO_SIM = new Set([
+  'sim', 's', 'pode', 'pode sim', 'sim pode', 'pode ser', 'pode usar', 'sim pode usar', 'pode usar sim', 'claro', 'sim claro',
+  'isso', 'esse mesmo', 'este mesmo', 'sim esse mesmo', 'sim este mesmo', 'pode ser esse', 'ok', 'com certeza',
+])
+const CONTATO_NAO = new Set([
+  'nao', 'n', 'nao pode', 'prefiro outro', 'prefiro outro numero', 'outro', 'outro numero', 'nao prefiro outro',
+  'nao outro numero', 'nao quero outro', 'quero outro numero', 'nao esse nao',
+])
+const NAO_SABE_NUMERO = new Set(['nao sei', 'sei nao', 'nao tenho', 'nao lembro', 'nao sei o numero'])
+// "20h", "às 20:30", "umas 8 da noite", "meio-dia": só o horário (sem dia, que a triagem resolve)
+const HORARIO_CURTO = new RegExp(
+  '^(?:(?:as|umas|pelas|la pelas|por volta das|por volta da|perto das|depois das|a partir das)\\s+)?'
+  + '(?:\\d{1,2}(?:\\s*(?:h|hs|hr|hrs|hora|horas))?(?:\\s*\\d{2})?|meio dia|meia noite)'
+  + '(?:\\s+(?:da noite|da tarde|da manha|horas?))?$',
+)
+// palavras que não são nome: "pode ser Maria", "quero cancelar" vão para a triagem
+const NAO_E_NOME = new Set([
+  'sim', 'nao', 'ok', 'pode', 'ser', 'quero', 'cancela', 'cancelar', 'reserva', 'reservar', 'obrigado', 'obrigada', 'valeu', 'oi',
+  'ola', 'bom', 'boa', 'hoje', 'amanha', 'pessoa', 'pessoas', 'horas', 'nome', 'meu', 'minha', 'eu', 'sou', 'pra', 'para', 'com',
+  'mesmo', 'mesma', 'outro', 'outra', 'numero', 'whatsapp', 'isso', 'esse', 'essa', 'sabado', 'domingo', 'segunda', 'terca',
+  'quarta', 'quinta', 'sexta', 'unidade', 'tchau',
+])
+
+/** Resposta curta ao campo pendente, sem o modelo; null = a triagem decide (resposta ambígua ou com outro pedido). */
+function respostaCurta(campo: PendenteReserva['campo'], texto: string, contato: Contato): Partial<ItemExtraido> | null {
+  const t = normalizeText(texto)
+  const palavras = t ? t.split(' ').length : 0
+  switch (campo) {
+    case 'contato':
+    case 'contato_numero':
+      if (contato.capturou) return palavras <= 8 ? {} : null
+      if (campo === 'contato') return CONTATO_SIM.has(t) ? { contato_ok: true } : CONTATO_NAO.has(t) ? { contato_ok: false } : null
+      // tentativa de número que não é telefone ("61 1234") ou "não sei": conta como falha
+      return (/\d/.test(t) && palavras <= 6) || NAO_SABE_NUMERO.has(t) ? {} : null
+    case 'pessoas':
+    case 'lotado': {
+      // "somos 80" vai com o número real: acima de 60 o atendimento segue como pedido de evento
+      const n = lerPessoas(texto, { min: 1, max: 1000 })
+      return typeof n === 'number' ? { pessoas: n } : null
+    }
+    case 'horario':
+      return HORARIO_CURTO.test(t) && normalizarHorario(texto).hhmm ? { horario: texto.trim() } : null
+    case 'nome': {
+      const ok = palavras >= 1 && palavras <= 4 && /^[\p{L}\s'.-]+$/u.test(texto.trim()) && !t.split(' ').some((w) => NAO_E_NOME.has(w))
+      return ok ? { nome: texto.trim() } : null
+    }
+    case 'data':
+      return null
+  }
+}
+
+/**
+ * Resposta curta à reserva pendente ("4", "20h", "Carlos", "pode sim", "61 99999-8888"): segue a reserva guardada sem
+ * chamar o modelo. Com a pergunta de contato, o número é capturado do texto bruto antes de qualquer outra leitura.
+ */
+async function respostaCurtaDaReserva(deps: ProcessDeps, ctx: Ctx, pending: Pending[], now: Date): Promise<Decision | null> {
   if (pending.length !== 1 || pending[0]!.tipo !== 'texto') return null
   const p = lerPendente(ctx.conv.pendente)
-  if (p?.tipo !== 'pessoas' || new Date(p.expiraEm) <= now) return null
-  const n = lerPessoas(pending[0]!.texto ?? '')
-  if (n === null) return null // resposta ambígua: a triagem decide (e substitui o pendente)
-  // "somos 80": o core responde o limite (aviso_pessoas_invalido) e não guarda pendente ⇒ sem laço
-  const pessoas = n === 'fora' ? MAX_PESSOAS + 1 : n
-  // unidade pelo id guardado: não reabre a lista nem confunde nomes parecidos
-  const { r, unidadeId } = await atender(deps, ctx, await carregarAtendimento(deps, ctx, now), [{ ...p.item, pessoas }], now, p.unitId)
+  if (p?.tipo !== 'reserva' || new Date(p.expiraEm) <= now) return null
+  const texto = pending[0]!.texto ?? ''
+  const contato = contatoDaResposta(p, texto, telefoneDoCliente(ctx, deps.phoneKey))
+  const curta = respostaCurta(p.campo, texto, contato)
+  if (!curta) return null
+  const c = continuarDoPendente([{ ...ITEM_RESERVA, ...curta }], p, contato)
+  const a = await atender(deps, ctx, await carregarAtendimento(deps, ctx, now), c.itens, now, c.escolhidaId, contato)
   const run: AiRunRow = {
-    etapa: 'resposta', modelo: 'deterministico', promptVersion: 's2-pessoas', costUsd: '0', intent: 'resposta_pessoas', resultado: 'ok',
+    etapa: 'resposta', modelo: 'deterministico', promptVersion: 's2-reserva', costUsd: '0', intent: `resposta_${p.campo}`, resultado: 'ok',
   }
-  // respondidas as pessoas, a pergunta do evento que ficou para depois sai agora (pendência 2)
-  return { ...decisaoAtendimento(retomarPerguntaEvento(r, p.eventoAdiado), now, p.pergunta), unidadeId, runs: [run] }
+  // terminada a reserva, a pergunta do evento que ficou para depois sai agora (pendência 2)
+  const d = decisaoDe(a, now, p.pergunta, p.eventoAdiado)
+  return { ...d, runs: [run], ...(contato.capturou ? { mascarar: mascaradas(pending) } : {}) }
 }
+
+/** O texto que fica guardado da mensagem que trouxe o número: o número sai (só a reserva o guarda, cifrado). */
+const mascaradas = (pending: readonly Pending[]) =>
+  pending.flatMap((m) => (m.texto && redactPii(m.texto) !== m.texto ? [{ id: m.id, texto: redactPii(m.texto) }] : []))
 
 /** A pergunta que espera resposta sai por último no texto composto (um parágrafo). */
 const ultimoTrecho = (texto: string | null) => (texto?.split('\n\n').at(-1) ?? '').slice(0, MAX_PERGUNTA_ENVIADA)
@@ -602,12 +810,12 @@ function decisaoAtendimento(r: ResultadoAtendimento, now: Date, pergunta: string
   const expira = (min: number) => new Date(now.getTime() + min * 60_000).toISOString()
   const ev = r.perguntarEvento
   const adiada = r.perguntaEventoAdiada
-  // pergunta do evento escondida pela lista ou pelo "Para quantas pessoas?": vai junto do pendente (pendência 2)
+  // pergunta do evento escondida pela lista ou pela pergunta da reserva: vai junto do pendente (pendência 2)
   const eventoAdiado = adiada
     ? { eventoAdiado: { campo: adiada.campo, item: adiada.item, unitId: adiada.unitId, texto: adiada.texto.slice(0, MAX_PERGUNTA_ENVIADA) } }
     : {}
-  // um pendente por vez: lista (inclui o pedido de evento sem unidade) > pessoas (S2) > próximo campo do evento
-  const pendente: Pendente | null = r.handoff
+  // um pendente por vez: lista (inclui o pedido de evento sem unidade) > reserva (S2) > próximo campo do evento
+  const pendente: PendenteGravado | null = r.handoff
     ? null
     : r.lista && r.pendente.length
       ? {
@@ -617,11 +825,12 @@ function decisaoAtendimento(r: ResultadoAtendimento, now: Date, pergunta: string
         expiraEm: expira(r.pendente.some((i) => i.servico === 'evento') ? PENDENTE_EVENTO_MIN : PENDENTE_MIN),
         ...eventoAdiado,
       }
-      // aviso antigo (sem o contexto da reserva): a única pergunta do S2 é a de pessoas, com a unidade resolvida
-      : r.perguntarReserva?.campo === 'pessoas' && r.perguntarReserva.unitId
+      // a reserva esperando o próximo campo, ou depois do lotado (a unidade da lista é o caso acima)
+      : r.perguntarReserva && r.perguntarReserva.campo !== 'unidade'
         ? {
-          tipo: 'pessoas', pergunta, perguntaEnviada: ultimoTrecho(r.texto), item: r.perguntarReserva.item,
-          unitId: r.perguntarReserva.unitId, expiraEm: expira(PENDENTE_MIN), ...eventoAdiado,
+          tipo: 'reserva', campo: r.perguntarReserva.campo, pergunta, perguntaEnviada: ultimoTrecho(r.texto),
+          item: r.perguntarReserva.item, unitId: r.perguntarReserva.unitId, tentativasNumero: r.perguntarReserva.tentativasNumero,
+          expiraEm: expira(PENDENTE_MIN), ...eventoAdiado,
         }
         : ev && ev.campo !== 'unidade'
           ? {
@@ -640,11 +849,25 @@ function decisaoAtendimento(r: ResultadoAtendimento, now: Date, pergunta: string
     pergunta,
     contagem: { validos: r.validos, respondidos: r.respondidos },
     pendente,
-    avisos: r.acoesS2,
     acoesS3: r.acoesS3,
     // a resposta do evento já diz que a equipe vai assumir: só fora do horário acrescenta quando a equipe volta
     ...(r.handoff ? { handoff: { motivo: 'servico', avisar: 'so_fora' } satisfies Handoff, audit: 'conversa.handoff_evento' } : {}),
   }
+}
+
+type EventoAdiado = z.infer<typeof eventoAdiadoSchema>
+
+/**
+ * Decisão do atendimento com as ações da reserva já preparadas para o commit (contato cifrado). `adiado`: a pergunta do
+ * evento guardada no pendente respondido — sai agora se nada mais pergunta, senão segue guardada na próxima pergunta da
+ * reserva ou da lista (a reserva pode levar várias mensagens).
+ */
+function decisaoDe(a: Atendido, now: Date, pergunta: string, adiado?: EventoAdiado): Decision {
+  const d: Decision = { ...decisaoAtendimento(retomarPerguntaEvento(a.r, adiado), now, pergunta, a.midias), avisos: a.avisos, unidadeId: a.unidadeId }
+  if (adiado && d.pendente && (d.pendente.tipo === 'reserva' || d.pendente.tipo === 'unidade') && !d.pendente.eventoAdiado) {
+    d.pendente = { ...d.pendente, eventoAdiado: adiado }
+  }
+  return d
 }
 
 const fmt = (m: number) => (m / 1_000_000).toFixed(6)
@@ -654,23 +877,23 @@ const RESERVE_USD = fmt(2 * ESTIMATE_MICROS)
 
 // Custo desconhecido (null) de chamada possivelmente cobrada é contabilizado pela estimativa;
 // falha sem uso reportado (502, rede) não custa nada.
-function runCostMicros(r: JsonCallResult<TriageV6>): number {
+function runCostMicros(r: JsonCallResult<TriageV7>): number {
   if (r.usage?.costUsd != null) return micros(r.usage.costUsd)
   const maybeBilled = r.ok || r.usage !== null
   return maybeBilled ? ESTIMATE_MICROS : 0
 }
 
 
-function resumoItens(t: TriageV6): string {
+function resumoItens(t: TriageV7): string {
   if (t.itens.length === 0) return 'fora_escopo'
   return [...new Set(t.itens.map((i) => (i.tipo ? `${i.servico}:${i.tipo}` : i.servico)))].join(',')
 }
 
-function toRun(r: JsonCallResult<TriageV6>, fallbackModel: string): AiRunRow {
+function toRun(r: JsonCallResult<TriageV7>, fallbackModel: string): AiRunRow {
   return {
     etapa: 'triagem',
     modelo: r.model ?? fallbackModel,
-    promptVersion: TRIAGE_V6_PROMPT_VERSION,
+    promptVersion: TRIAGE_V7_PROMPT_VERSION,
     tokensIn: r.usage?.tokensIn ?? 0,
     tokensOut: r.usage?.tokensOut ?? 0,
     tokensCache: r.usage?.tokensCache ?? 0,
@@ -682,7 +905,7 @@ function toRun(r: JsonCallResult<TriageV6>, fallbackModel: string): AiRunRow {
   }
 }
 
-async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, now: Date): Promise<Decision> {
+async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, pending: Pending[], now: Date): Promise<Decision> {
   const { db } = deps
   // simulador tem limite próprio (`simulacao`): estourá-lo só põe a conversa simulada no modo econômico
   const reservation = await reserveBudget(db, {
@@ -701,10 +924,14 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, now: Da
   // a resposta a uma pergunta nossa vai com o contexto (Decisão 3); pendente vencido não conta
   const pendenteAtual = lerPendente(ctx.conv.pendente)
   const contexto = pendenteDaTriagem(pendenteAtual, now)
-  let result: JsonCallResult<TriageV6>
+  // reserva esperando resposta: o número (pergunta de contato) sai do texto bruto antes da triagem, que só vê [TELEFONE]
+  const reservaPendente = contexto && pendenteAtual?.tipo === 'reserva' ? pendenteAtual : null
+  const contato = reservaPendente ? contatoDaResposta(reservaPendente, text, telefoneDoCliente(ctx, deps.phoneKey)) : null
+  const mascarar = contato?.capturou ? { mascarar: mascaradas(pending) } : {}
+  let result: JsonCallResult<TriageV7>
   const runs: AiRunRow[] = []
   try {
-    const call = () => triageV6(deps.llm, {
+    const call = () => triageV7(deps.llm, {
       models: deps.triageModels, restaurante: ctx.restaurant.nome, text, ...(contexto ? { pendente: contexto } : {}),
     })
     const fallbackModel = deps.triageModels[0]!
@@ -728,14 +955,14 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, now: Da
     deps.log.error({ conversationId: ctx.conv.id, erro: result.error, status: result.status }, 'triagem falhou')
     // a triagem já tentou de novo: a falha do modelo passa direto para a equipe (e conta como falha)
     const handoff: Handoff = { motivo: 'falhas', avisar: 'sempre' }
-    return { replies: [], autor: 'sistema', handoff, falhas: 'incrementar', audit: 'ia.falha_triagem', runs, budget }
+    return { replies: [], autor: 'sistema', handoff, falhas: 'incrementar', audit: 'ia.falha_triagem', runs, budget, ...mascarar }
   }
 
   const { itens, frustracao, fora_escopo: foraEscopo } = result.data
   if (itens.some((i) => i.servico === 'humano' || i.servico === 'lgpd')) {
     // resposta do sistema: com `ia` a entrega a cancelaria (a conversa já está aguardando humano)
     const handoff: Handoff = { motivo: frustracao ? 'frustracao' : 'pedido', avisar: 'sempre' }
-    return { replies: [], autor: 'sistema', handoff, audit: 'conversa.handoff_triagem', runs, budget }
+    return { replies: [], autor: 'sistema', handoff, audit: 'conversa.handoff_triagem', runs, budget, ...mascarar }
   }
   // cliente irritado com o atendimento: responde o que der e a equipe continua (sem "só consigo ajudar…")
   const frustrado = (d: Decision): Decision => ({
@@ -747,18 +974,20 @@ async function triageDecision(deps: ProcessDeps, ctx: Ctx, text: string, now: Da
   if (itens.length === 0 && !foraEscopo && !frustracao) {
     // sem item e sem fora de escopo não é falha: agradecimento/despedida que o pré-filtro não pegou ("ok, até sábado
     // então", "abraço!") ⇒ "Por nada!"; pedido vago ("tenho uma dúvida") ⇒ `cortesia` (com o que a IA ajuda)
-    if (temAgradecimentoOuDespedida(text)) return { replies: ['agradecimento'], autor: 'ia', runs, budget, pendente: null }
-    return { replies: [], saidas: [await saidaDoModelo(db, ctx, 'cortesia', {})], autor: 'ia', runs, budget, pendente: null }
+    if (temAgradecimentoOuDespedida(text)) return { replies: ['agradecimento'], autor: 'ia', runs, budget, pendente: null, ...mascarar }
+    return { replies: [], saidas: [await saidaDoModelo(db, ctx, 'cortesia', {})], autor: 'ia', runs, budget, pendente: null, ...mascarar }
   }
   if (itens.length === 0) {
-    const d: Decision = { replies: ['foraEscopo'], autor: 'ia', falhas: 'incrementar', runs, budget, pendente: null }
+    const d: Decision = { replies: ['foraEscopo'], autor: 'ia', falhas: 'incrementar', runs, budget, pendente: null, ...mascarar }
     return frustracao ? frustrado(d) : d
   }
   try {
     const atendimento = await carregarAtendimento(deps, ctx, now)
-    const c = completarDoPendente(itens, contexto ? pendenteAtual : null, atendimento.s1.unidades)
-    const { r, midias, unidadeId } = await atender(deps, ctx, atendimento, c.itens, now, c.escolhidaId)
-    const d: Decision = { ...decisaoAtendimento(r, now, perguntaMascarada(text), midias), unidadeId, runs, budget }
+    const c = reservaPendente
+      ? continuarDoPendente(itens, reservaPendente, contato)
+      : completarDoPendente(itens.map(semContatoOk), contexto ? pendenteAtual : null, atendimento.s1.unidades)
+    const a = await atender(deps, ctx, atendimento, c.itens, now, c.escolhidaId, contato ?? {})
+    const d: Decision = { ...decisaoDe(a, now, perguntaMascarada(text), reservaPendente?.eventoAdiado), runs, budget, ...mascarar }
     return frustracao ? frustrado(d) : d
   } catch (err) {
     await compensate(deps, reservation, spentMicros, ctx.conv.id)
@@ -803,20 +1032,34 @@ async function commit(db: Db, ctx: Ctx, upTo: number, d: Decision, now: Date): P
 
     // o banco pode mudar a decisão (cancelamento recusado ⇒ a equipe assume): o que vale é o daqui para baixo
     let { autor, handoff, pendente, audit } = d
-    // avisos de presença: na mesma transação da resposta; com humano no controle, nada é gravado (acima)
+    // a mensagem que trouxe o número de contato fica guardada mascarada (o número só existe cifrado na reserva)
+    for (const m of d.mascarar ?? []) {
+      await tx.update(messages).set({ texto: m.texto }).where(and(eq(messages.id, m.id), eq(messages.conversationId, conversationId)))
+    }
+    // reservas: na mesma transação da resposta, com a lotação conferida sob a trava da unidade; com humano no controle,
+    // nada é gravado (acima). Auditoria sem PII (sem nome, contato, pessoas ou horário).
     let saidas = d.saidas ?? []
+    const auditar = (acao: string, id: string) =>
+      tx.insert(auditLog).values({ restaurantId, atorTipo: 'ia', acao, entidade: 'attendance_notice', entidadeId: id })
     for (const a of d.avisos ?? []) {
-      // a reserva ('registrar') só sai com o contexto da reserva, que este worker ainda não passa (Task 4)
-      if (a.tipo === 'registrar') continue
-      if (a.tipo === 'registrar_aviso') {
-        const r = await registrarAviso(tx, {
-          restaurantId, customerId: ctx.customer.id, unitId: a.unitId, data: a.data, pessoas: a.pessoas,
-          horarioAprox: a.horarioAprox, nome: ctx.customer.nomePerfil, simulado: ctx.conv.simulada,
+      if (a.tipo === 'registrar') {
+        const r = await registrarReserva(tx, {
+          restaurantId, unitId: a.unitId, customerId: ctx.customer.id, data: a.data, pessoas: a.pessoas, horario: a.horario, nome: a.nome,
+          contatoCifrado: a.contatoCifrado, simulado: ctx.conv.simulada, origem: 'ia', ...(a.reservaId ? { reservaId: a.reservaId } : {}),
         })
-        await tx.insert(auditLog).values({ restaurantId, atorTipo: 'ia', acao: r.atualizado ? 'aviso.atualizado' : 'aviso.registrado', entidade: 'attendance_notice', entidadeId: r.id })
+        if (r.ok) {
+          await auditar(r.atualizou ? 'reserva.atualizada' : 'reserva.registrada', r.id)
+        } else if (r.motivo === 'lotado') {
+          // corrida nas últimas vagas: a resposta vira a de lotado e a reserva fica guardada para a continuação
+          saidas = trocarTrecho(saidas, a.texto, a.textoSeLotado)
+          if (!pendente && !handoff) pendente = a.seLotado
+        } else {
+          // a reserva mudada foi cancelada (ou "não veio") no meio, ou o destino já tem outra: nada muda
+          saidas = trocarTrecho(saidas, a.texto, a.textoSeIndisponivel)
+        }
       } else {
         const ok = await cancelarAvisoDoCliente(tx, { restaurantId, customerId: ctx.customer.id, avisoId: a.avisoId })
-        if (ok) await tx.insert(auditLog).values({ restaurantId, atorTipo: 'ia', acao: 'aviso.cancelado', entidade: 'attendance_notice', entidadeId: a.avisoId })
+        if (ok) await auditar('reserva.cancelada', a.avisoId)
         else saidas = trocarTrecho(saidas, a.texto, a.textoSeFalhar) // a resposta diz o que o banco fez
       }
     }
@@ -916,12 +1159,19 @@ async function unidadeUnica(tx: Tx, restaurantId: string): Promise<string | unde
   return ativas.length === 1 ? ativas[0]!.id : undefined
 }
 
-/** Troca um trecho (parágrafo) do texto composto; o substituto aparece uma vez só. */
+/**
+ * Troca um trecho do texto composto (um ou mais parágrafos inteiros, como o resumo da reserva seguido das regras); o
+ * substituto aparece uma vez só.
+ */
 function trocarTrecho(saidas: Saida[], de: string, para: string): Saida[] {
+  const alvo = de.split('\n\n')
   return saidas.map((s) => {
-    if (s.tipo !== 'texto' || !s.texto.split('\n\n').includes(de)) return s
-    const partes = s.texto.split('\n\n').map((p) => (p === de ? para : p))
-    const texto = partes.filter((p, i) => p !== para || partes.indexOf(para) === i).join('\n\n')
+    if (s.tipo !== 'texto') return s
+    const partes = s.texto.split('\n\n')
+    const i = partes.findIndex((_, k) => alvo.every((p, j) => partes[k + j] === p))
+    if (i < 0) return s
+    partes.splice(i, alvo.length, para)
+    const texto = partes.filter((p, k) => p !== para || partes.indexOf(para) === k).join('\n\n')
     return { ...s, texto }
   })
 }

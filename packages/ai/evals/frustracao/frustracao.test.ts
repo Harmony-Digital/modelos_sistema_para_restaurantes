@@ -33,13 +33,13 @@ describe('gabarito de frustração', () => {
 })
 
 describe('rodarFrustracao (camada 1 com fetch falso)', () => {
-  it('modelo que acerta tudo passa no gate; chama a triage-v6 com deny + zdr', async () => {
+  it('modelo que acerta tudo passa no gate; chama a triage-v7 com deny + zdr', async () => {
     const f = fetchFalso((m) => esperado.get(m)!)
     const r = await rodarFrustracao({ llm: llmCom(f.fn), modelos: ['m'], teto: 1, maxChamadas: 100, hoje: '2026-10-06' })
     expect(r.motivos).toEqual([])
     expect(r.relatorio).toContain(`| m | ${CASOS_FRUSTRACAO.length}/${CASOS_FRUSTRACAO.length} (100.0%) | 0 | 0 |`)
     expect(f.corpos).toHaveLength(CASOS_FRUSTRACAO.length)
-    expect(f.corpos[0]).toMatchObject({ provider: { data_collection: 'deny', zdr: true }, response_format: { json_schema: { name: 'triagem_v6' } } })
+    expect(f.corpos[0]).toMatchObject({ provider: { data_collection: 'deny', zdr: true }, response_format: { json_schema: { name: 'triagem_v7' } } })
     // pendente vai junto
     expect(f.corpos.some((c) => JSON.stringify(c).includes('pergunta_pendente'))).toBe(true)
   })

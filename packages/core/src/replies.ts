@@ -4,10 +4,10 @@ export type ReplyKey =
 
 const TEMPLATES: Record<ReplyKey, string> = {
   saudacao:
-    'Olá! 👋 Sou o assistente virtual do {restaurante}. Posso ajudar com horários e endereços das unidades, aviso de presença, eventos e cardápio. Como posso ajudar?',
+    'Olá! 👋 Sou o assistente virtual do {restaurante}. Posso ajudar com horários e endereços das unidades, reservas, eventos e cardápio. Como posso ajudar?',
   agradecimento: 'Por nada! Se precisar de mais alguma coisa, é só chamar. 😊',
   foraEscopo:
-    'Desculpe, só consigo ajudar com assuntos do {restaurante}: horários e unidades, aviso de presença, eventos e cardápio. Se preferir falar com uma pessoa, digite *atendente*.',
+    'Desculpe, só consigo ajudar com assuntos do {restaurante}: horários e unidades, reservas, eventos e cardápio. Se preferir falar com uma pessoa, digite *atendente*.',
   midiaNaoSuportada: 'Por enquanto só consigo ler mensagens de texto. Pode escrever sua dúvida? ✍️',
   handoff: 'Certo! Vou chamar alguém da nossa equipe para continuar o atendimento. Aguarde um instante, por favor.',
   lgpdRecebido:

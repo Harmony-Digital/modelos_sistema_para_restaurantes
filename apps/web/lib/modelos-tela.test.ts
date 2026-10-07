@@ -36,7 +36,7 @@ describe('modelos na tela', () => {
     for (const chave of Object.keys(MODELOS_S1) as ChaveModelo[]) {
       expect(previaModelo(chave, MODELOS_S1[chave].texto, unidade), chave).not.toMatch(/\{\w+\}/)
     }
-    expect(previaModelo('aviso_qual_cancelar', MODELOS_S1.aviso_qual_cancelar.texto, unidade))
-      .toContain('Para cancelar, mande por exemplo: "cancela o aviso de hoje na unidade Lago Sul".')
+    expect(previaModelo('reserva_qual_cancelar', MODELOS_S1.reserva_qual_cancelar.texto, unidade))
+      .toContain('Para cancelar, mande por exemplo: "cancela a reserva de hoje na unidade Lago Sul".')
   })
 })

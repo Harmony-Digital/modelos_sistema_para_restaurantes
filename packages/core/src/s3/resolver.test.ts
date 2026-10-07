@@ -3,6 +3,7 @@ import { ASA_NORTE, CONTEXTO, CONTEXTO_PEQUENO } from '../../../ai/evals/s1/fixt
 import { MODELOS_S1, renderModelo, type ChaveModelo } from '../s1/modelos.ts'
 import type { ContextoS1, ItemExtraido } from '../s1/tipos.ts'
 import { resolverAtendimento, retomarPerguntaEvento } from '../s2/atendimento.ts'
+import type { ContextoReserva } from '../s2/tipos.ts'
 import { itemDoPedidoNaUnidade, resolverS3 } from './resolver.ts'
 import type { EspacoS3Core, PedidoAtivoS3 } from './tipos.ts'
 
@@ -356,6 +357,12 @@ describe('resolverS3 — espaços', () => {
   })
 })
 
+/** A mensagem responde à pergunta de contato da reserva (só assim o `contato_ok` do item vale). */
+const RESPONDE_CONTATO: ContextoReserva = {
+  vagas: new Map(), regras: 'Regras.', pergunta: { campo: 'contato', item: { servico: 'aviso_presenca', tipo: 'registrar', ...nulos }, unitId: null, tentativasNumero: 0 },
+}
+const FEITA_AS_SAB = 'Reserva feita: unidade Asa Sul, sábado (10/10), às 20h, 4 pessoas, em nome de Ana.\n\nRegras.'
+
 describe('resolverAtendimento com S3', () => {
   const h = (extra: Partial<ItemExtraido>): ItemExtraido => ({ servico: 'horario_unidades', tipo: 'horario_dia', ...nulos, ...extra })
   const reg = (extra: Partial<ItemExtraido>): ItemExtraido => ({ servico: 'aviso_presenca', tipo: 'registrar', ...nulos, ...extra })
@@ -374,9 +381,10 @@ describe('resolverAtendimento com S3', () => {
 
   it('S2 + S3 na mesma mensagem', () => {
     const r = resolverAtendimento(
-      [reg({ unidade: 'asa sul', data: 'sábado', pessoas: 4 }), completo({ espaco: '*' })], CONTEXTO, SEG_14H, [], undefined, { espacos: ESPACOS, pedidos: [] },
+      [reg({ unidade: 'asa sul', data: 'sábado', pessoas: 4, horario: '20h', nome: 'Ana', contato_ok: true }), completo({ espaco: '*' })],
+      CONTEXTO, SEG_14H, [], undefined, { espacos: ESPACOS, pedidos: [] }, undefined, RESPONDE_CONTATO,
     )
-    expect(r.texto).toBe(`Anotado: Asa Sul, sábado (10/10), 4 pessoas. Se mudar de ideia, é só me avisar.\n\n${REG_AS_SAB}`)
+    expect(r.texto).toBe(`${FEITA_AS_SAB}\n\n${REG_AS_SAB}`)
     expect(r.acoesS2).toHaveLength(1)
     expect(r.acoesS3).toEqual([registrar()])
   })
@@ -584,9 +592,11 @@ describe('pendências da Etapa 04 — "pessoas" e evento na mesma mensagem', () 
       [aviso({ unidade: 'asa sul', data: 'sábado' }), ped({ unidade: 'asa sul', data: 'dia 20', tipoEvento: 'aniversário' })],
       CONTEXTO, SEG_14H, [], undefined, s3,
     )
-    const pessoas = resolverAtendimento([{ ...r.perguntarReserva!.item, pessoas: 4 }], CONTEXTO, SEG_14H, [], 'u-asa-sul', s3)
+    // pessoas e, de uma vez, o resto da reserva (horário, nome e o "pode usar o WhatsApp")
+    const resposta = { ...r.perguntarReserva!.item, pessoas: 4, horario: '20h', nome: 'Ana', contato_ok: true }
+    const pessoas = resolverAtendimento([resposta], CONTEXTO, SEG_14H, [], 'u-asa-sul', s3, undefined, RESPONDE_CONTATO)
     const seguida = retomarPerguntaEvento(pessoas, r.perguntaEventoAdiada)
-    expect(seguida.texto).toBe('Anotado: Asa Sul, sábado (10/10), 4 pessoas. Se mudar de ideia, é só me avisar.\n\nPara quantos convidados?')
+    expect(seguida.texto).toBe(`${FEITA_AS_SAB}\n\nPara quantos convidados?`)
     expect(seguida.acoesS2).toHaveLength(1)
     expect(seguida.perguntarEvento).toEqual({ campo: 'convidados', unitId: 'u-asa-sul', item: r.perguntaEventoAdiada!.item })
     // a resposta "40" completa o pedido guardado

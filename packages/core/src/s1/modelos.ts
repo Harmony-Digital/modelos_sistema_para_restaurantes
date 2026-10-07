@@ -23,34 +23,6 @@ export const MODELOS_S1 = {
   lista_expirada: { texto: 'Essa lista expirou. Pode me mandar a pergunta de novo?', variaveis: [] },
   lacuna: { texto: 'Ainda não tenho essa informação; vou verificar com a equipe.', variaveis: [] },
   em_breve: { texto: 'Sobre {servico}, ainda estou aprendendo e em breve vou conseguir responder por aqui.', variaveis: ['servico'] },
-  // S2 — avisos de presença (Etapa 03)
-  escolher_unidade_aviso: { texto: 'Para qual unidade é o aviso? Toque em "Ver unidades" e escolha.', variaveis: [] },
-  aviso_registrado: {
-    texto: 'Anotado: {unidade}, {quando}, {pessoas}{horario}. Se mudar de ideia, é só me avisar.',
-    variaveis: ['unidade', 'quando', 'pessoas', 'horario'],
-  },
-  aviso_atualizado: { texto: 'Atualizei seu aviso: {unidade}, {quando}, {pessoas}{horario}.', variaveis: ['unidade', 'quando', 'pessoas', 'horario'] },
-  aviso_pessoas_invalido: {
-    texto: 'Consigo anotar avisos de 1 a 60 pessoas. Para grupos maiores, fale com a nossa equipe.',
-    variaveis: [],
-  },
-  // a triagem não vê o histórico: a pergunta de retorno pede o aviso completo de novo
-  aviso_data_fora: { texto: 'Consigo anotar avisos de hoje até {limite}. Se quiser, mande o aviso de novo com outro dia.', variaveis: ['limite'] },
-  aviso_unidade_fechada: {
-    texto: '{quando}, a unidade {unidade} não abre. Se quiser, mande o aviso de novo para outro dia.',
-    variaveis: ['quando', 'unidade'],
-  },
-  aviso_horario_fora: {
-    texto: '{quando}, a unidade {unidade} funciona {turnos}. Se quiser, mande o aviso de novo com um horário nesse período.',
-    variaveis: ['quando', 'unidade', 'turnos'],
-  },
-  aviso_horario_passado: { texto: 'Esse horário de hoje já passou. Se quiser, mande o aviso de novo com outro horário ou dia.', variaveis: [] },
-  aviso_cancelado: { texto: 'Pronto, cancelei seu aviso: {unidade}, {quando}.', variaveis: ['unidade', 'quando'] },
-  aviso_nao_encontrado: { texto: 'Não encontrei nenhum aviso ativo seu.', variaveis: [] },
-  aviso_qual_cancelar: {
-    texto: 'Você tem estes avisos:\n{linhas}\nPara cancelar, mande por exemplo: "{exemplo}".',
-    variaveis: ['linhas', 'exemplo'],
-  },
   // S2 — reserva com lotação (reservas-logo). Um dado por vez; o código decide unidade, data, lotação e horário.
   escolher_unidade_reserva: { texto: 'Para qual unidade é a reserva? Toque em "Ver unidades" e escolha.', variaveis: [] },
   reserva_pergunta_data: { texto: 'Para qual dia é a reserva? Consigo reservar de hoje até {limite}.', variaveis: ['limite'] },
@@ -86,6 +58,11 @@ export const MODELOS_S1 = {
   },
   reserva_cancelada: { texto: 'Pronto, cancelei sua reserva: {unidade}, {quando}.', variaveis: ['unidade', 'quando'] },
   reserva_nao_encontrada: { texto: 'Não encontrei nenhuma reserva sua.', variaveis: [] },
+  // a reserva mudou entre a leitura e a gravação (a equipe cancelou ou marcou "não veio"): nada foi gravado
+  reserva_indisponivel: {
+    texto: 'Essa reserva não está mais ativa, então não consegui mudá-la. Se quiser, posso fazer uma nova: é só me dizer.',
+    variaveis: [],
+  },
   reserva_qual_cancelar: {
     texto: 'Você tem estas reservas:\n{linhas}\nPara cancelar, mande por exemplo: "{exemplo}".',
     variaveis: ['linhas', 'exemplo'],
@@ -137,7 +114,7 @@ export const MODELOS_S1 = {
     variaveis: ['proximo_horario'],
   },
   // cortesia sem item (pedido vago, "tenho uma dúvida"): não conta falha
-  cortesia: { texto: 'Posso ajudar com horários e unidades, aviso de presença, eventos e cardápio. É só me dizer do que precisa. 😊', variaveis: [] },
+  cortesia: { texto: 'Posso ajudar com horários e unidades, reservas, eventos e cardápio. É só me dizer do que precisa. 😊', variaveis: [] },
   handoff_frustracao: { texto: 'Desculpe pelo transtorno. Vou chamar alguém da nossa equipe para continuar com você.', variaveis: [] },
 } as const satisfies Record<string, { texto: string; variaveis: readonly string[] }>
 

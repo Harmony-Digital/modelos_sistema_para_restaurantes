@@ -28,8 +28,8 @@ export type ContextoAtendimentoS4 = {
  * Resolve S1–S4 da mesma mensagem numa única resposta (texto, lista de unidade, ações de reserva, de evento e de cardápio).
  * Sem `s3`, itens de evento são resolvidos sem espaços cadastrados nem pedidos anteriores.
  * Sem `s4`, itens de cardápio recebem o "em breve" do S1 (worker antigo).
- * Sem `reserva`, o S2 segue o aviso de presença antigo (worker antigo); com ela, a reserva com lotação e contato, e o
- * grupo de mais de 60 pessoas segue como pedido de evento.
+ * `reserva`: lotação do dia, regras e a pergunta pendente da reserva (o worker sempre passa; sem ela, sem lotação
+ * conhecida e sem regras). O grupo de mais de 60 pessoas segue como pedido de evento.
  * Um dado por vez: lista de unidade > pergunta da reserva > pergunta do evento.
  */
 /** A única reserva ativa (de hoje em diante), com a unidade pelo nome do banco; nenhuma ou várias ⇒ null. */
@@ -50,7 +50,7 @@ export function resolverAtendimento(
   s4?: ContextoAtendimentoS4,
   reserva?: ContextoReserva,
 ): ResultadoAtendimento {
-  const grupoGrande = !!reserva && itensRecebidos.some(ehGrupoDeEvento)
+  const grupoGrande = itensRecebidos.some(ehGrupoDeEvento)
   const unica = grupoGrande ? unicaReserva(ctx, agora, avisos) : null
   const itens = grupoGrande ? itensRecebidos.map((i) => (ehGrupoDeEvento(i) ? reservaComoEvento(i, unica) : i)) : itensRecebidos
   // com o S4, o S1 não vê os itens de cardápio (sem "em breve"); a identidade dos itens se mantém para o pendente
@@ -71,7 +71,7 @@ export function resolverAtendimento(
     ? { campo: ep.campo, item: ep.item, unitId: ep.unitId, texto: ep.texto }
     : null
   const corpo = s1.pendente.length || card.pendenteUnidade.length ? 'escolher_unidade'
-    : s2.pendenteUnidade.length ? (reserva ? 'escolher_unidade_reserva' : 'escolher_unidade_aviso') : 'evento_pergunta_unidade'
+    : s2.pendenteUnidade.length ? 'escolher_unidade_reserva' : 'evento_pergunta_unidade'
   const lacunas = new Map<string, Lacuna>([...s1.lacunas, ...ev.lacunas, ...card.lacunas].map((l) => [`${l.chave}|${l.unitId ?? ''}`, l]))
   const avisoGrupo = grupoGrande ? renderModelo('reserva_grupo_grande', {}, ctx.modelos) : null
   return {

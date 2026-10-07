@@ -403,9 +403,10 @@ describe('reserva — mais de 60 pessoas vira pedido de evento', () => {
     expect(r.perguntarEvento).toMatchObject({ campo: 'tipo', item: { convidados: 80, unidade: 'Asa Sul', data: '2026-10-20' } })
   })
 
-  it('sem o contexto da reserva (worker antigo), segue o limite do aviso', () => {
+  it('sem o contexto da reserva (evals), o grupo grande também vira evento', () => {
     const r = resolverAtendimento([reg({ unidade: 'asa sul', data: 'sábado', pessoas: 80 })], CONTEXTO, SEG_14H, [])
-    expect(r.texto).toBe('Consigo anotar avisos de 1 a 60 pessoas. Para grupos maiores, fale com a nossa equipe.')
+    expect(r.texto).toContain('Reservas vão até 60 pessoas.')
+    expect(r.perguntarEvento).toMatchObject({ item: { convidados: 80 } })
   })
 })
 

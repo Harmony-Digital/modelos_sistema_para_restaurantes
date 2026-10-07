@@ -630,16 +630,7 @@ Espaços para eventos:
 
 exports[`evals S3 — camada 2 (resolução + composição, determinística) > m02: vou hoje na asa norte em 2 e quero festa 1`] = `
 {
-  "acoesS2": [
-    {
-      "atualiza": false,
-      "data": "2026-10-05",
-      "horarioAprox": null,
-      "pessoas": 2,
-      "tipo": "registrar_aviso",
-      "unitId": "u-asa-norte",
-    },
-  ],
+  "acoesS2": [],
   "acoesS3": [
     {
       "convidados": 40,
@@ -659,12 +650,30 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > m
   "localizacoes": [],
   "pendente": [],
   "perguntarEvento": null,
-  "perguntarReserva": null,
-  "respondidos": 2,
-  "texto": "Anotado: Asa Norte, hoje, 2 pessoas. Se mudar de ideia, é só me avisar.
+  "perguntarReserva": {
+    "campo": "horario",
+    "item": {
+      "consulta": null,
+      "convidados": null,
+      "data": "2026-10-05",
+      "espaco": null,
+      "horario": null,
+      "pessoas": 2,
+      "servico": "aviso_presenca",
+      "tag": null,
+      "tema": null,
+      "tipo": "registrar",
+      "tipoEvento": null,
+      "unidade": "Asa Norte",
+    },
+    "tentativasNumero": 0,
+    "unitId": "u-asa-norte",
+  },
+  "respondidos": 1,
+  "texto": "Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.
 
-Recebemos seu pedido de aniversário para 40 convidados na unidade Asa Sul, sábado (10/10). Nossa equipe vai entrar em contato para confirmar.",
-  "validos": 2,
+Para que horas é a reserva?",
+  "validos": 1,
 }
 `;
 
@@ -869,7 +878,7 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > m
 }
 `;
 
-exports[`evals S3 — camada 2 (resolução + composição, determinística) > m08: cancela o evento e o aviso 1`] = `
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > m08: cancela o evento e a reserva 1`] = `
 {
   "acoesS2": [],
   "acoesS3": [
@@ -891,14 +900,14 @@ exports[`evals S3 — camada 2 (resolução + composição, determinística) > m
   "perguntarEvento": null,
   "perguntarReserva": null,
   "respondidos": 1,
-  "texto": "Não encontrei nenhum aviso ativo seu.
+  "texto": "Não encontrei nenhuma reserva sua.
 
 Pronto, cancelei seu pedido de evento: Asa Sul, sábado (10/10).",
   "validos": 2,
 }
 `;
 
-exports[`evals S3 — camada 2 (resolução + composição, determinística) > m09: aviso sem pessoas e festa sem data: pergunta de pessoas vem antes 1`] = `
+exports[`evals S3 — camada 2 (resolução + composição, determinística) > m09: reserva sem pessoas e festa sem data: pergunta de pessoas vem antes 1`] = `
 {
   "acoesS2": [],
   "acoesS3": [],

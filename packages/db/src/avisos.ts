@@ -175,7 +175,9 @@ export function vagasSeNaoCouber(capacidade: number | null, ocupadas: number, pe
  * Ocupação do dia por unidade ativa do restaurante (as visíveis, sob RLS), contando só as reservas `confirmada` com o
  * `simulado` pedido. Leitura sem trava: a decisão final é de `registrarReserva`.
  */
-export async function ocupacaoDoDia(tx: Tx, restaurantId: string, data: string, simulado: boolean): Promise<Map<string, OcupacaoUnidade>> {
+export async function ocupacaoDoDia(
+  tx: Db | Tx, restaurantId: string, data: string, simulado: boolean,
+): Promise<Map<string, OcupacaoUnidade>> {
   const rows = await tx
     .select({
       unitId: units.id,

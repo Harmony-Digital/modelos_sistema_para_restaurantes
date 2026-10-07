@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { eq } from 'drizzle-orm'
 import type { PgBoss } from 'pg-boss'
-import { encryptPhone, keyFromBase64 } from '@atd/core'
+import { decryptPhone, encryptPhone, keyFromBase64 } from '@atd/core'
 import { applyStatus, createBoss, createDb, enqueueProcess, ingestInbound, schema } from '@atd/db'
 import { getTestBoss, getTestDb, resetDb, seedRestaurant, setupPgbossRoles, WEB_URL, WORKER_URL } from '@atd/db/test-utils'
 import type { LlmClient, TriageV5 } from '@atd/ai'
@@ -11,6 +11,7 @@ import { createLogger } from '../logger.ts'
 import { comMidiaProibida, storageProibido } from './midia-fake.ts'
 import { deliver } from './deliver.ts'
 import { processConversation, type ProcessDeps } from './process-conversation.ts'
+import { comoV7 } from './triagem-falsa.ts'
 
 /**
  * Regressão de grants: o caminho de runtime roda com os roles de produção (web_app no webhook,
@@ -76,7 +77,7 @@ function fakeLlm(step: TriageV5 | 'erro') {
         return { ok: false as const, error: 'upstream', retryable: true, status: 502, model: null, usage: null, latencyMs: 1 }
       }
       return {
-        ok: true as const, data: p.parse({ frustracao: false, ...step }), model: 'fake/m',
+        ok: true as const, data: p.parse(comoV7(step)), model: 'fake/m',
         usage: { tokensIn: 100, tokensOut: 5, tokensCache: 0, costUsd: '0.000200' }, latencyMs: 10,
       }
     },
@@ -202,19 +203,28 @@ describe('grants de runtime (web_app → worker_app)', () => {
     expect(listas).toHaveLength(1)
   })
 
-  it('S2 com worker_app: lê, registra e cancela aviso de presença com audit_log', async () => {
+  it('S2 com worker_app: lê a lotação, registra com contato cifrado (mascarando a mensagem) e cancela a reserva com audit_log', async () => {
     const rid = await seed()
     const [u] = await admin.db.select().from(schema.units)
+    await admin.db.update(schema.units).set({ capacidadePessoas: 50 })
     for (let d = 0; d < 7; d++) await admin.db.insert(schema.unitHours).values({ restaurantId: rid, unitId: u!.id, weekday: d, turno: 1, abre: '00:00', fecha: '23:59' })
-    const aviso = (tipo: 'registrar' | 'cancelar', pessoas: number | null) =>
-      ({ itens: [{ servico: 'aviso_presenca', tipo, unidade: null, data: null, tema: null, pessoas, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null }], fora_escopo: false }) as TriageV5
-    const { conversationId } = await receiveAsWeb(rid, 'vou hoje com 2')
-    await processConversation(depsAsWorker(fakeLlm(aviso('registrar', 2)).llm, fakeWa()), conversationId)
-    expect(await admin.db.select().from(schema.attendanceNotices)).toMatchObject([{ pessoas: 2, status: 'confirmada', simulado: false }])
+    const reserva = (tipo: 'registrar' | 'cancelar', extra: object = {}) =>
+      ({ itens: [{ servico: 'aviso_presenca', tipo, unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null, ...extra }], fora_escopo: false }) as TriageV5
+    const { conversationId } = await receiveAsWeb(rid, 'reserva amanhã às 20h para 2 em nome de Maria')
+    await processConversation(depsAsWorker(fakeLlm(reserva('registrar', { data: 'amanhã', pessoas: 2, horario: '20h', nome: 'Maria' })).llm, fakeWa()), conversationId)
+    await receiveAsWeb(rid, 'não')
+    await processConversation(depsAsWorker(fakeLlm(FORA).llm, fakeWa()), conversationId) // resposta curta: sem o modelo
+    await receiveAsWeb(rid, '61 98888-7777')
+    await processConversation(depsAsWorker(fakeLlm(FORA).llm, fakeWa()), conversationId)
+    const [r] = await admin.db.select().from(schema.attendanceNotices)
+    expect(r).toMatchObject({ pessoas: 2, status: 'confirmada', simulado: false, nome: 'Maria' })
+    expect(decryptPhone(r!.contatoCifrado!, phoneKey)).toBe('+5561988887777')
+    const entradas = await admin.db.select({ texto: schema.messages.texto }).from(schema.messages).where(eq(schema.messages.direcao, 'in'))
+    expect(entradas.map((m) => m.texto)).toContain('[TELEFONE]')
     await receiveAsWeb(rid, 'não vou mais')
-    await processConversation(depsAsWorker(fakeLlm(aviso('cancelar', null)).llm, fakeWa()), conversationId)
+    await processConversation(depsAsWorker(fakeLlm(reserva('cancelar')).llm, fakeWa()), conversationId)
     expect(await admin.db.select().from(schema.attendanceNotices)).toMatchObject([{ status: 'cancelada' }])
-    const acoes = (await admin.db.select().from(schema.auditLog)).map((x) => x.acao).filter((a) => a.startsWith('aviso.'))
-    expect(acoes.sort()).toEqual(['aviso.cancelado', 'aviso.registrado'])
+    const acoes = (await admin.db.select().from(schema.auditLog)).map((x) => x.acao).filter((a) => a.startsWith('reserva.'))
+    expect(acoes.sort()).toEqual(['reserva.cancelada', 'reserva.registrada'])
   })
 })

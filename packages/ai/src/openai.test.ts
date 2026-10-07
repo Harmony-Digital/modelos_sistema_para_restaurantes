@@ -9,6 +9,7 @@ import { triageV3JsonSchema } from './prompts/triage-v3.ts'
 import { triageV4JsonSchema } from './prompts/triage-v4.ts'
 import { triageV5JsonSchema } from './prompts/triage-v5.ts'
 import { triageV6JsonSchema } from './prompts/triage-v6.ts'
+import { triageV7JsonSchema } from './prompts/triage-v7.ts'
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -349,6 +350,7 @@ describe('esquemas atuais são compatíveis com strict da OpenAI', () => {
     ['triage-v4', triageV4JsonSchema],
     ['triage-v5', triageV5JsonSchema],
     ['triage-v6', triageV6JsonSchema],
+    ['triage-v7', triageV7JsonSchema],
     ['ingestao-cardapio-v1', ingestaoJsonSchema],
   ])('%s', (_nome, s) => {
     expect(violacoesStrict(s)).toEqual([])

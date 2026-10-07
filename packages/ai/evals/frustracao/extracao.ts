@@ -1,5 +1,5 @@
 /**
- * Evals de frustração — camada 1: `frustracao` da triage-v6 com modelo real via OpenRouter ou OpenAI (--provider ou AI_PROVIDER; padrão openrouter).
+ * Evals de frustração — camada 1: `frustracao` da triage-v7 (a de produção) com modelo real via OpenRouter ou OpenAI (--provider ou AI_PROVIDER; padrão openrouter).
  * Uso: pnpm --filter @atd/ai eval:frustracao [--modelos a,b,c] [--provider openrouter|openai] [--teto 0.50] [--max-chamadas 200]
  * Custo real, com teto por execução. Grava o relatório em evals/frustracao/resultados/AAAA-MM-DD-frustracao.md.
  * Gate por modelo: acerto ≥ 90%, no máximo 1 falso positivo (handoff desnecessário) e execução completa.
@@ -8,7 +8,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import type { LlmClient } from '../../src/openrouter.ts'
 import { clienteDoEval } from '../provedor.ts'
-import { triageV6 } from '../../src/triage.ts'
+import { triageV7 } from '../../src/triage.ts'
 import { custoDaChamada } from '../s1/custo.ts'
 import { CONTEXTO } from '../s4/fixture.ts'
 import { CASOS_FRUSTRACAO, type CasoFrustracao } from './casos.ts'
@@ -52,7 +52,7 @@ export async function rodarFrustracao(p: {
         break
       }
       chamadas++
-      const r = await triageV6(p.llm, { models: [modelo], restaurante: CONTEXTO.restaurante, text: caso.mensagem, ...(caso.pendente ? { pendente: caso.pendente } : {}) })
+      const r = await triageV7(p.llm, { models: [modelo], restaurante: CONTEXTO.restaurante, text: caso.mensagem, ...(caso.pendente ? { pendente: caso.pendente } : {}) })
       feitos++
       const usd = custoDaChamada(r.usage)
       custo += usd
@@ -82,7 +82,7 @@ export async function rodarFrustracao(p: {
   const total = casos.length
   const comFrustracao = casos.filter((c) => c.frustracao).length
   const relatorio = [
-    `# Evals de frustração — triage-v6 (${hoje})`,
+    `# Evals de frustração — triage-v7 (${hoje})`,
     '',
     `Casos: ${total} (${comFrustracao} com frustração, ${total - comFrustracao} sem) · teto: US$ ${p.teto.toFixed(2)} · gasto: US$ ${gastoTotal.toFixed(4)}${motivos.length ? ' (REPROVADO/PARCIAL)' : ''}`,
     ...(motivos.length ? ['', ...motivos.map((m) => `**Falha do gate:** ${m}`)] : []),

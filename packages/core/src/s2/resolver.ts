@@ -8,7 +8,6 @@ import { asHora, ddmm, DIAS_SEMANA, formatarTurnos, quandoAbre, renderModelo, ro
 import { unidadesOrdenadas } from '../s1/resolver.ts'
 import { agoraLocal, diaDaSemana, diasEntre, somarDias, type DataIso } from '../s1/tempo.ts'
 import type { ContextoS1, ItemExtraido, UnidadeS1 } from '../s1/tipos.ts'
-import { resolverItensAvisoLegado } from './aviso-legado.ts'
 import { normalizarHorario } from './horario.ts'
 import { MAX_PESSOAS, MIN_PESSOAS } from './pessoas.ts'
 import type {
@@ -146,15 +145,17 @@ export function diasDaReserva(
   return [...dias].sort()
 }
 
+/** Sem o contexto da reserva (evals e testes): sem lotação conhecida e sem regras. O worker sempre passa o seu. */
+export const RESERVA_SEM_LOTACAO: ContextoReserva = { vagas: new Map(), regras: '' }
+
 export function resolverItensS2(
   itens: readonly ItemExtraido[],
   ctx: ContextoS1,
   agora: Date,
   avisos: readonly AvisoAtivoS2[],
   escolhidaId?: string,
-  reserva?: ContextoReserva,
+  reserva: ContextoReserva = RESERVA_SEM_LOTACAO,
 ): ParcialS2 {
-  if (!reserva) return resolverItensAvisoLegado(itens, ctx, agora, avisos, escolhidaId)
   const rc = reserva
   const local = agoraLocal(agora, ctx.timezone)
   const ano = Number(local.data.slice(0, 4))

@@ -7,7 +7,7 @@ import { CASOS as CASOS_S3, FRASES as FRASES_S3 } from './s3/casos.ts'
 import { CASOS as CASOS_S4, FRASES as FRASES_S4 } from './s4/casos.ts'
 import { chaveItemReserva, chaveItemS2, extracaoCorretaReserva } from './s2/comparar.ts'
 import { CONTEXTO } from './s2/fixture.ts'
-import { CASOS_RESERVA, type ItemV7, type RotuloReserva } from './s2/reserva.ts'
+import { CASOS_RESERVA, comNovos, MUDA_NA_V7, type ItemV7, type RotuloReserva } from './s2/reserva.ts'
 
 /**
  * Camada 2 (determinística) da triage-v7: sem LLM real. Garante que
@@ -15,19 +15,7 @@ import { CASOS_RESERVA, type ItemV7, type RotuloReserva } from './s2/reserva.ts'
  * - o gabarito da reserva é uma saída válida da v7, cobre os casos da spec e chega ao LLM sem PII;
  * - a comparação da camada 1 distingue nome e resposta do contato.
  */
-const comNovos = <T extends object>(i: T) => ({ ...i, nome: null, contato_ok: null })
 const grupos = { S1: CASOS_S1, S2: [...CASOS_S2, ...FRASES_S2], S3: [...CASOS_S3, ...FRASES_S3], S4: [...CASOS_S4, ...FRASES_S4] }
-
-/**
- * Únicas frases cujo gabarito muda na v7: "tem mesa pra N?" deixa de ser info e vira reserva (com lotação, o fluxo
- * responde se cabe). Os gabaritos da v6 ficam como estavam.
- */
-const reservaV7 = (extra: Partial<ItemV7>): ItemV7 =>
-  ({ servico: 'aviso_presenca', tipo: 'registrar', ...comNovos({ unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null }), ...extra })
-const MUDA_NA_V7: Record<string, { mensagem: string; v6: ItemV7['tema']; v7: ItemV7[] }> = {
-  e43: { mensagem: 'tem mesa pra 4 hoje à noite?', v6: 'mesa', v7: [reservaV7({ data: 'hoje', pessoas: 4, horario: 'à noite' })] },
-  v50: { mensagem: 'tem mesa pra 6 hoje à noite?', v6: 'mesa', v7: [reservaV7({ data: 'hoje', pessoas: 6, horario: 'à noite' })] },
-}
 
 describe('gabaritos S1–S4 na triage-v7', () => {
   for (const [servico, casos] of Object.entries(grupos)) {

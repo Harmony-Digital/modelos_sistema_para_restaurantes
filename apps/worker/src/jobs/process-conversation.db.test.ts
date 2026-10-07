@@ -9,6 +9,7 @@ import type { SendResult } from '@atd/whatsapp'
 import { createLogger } from '../logger.ts'
 import { comMidiaProibida, storageProibido } from './midia-fake.ts'
 import { processConversation, type ProcessDeps } from './process-conversation.ts'
+import { comoV7 } from './triagem-falsa.ts'
 
 const { db, sql } = getTestDb()
 beforeEach(() => resetDb(sql))
@@ -64,7 +65,7 @@ function fakeLlm(script: Scripted[]) {
         return { ok: false as const, error: 'upstream', retryable: true, status: 502, model: null, usage: null, latencyMs: 1 }
       }
       return {
-        ok: true as const, data: p.parse({ frustracao: false, ...step }), model: 'fake/m',
+        ok: true as const, data: p.parse(comoV7(step)), model: 'fake/m',
         usage: { tokensIn: 100, tokensOut: 5, tokensCache: 0, costUsd: '0.000200' }, latencyMs: 10,
       }
     },
@@ -143,7 +144,7 @@ describe('processConversation', () => {
     expect(wa.sent.at(-1)!.text).toMatch(/só consigo ajudar com assuntos do Casa Teste/)
     const runs = await db.select().from(schema.aiRuns)
     expect(runs.map((r) => [r.etapa, r.intent, r.costUsd, r.promptVersion])).toEqual([
-      ['triagem', 'fora_escopo', '0.000200', 'triage-v6'],
+      ['triagem', 'fora_escopo', '0.000200', 'triage-v7'],
     ])
     const counters = await db.select().from(schema.budgetCounters).orderBy(schema.budgetCounters.periodo)
     expect(counters.map((c) => [c.reservado, c.gasto])).toEqual([
@@ -328,7 +329,7 @@ describe('processConversation', () => {
     const llm: LlmClient = {
       async completeJson(p) {
         return {
-          ok: true as const, data: p.parse({ frustracao: false, ...FORA }), model: 'fake/m',
+          ok: true as const, data: p.parse(comoV7(FORA)), model: 'fake/m',
           usage: { tokensIn: 1, tokensOut: 1, tokensCache: 0, costUsd: null }, latencyMs: 1,
         }
       },

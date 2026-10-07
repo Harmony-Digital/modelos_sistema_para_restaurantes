@@ -170,7 +170,8 @@ export async function iniciarOpenRouterFalso(
       const triagem = {
         frustracao: false,
         ...r,
-        itens: r.itens.map((i) => ({ convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null, ...i })),
+        // campos da triage-v7 (reserva) nulos quando o roteiro do teste não os diz
+        itens: r.itens.map((i) => ({ convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null, nome: null, contato_ok: null, ...i })),
       }
       return resposta(triagem)
     })

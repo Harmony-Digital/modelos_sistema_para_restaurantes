@@ -1,11 +1,11 @@
 /**
- * Evals S1 — camada 1: extração (padrão triage-v6; --triagem v5|v4|v2 mede as versões anteriores) com modelo real via OpenRouter ou OpenAI (--provider ou AI_PROVIDER; padrão openrouter).
- * Uso: pnpm --filter @atd/ai eval:s1 [--modelos a,b,c] [--provider openrouter|openai] [--teto 0.50] [--triagem v6|v5|v4|v2] (padrão v6)
+ * Evals S1 — camada 1: extração (padrão triage-v7; --triagem v6|v5|v4|v2 mede as versões anteriores) com modelo real via OpenRouter ou OpenAI (--provider ou AI_PROVIDER; padrão openrouter).
+ * Uso: pnpm --filter @atd/ai eval:s1 [--modelos a,b,c] [--provider openrouter|openai] [--teto 0.50] [--triagem v7|v6|v5|v4|v2] (padrão v7)
  * Custo real, com teto por execução. Grava o relatório em evals/s1/resultados/AAAA-MM-DD-extracao.md.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
-import { triageV2, triageV4, triageV5, triageV6 } from '../../src/triage.ts'
+import { triageV2, triageV4, triageV5, triageV6, triageV7 } from '../../src/triage.ts'
 import { lerTriagem } from '../triagem.ts'
 import { CASOS } from './casos.ts'
 import { extracaoCorreta } from './comparar.ts'
@@ -17,7 +17,7 @@ const { values } = parseArgs({ options: { modelos: { type: 'string' }, provider:
 const modelos = (values.modelos ?? process.env.AI_TRIAGE_MODELS ?? '').split(',').map((s) => s.trim()).filter(Boolean)
 if (modelos.length === 0) throw new Error('Informe --modelos ou AI_TRIAGE_MODELS')
 const triagem = lerTriagem(values.triagem, 'v2')
-const extrair = triagem === 'v6' ? triageV6 : triagem === 'v5' ? triageV5 : triagem === 'v4' ? triageV4 : triageV2
+const extrair = triagem === 'v7' ? triageV7 : triagem === 'v6' ? triageV6 : triagem === 'v5' ? triageV5 : triagem === 'v4' ? triageV4 : triageV2
 const teto = Number(values.teto)
 if (!(teto > 0)) throw new Error('--teto deve ser um valor em dólares maior que zero')
 

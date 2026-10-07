@@ -1,3 +1,4 @@
+import type { ItemExtraido } from '@atd/core'
 import type { ItemTriagemV7, PendenteTriagem } from '../../src/triage.ts'
 
 /**
@@ -82,3 +83,21 @@ export const CASOS_RESERVA: CasoReserva[] = [
   c('rv25', 'nao_e_reserva', 'costuma lotar no sábado?', [info('lotacao', 'sábado')]),
   c('rv26', 'nao_e_reserva', 'quero reservar o espaço para a festa de aniversário da minha filha', [evento({ tipoEvento: 'aniversário' })]),
 ]
+
+/** Item da v6 (sem os campos da reserva) como sai da v7: nome e contato_ok nulos. */
+export const comNovos = <T extends object>(i: T) => ({ ...i, nome: null, contato_ok: null })
+
+/**
+ * Únicas frases cujo gabarito muda na v7: "tem mesa pra N?" deixa de ser info e vira reserva (com lotação, o fluxo
+ * responde se cabe). Os gabaritos da v6 ficam como estavam.
+ */
+const reservaV7 = (extra: Partial<ItemV7>): ItemV7 =>
+  ({ servico: 'aviso_presenca', tipo: 'registrar', ...comNovos({ unidade: null, data: null, tema: null, pessoas: null, horario: null, convidados: null, tipoEvento: null, espaco: null, consulta: null, tag: null }), ...extra })
+export const MUDA_NA_V7: Record<string, { mensagem: string; v6: ItemV7['tema']; v7: ItemV7[] }> = {
+  e43: { mensagem: 'tem mesa pra 4 hoje à noite?', v6: 'mesa', v7: [reservaV7({ data: 'hoje', pessoas: 4, horario: 'à noite' })] },
+  v50: { mensagem: 'tem mesa pra 6 hoje à noite?', v6: 'mesa', v7: [reservaV7({ data: 'hoje', pessoas: 6, horario: 'à noite' })] },
+}
+
+/** Gabarito da frase na versão medida: na v7, "tem mesa pra N?" é reserva; nas outras, o da v6. */
+export const gabaritoDa = (triagem: string, id: string, itens: ItemExtraido[]): ItemExtraido[] =>
+  (triagem === 'v7' && id in MUDA_NA_V7 ? MUDA_NA_V7[id]!.v7 : itens)
