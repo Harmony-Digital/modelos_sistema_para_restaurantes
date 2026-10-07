@@ -1,6 +1,7 @@
 import { ChevronRight, Store } from 'lucide-react'
 import Link from 'next/link'
-import { carregarUnidadesPainel } from '@atd/db'
+import { carregarUnidadesPainel, podeEditarCardapioGeral, withUserContext } from '@atd/db'
+import { BotaoImportar } from '@/app/(painel)/conteudo/secao-importar'
 import { NovaUnidade } from '@/components/painel/nova-unidade'
 import { SeloUnidade } from '@/components/painel/selo-unidade'
 import { EmptyState } from '@/components/shell/empty-state'
@@ -11,14 +12,18 @@ import { seloDaUnidade } from '@/lib/selo-unidade'
 import { getDb } from '@/lib/server/db'
 import { cn } from '@/lib/utils'
 
-/** Coluna da lista de Unidades (slot `@lista`); com uma unidade aberta fica ao lado dela (≥ lg), marcada. */
-export async function ColunaUnidades(props: { abertaId?: string }) {
+/**
+ * Coluna da lista de Unidades (slot `@lista`); com uma unidade aberta (ou o importador) fica ao lado dela (≥ lg), com a
+ * aberta marcada. "Importar" (horários e espaços) só para quem confirma: dono ou gerente com acesso a todas as unidades.
+ */
+export async function ColunaUnidades(props: { abertaId?: string; detalheAberto?: boolean }) {
   const s = await requireStaff()
   const { restaurante, unidades } = await carregarUnidadesPainel(getDb(), s.claims)
   const podeEditar = s.role !== 'atendente'
+  const importa = podeEditar && (await withUserContext(getDb(), s.claims, (tx) => podeEditarCardapioGeral(tx)))
   const agora = new Date()
   return (
-    <section aria-label="Lista de unidades" className={colunaLista(props.abertaId !== undefined)}>
+    <section aria-label="Lista de unidades" className={colunaLista(props.abertaId !== undefined || props.detalheAberto === true)}>
       <TopBar title="Unidades" subtitle="Endereços, horários e exceções" className="lg:hidden" semFaixa />
       <div className="mx-auto flex w-full max-w-xl flex-col gap-3 px-4 py-6 lg:mx-0 lg:max-w-none lg:py-4">
         {unidades.length === 0 ? (
@@ -30,7 +35,12 @@ export async function ColunaUnidades(props: { abertaId?: string }) {
           />
         ) : (
           <>
-            {podeEditar && <div className="flex justify-end"><NovaUnidade /></div>}
+            {podeEditar && (
+              <div className="flex flex-wrap justify-end gap-2">
+                {importa && <BotaoImportar alvo="horarios" rotulo="Importar horários e espaços" />}
+                <NovaUnidade />
+              </div>
+            )}
             <ul className="flex flex-col gap-2">
               {unidades.map((u) => {
                 const aberta = u.id === props.abertaId

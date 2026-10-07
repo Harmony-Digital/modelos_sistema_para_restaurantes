@@ -107,8 +107,8 @@ describe('AlertasInicio', () => {
     />)
     const regiao = screen.getByRole('region', { name: 'Alertas' })
     expect(regiao).not.toHaveTextContent('Nenhum alerta agora')
-    expect(within(regiao).getByRole('link', { name: /Cardápio/ })).toHaveAttribute('href', '/conteudo?aba=importar&imp=imp-1')
-    expect(within(regiao).getByRole('link', { name: /Horários/ })).toHaveAttribute('href', '/conteudo?aba=importar&imp=imp-2')
+    expect(within(regiao).getByRole('link', { name: /Cardápio/ })).toHaveAttribute('href', '/conteudo?aba=cardapio&importar=1&imp=imp-1')
+    expect(within(regiao).getByRole('link', { name: /Horários/ })).toHaveAttribute('href', '/unidades/importar?alvo=horarios&imp=imp-2')
     expect(within(regiao).getByRole('region', { name: 'Perguntas sem resposta' })).toBeInTheDocument()
   })
   it('prazo LGPD e alerta de gasto reaproveitam os cartões atuais', () => {

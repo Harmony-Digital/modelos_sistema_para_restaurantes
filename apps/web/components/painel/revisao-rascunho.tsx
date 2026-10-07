@@ -14,7 +14,7 @@ import { AvisoConflitoPreco, ResultadoImportacao, useConfirmarImportacao } from 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { chamarAcao } from '@/lib/action-result'
-import { URL_IMPORTAR } from '@/lib/importacao'
+import { urlImportarAlvo } from '@/lib/importacao'
 import { formatarCentavos, maskReais, reaisParaCentavos } from '@/lib/dinheiro'
 import { ROTULO_TAG, TAGS_CARDAPIO, type TagCardapio } from '@/lib/schemas/cardapio'
 import { cn } from '@/lib/utils'
@@ -214,7 +214,7 @@ export function RevisaoRascunho(props: {
     }
     setDescartar(false)
     toast.success('Importação descartada')
-    router.push(URL_IMPORTAR)
+    router.push(urlImportarAlvo('cardapio'))
   }
 
   if (resultado) return <ResultadoAplicacao r={resultado} />
@@ -428,7 +428,7 @@ function ResultadoAplicacao({ r }: { r: Resultado }) {
         <Link href="/conteudo?aba=cardapio&sub=itens" className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 hover:underline">
           Ver os itens do cardápio
         </Link>
-        <Link href={URL_IMPORTAR} className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 hover:underline">
+        <Link href={urlImportarAlvo('cardapio')} className="inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 hover:underline">
           Nova importação
         </Link>
       </div>

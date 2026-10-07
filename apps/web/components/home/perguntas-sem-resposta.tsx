@@ -24,7 +24,7 @@ export function PerguntasSemResposta(props: { lacunas: { id: string; chave: stri
         </ul>
       )}
       <Button asChild variant="outline" className="self-start">
-        <Link href="/conteudo?aba=sem-resposta">{props.lacunas.length ? 'Responder' : 'Ver respostas'}</Link>
+        <Link href="/conteudo?aba=informacoes">{props.lacunas.length ? 'Responder' : 'Ver respostas'}</Link>
       </Button>
     </section>
   )

@@ -9,6 +9,8 @@ import { PerguntasSemResposta } from './perguntas-sem-resposta'
 
 const LINK = 'inline-flex min-h-11 items-center text-sm font-medium text-link underline-offset-4 [@media(hover:hover)]:hover:underline'
 const rotuloAlvo = (alvo: string) => ALVOS_IMPORTACAO_TELA.find((a) => a.chave === alvo)?.rotulo ?? 'Importação'
+/** a importação abre na tela do alvo; alvo desconhecido cai no cardápio (a tela confere e leva ao certo) */
+const alvoDaTela = (alvo: string): AlvoImportacaoTela => ALVOS_IMPORTACAO_TELA.find((a) => a.chave === alvo)?.chave ?? 'cardapio'
 
 /** Importações cuja leitura parou: cada uma abre a tela de leitura dela, que oferece "Tentar de novo". */
 function CartaoImportacoesParadas(props: { importacoes: readonly { id: string; alvo: AlvoImportacaoTela | string }[] }) {
@@ -22,7 +24,7 @@ function CartaoImportacoesParadas(props: { importacoes: readonly { id: string; a
       <ul className="flex flex-col">
         {props.importacoes.map((i) => (
           <li key={i.id}>
-            <Link href={urlImportacao(i.id)} className={LINK}>{rotuloAlvo(i.alvo)}: continuar a leitura</Link>
+            <Link href={urlImportacao(i.id, alvoDaTela(i.alvo))} className={LINK}>{rotuloAlvo(i.alvo)}: continuar a leitura</Link>
           </li>
         ))}
       </ul>

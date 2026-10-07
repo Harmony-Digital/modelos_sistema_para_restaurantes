@@ -1,7 +1,8 @@
 import { render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const db = vi.hoisted(() => ({ carregarUnidadesPainel: vi.fn(), listarEspacos: vi.fn() }))
+const db = vi.hoisted(() => ({ carregarUnidadesPainel: vi.fn(), listarEspacos: vi.fn(), podeEditarCardapioGeral: vi.fn(), withUserContext: vi.fn() }))
+const acesso = vi.hoisted(() => ({ geral: true }))
 const sessao = vi.hoisted(() => ({ role: 'dono' as 'dono' | 'gerente' | 'atendente' }))
 const dados = vi.hoisted(() => vi.fn())
 vi.mock('@atd/db', () => db)
@@ -10,6 +11,13 @@ vi.mock('@/lib/server/db', () => ({ getDb: () => ({}) }))
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
   notFound: () => { throw new Error('NEXT_NOT_FOUND') },
+  redirect: (url: string) => { throw new Error(`NEXT_REDIRECT ${url}`) },
+}))
+const importador = vi.hoisted(() => ({ props: null as Record<string, unknown> | null }))
+vi.mock('@/app/(painel)/conteudo/secao-importar', () => ({
+  BotaoImportar: (p: { alvo: string; rotulo?: string }) => <a href={`#importar-${p.alvo}`}>{p.rotulo ?? 'Importar'}</a>,
+  CabecalhoImportar: (p: { titulo: string; fechar: string }) => <a href={p.fechar}>Fechar: {p.titulo}</a>,
+  SecaoImportar: (p: Record<string, unknown>) => { importador.props = p; return <p>importador</p> },
 }))
 vi.mock('@/app/(painel)/actions', () => ({ setTheme: vi.fn(), signOut: vi.fn() }))
 vi.mock('@/app/(painel)/unidades/actions', () => ({ salvarDadosUnidadeAction: vi.fn(), salvarHorariosAction: vi.fn() }))
@@ -27,6 +35,7 @@ vi.mock('@/components/painel/nova-unidade', () => ({ NovaUnidade: () => <button 
 import { ColunaUnidades } from './coluna-lista'
 import UnidadePage from './[id]/page'
 import UnidadesPage from './page'
+import ImportarUnidadesPage from './importar/page'
 
 const A = '22222222-2222-4222-8222-000000000001'
 const B = '22222222-2222-4222-8222-000000000002'
@@ -41,6 +50,9 @@ beforeEach(() => {
     unidades: [unidade(A, 'Asa Sul'), unidade(B, 'Lago Sul')],
   })
   db.listarEspacos.mockResolvedValue([])
+  acesso.geral = true
+  importador.props = null
+  db.withUserContext.mockImplementation(async () => acesso.geral)
   Element.prototype.scrollIntoView = vi.fn()
 })
 
@@ -106,5 +118,44 @@ describe('Unidades: lista + detalhe', () => {
 
   it('unidade fora do acesso: notFound', async () => {
     await expect(UnidadePage({ params: Promise.resolve({ id: 'x' }), searchParams: Promise.resolve({}) })).rejects.toThrow('NEXT_NOT_FOUND')
+  })
+})
+
+describe('Unidades: Importar (horários e espaços)', () => {
+  it('dono vê "Importar" na lista; gerente restrito e atendente não', async () => {
+    render(await ColunaUnidades({}))
+    expect(screen.getByRole('link', { name: 'Importar horários e espaços' })).toHaveAttribute('href', '#importar-horarios')
+    document.body.innerHTML = ''
+    sessao.role = 'gerente'
+    acesso.geral = false
+    render(await ColunaUnidades({}))
+    expect(screen.queryByRole('link', { name: /Importar/ })).toBeNull()
+    document.body.innerHTML = ''
+    sessao.role = 'atendente'
+    render(await ColunaUnidades({}))
+    expect(screen.queryByRole('link', { name: /Importar/ })).toBeNull()
+  })
+
+  it('importador aberto ao lado da lista (a lista some < lg), no alvo pedido e com a importação', async () => {
+    const I = '11111111-1111-4111-8111-000000000001'
+    render(
+      <>
+        {await ColunaUnidades({ detalheAberto: true })}
+        {await ImportarUnidadesPage({ searchParams: Promise.resolve({ alvo: 'espacos', imp: I }) })}
+      </>,
+    )
+    expect(classes(screen.getByRole('region', { name: 'Lista de unidades' }))).toEqual(expect.arrayContaining(['hidden', 'lg:flex']))
+    const detalhe = screen.getByRole('region', { name: 'Importar horários e espaços' })
+    expect(classes(detalhe)).not.toContain('hidden')
+    expect(importador.props).toMatchObject({ alvo: 'espacos', imp: I, geral: true, unidades: [{ id: A, nome: 'Asa Sul' }, { id: B, nome: 'Lago Sul' }] })
+    expect(within(detalhe).getByRole('link', { name: 'Fechar: Importar horários e espaços' })).toHaveAttribute('href', '/unidades')
+    expect(within(detalhe).getByRole('link', { name: 'Voltar para unidades' })).toHaveAttribute('href', '/unidades')
+  })
+
+  it('alvo desconhecido abre em horários; atendente volta para Unidades', async () => {
+    render(await ImportarUnidadesPage({ searchParams: Promise.resolve({ alvo: 'cardapio' }) }))
+    expect(importador.props).toMatchObject({ alvo: 'horarios' })
+    sessao.role = 'atendente'
+    await expect(ImportarUnidadesPage({ searchParams: Promise.resolve({}) })).rejects.toThrow('NEXT_REDIRECT /unidades')
   })
 })

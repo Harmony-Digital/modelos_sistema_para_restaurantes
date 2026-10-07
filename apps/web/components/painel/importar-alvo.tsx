@@ -120,7 +120,7 @@ export function ImportarAlvo(props: { alvo: AlvoImportacaoTela; importacoes: Imp
       )}
       <NovaImportacao key={props.alvo} alvo={props.alvo} />
       {props.alvo === 'cardapio' && <ImportarCsv />}
-      <HistoricoImportacoes importacoes={props.importacoes} vazio={`Nenhuma importação de ${NOME_ALVO[props.alvo]} ainda.`} />
+      <HistoricoImportacoes alvo={props.alvo} importacoes={props.importacoes} vazio={`Nenhuma importação de ${NOME_ALVO[props.alvo]} ainda.`} />
     </div>
   )
 }
@@ -158,7 +158,7 @@ function NovaImportacao(props: { alvo: AlvoImportacaoTela }) {
         return
       }
       if (enviados.falhas.length > 0) guardarFalhas(id, enviados.falhas)
-      router.push(urlImportacao(id))
+      router.push(urlImportacao(id, props.alvo))
     } finally {
       emAndamento.current = false
       setEnviando(null)
@@ -289,7 +289,7 @@ export function ArquivosImportacao(props: {
         // esta (ainda recebendo arquivos) não fica órfã no histórico
         await chamarAcao(() => descartarImportacaoAction(props.id))
         toast.info('Esses arquivos já foram importados. Mostrando a importação deles.')
-        router.push(urlImportacao(r.data.id))
+        router.push(urlImportacao(r.data.id, props.alvo))
         return
       }
       router.refresh()
