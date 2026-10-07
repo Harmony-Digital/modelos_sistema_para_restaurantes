@@ -16,7 +16,7 @@ export default async function PrivacidadePage() {
   const r = rows[0]!
   return (
     <main className="mx-auto max-w-2xl space-y-4 px-4 py-10 leading-relaxed">
-      <h1 className="text-2xl font-bold">Política de privacidade — atendimento por WhatsApp</h1>
+      <h1 className="text-2xl font-semibold">Política de privacidade — atendimento por WhatsApp</h1>
       <p><strong>Rascunho sujeito a revisão jurídica.</strong></p>
       <p>
         O atendimento do {r.nome} pelo WhatsApp é feito por um assistente virtual. Tratamos apenas o nome do seu

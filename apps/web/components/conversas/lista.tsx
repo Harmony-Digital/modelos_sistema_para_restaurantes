@@ -4,6 +4,7 @@ import type { AbaInbox, ItemInbox } from '@atd/db'
 import { SeloSimulacao } from '@/components/painel/selo-simulacao'
 import { EmptyState } from '@/components/shell/empty-state'
 import { Badge } from '@/components/ui/badge'
+import { EtiquetaStatus, type VarianteEtiqueta } from '@/components/ui/etiqueta-status'
 import { haQuanto, ROTULO_ESTADO, ROTULO_MOTIVO, VAZIO_INBOX } from '@/lib/conversas'
 import { cn } from '@/lib/utils'
 
@@ -12,15 +13,15 @@ export { SeloSimulacao }
 /** `atendenteId` (vem da DAL) marca as conversas do próprio usuário com "Você". */
 export type ItemLista = ItemInbox
 
-const COR_ESTADO: Record<ItemInbox['estado'], string> = {
-  aguardando_humano: 'border-warning text-warning',
-  humano: 'border-info text-info',
-  ia: 'border-success text-success',
-  encerrada: 'border-border text-muted-foreground',
+const VARIANTE_ESTADO: Record<ItemInbox['estado'], VarianteEtiqueta> = {
+  aguardando_humano: 'aguarda',
+  humano: 'humano',
+  ia: 'ia',
+  encerrada: 'encerrada',
 }
 
 export function SeloEstado({ estado }: { estado: ItemInbox['estado'] }) {
-  return <Badge variant="outline" className={COR_ESTADO[estado]}>{ROTULO_ESTADO[estado]}</Badge>
+  return <EtiquetaStatus variante={VARIANTE_ESTADO[estado]}>{ROTULO_ESTADO[estado]}</EtiquetaStatus>
 }
 
 

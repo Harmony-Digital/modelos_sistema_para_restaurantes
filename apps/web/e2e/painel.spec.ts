@@ -8,7 +8,7 @@ test.afterAll(async () => {
 })
 
 test('tema: cookie claro chega na primeira resposta e a troca funciona', async ({ page, context }) => {
-  await context.addCookies([{ name: 'atd-tema', value: 'claro', url: 'http://localhost:3000' }])
+  await context.addCookies([{ name: 'atd-tema', value: 'claro', url: `http://localhost:${process.env.E2E_PORT ?? 3000}` }])
   const resp = await page.goto('/login')
   expect(await resp!.text()).toContain('data-theme="light"')
   const { email, senha } = await criarMembro('atendente')

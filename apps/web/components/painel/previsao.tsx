@@ -9,6 +9,7 @@ import type { AvisoPainel, PrevisaoUnidade } from '@atd/db'
 import { cancelarAvisoAction, criarAvisoAction } from '@/app/(painel)/agenda/actions'
 import { EmptyState } from '@/components/shell/empty-state'
 import { Badge } from '@/components/ui/badge'
+import { EtiquetaStatus } from '@/components/ui/etiqueta-status'
 import { SeloSimulacao } from './selo-simulacao'
 import { Button } from '@/components/ui/button'
 import { chamarAcao } from '@/lib/action-result'
@@ -137,7 +138,7 @@ export function Previsao(props: {
                             <span>{a.pessoas === 1 ? '1 pessoa' : `${a.pessoas} pessoas`}</span>
                             {a.horarioAprox && <span>· {a.horarioAprox}</span>}
                             <Badge variant="secondary">{a.origem === 'ia' ? 'IA' : 'Painel'}</Badge>
-                            {a.status === 'cancelado' && <Badge variant="outline">Cancelado</Badge>}
+                            {a.status === 'cancelado' && <EtiquetaStatus variante="cancelado">Cancelado</EtiquetaStatus>}
                           </p>
                         </div>
                         {podeEditar && a.status === 'ativo' && (

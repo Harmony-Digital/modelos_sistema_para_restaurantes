@@ -30,7 +30,7 @@
   --success: #4ADE80;
   --warning: #FBBF24;
   --info: #7DB3F5;
-  --radius: 14px;
+  --radius: 8px;
 }
 
 [data-theme="light"] {
@@ -84,12 +84,14 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-info: var(--info);
-  --radius-sm: 8px;
-  --radius-md: var(--radius);
-  --radius-lg: 22px;
-  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+  /* Identidade operacional: raio menor (etiquetas 4, botões 6, cartões 8), bordas de 1 px. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius);
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
   --ease-out: cubic-bezier(.22, 1, .36, 1);
 }
 
@@ -97,7 +99,7 @@
   * { @apply border-border; }
   html { -webkit-text-size-adjust: 100%; }
   body { @apply bg-background text-foreground font-sans antialiased; }
-  h1, h2, h3 { @apply font-display; }
+  h1, h2, h3 { @apply font-display font-semibold tracking-tight; }
   :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
   a { color: var(--link); }
 }

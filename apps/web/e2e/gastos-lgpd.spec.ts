@@ -369,7 +369,7 @@ test('gerente vê equipe e limites só para leitura; atendente não vê as telas
   await expect(page.getByRole('button', { name: /^Salvar/ })).toHaveCount(0)
   await semRolagemHorizontal(page)
 
-  const contexto = await browser.newContext({ viewport: { width: 360, height: 740 }, locale: 'pt-BR', baseURL: 'http://localhost:3000' })
+  const contexto = await browser.newContext({ viewport: { width: 360, height: 740 }, locale: 'pt-BR', baseURL: `http://localhost:${process.env.E2E_PORT ?? 3000}` })
   const atendente = await contexto.newPage()
   const { email, senha } = await criarMembro('atendente')
   await entrar(atendente, email, senha)
