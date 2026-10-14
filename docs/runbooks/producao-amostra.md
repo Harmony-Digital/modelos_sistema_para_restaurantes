@@ -173,6 +173,80 @@ git check-ignore -q .env.production-bootstrap .env.vercel-producao .env.worker-p
 8. **Realtime → Settings:** "Allow public access" = **off** (só canais privados, autorizados pela RLS de `realtime.messages` das migrations 0030–0031).
 9. Storage: nada a fazer agora — os buckets privados `cardapio` e `importacoes` são criados pela migration 0027, e o bucket **público** `marca` (logo do restaurante, 1 MB, PNG/JPG/WebP) pelas 0046–0047 (todos conferidos no passo 2). Não mude a visibilidade nem o limite no painel.
 
+### Variante: Supabase self-hosted (Docker, em vez do supabase.com)
+
+Se o Supabase de produção roda num servidor próprio (ex.: `https://supabase.<empresa>.com.br`), **não existe** a tela
+de Authentication dos itens 2–6: o Auth (GoTrue) lê tudo de variáveis de ambiente no momento em que o contêiner é
+criado. Sem isto, o convite sai com o **modelo padrão em inglês** ("You have been invited… Accept the invite",
+com um código), o link cai na raiz do próprio Supabase com `#error=access_denied&error_code=otp_expired` e a
+mensagem `forbidden` (do Kong), e ninguém chega a definir senha — embora a pessoa já apareça na Equipe.
+
+🔑 **Peça ao humano** (quem administra o servidor do Supabase; na pasta `docker/` da instalação):
+
+1. No `.env` do Supabase (itens 2 e 5):
+
+   ```env
+   SITE_URL=https://<domínio>
+   ADDITIONAL_REDIRECT_URLS=https://<domínio>/auth/confirm
+   DISABLE_SIGNUP=true
+   ENABLE_EMAIL_SIGNUP=true
+   ```
+
+   `SITE_URL` é o domínio do **painel** (Vercel), nunca o do Supabase: o modelo do convite monta o link com
+   `{{ .SiteURL }}`.
+2. Copie `supabase/templates/invite.html` deste repositório para `./volumes/templates/invite.html` no servidor
+   (não é segredo) e, no `docker-compose.yml`, sirva-o por um contêiner interno, sem porta publicada (item 6;
+   forma da documentação oficial "Self-Hosting → Custom Email Templates"):
+
+   ```yaml
+   services:
+     auth:
+       depends_on:
+         templates-server:
+           condition: service_started
+       environment:
+         # (mantenha as variáveis que já existem)
+         GOTRUE_MAILER_TEMPLATES_INVITE: http://templates-server/invite.html
+         GOTRUE_MAILER_SUBJECTS_INVITE: Convite para o painel de atendimento
+         GOTRUE_MAILER_OTP_EXP: 3600          # item 2: o convite vale 1 hora
+         GOTRUE_PASSWORD_MIN_LENGTH: 12       # item 4
+         GOTRUE_MFA_TOTP_ENROLL_ENABLED: "true"  # item 3 (já é o padrão)
+         GOTRUE_MFA_TOTP_VERIFY_ENABLED: "true"
+
+     templates-server:
+       image: caddy:2-alpine
+       command: ['caddy', 'file-server', '-r', '/templates', '--listen', ':80']
+       volumes:
+         - ./volumes/templates:/templates
+   ```
+
+   Não use um bucket do Storage para o modelo: o `marca` só aceita imagem e um bucket público novo expõe o arquivo
+   sem necessidade.
+3. Recrie os contêineres. `docker compose restart` **não** relê `.env` nem `docker-compose.yml`:
+
+   ```bash
+   docker compose up -d --force-recreate auth templates-server
+   ```
+
+**Verificação** (no servidor do Supabase; só nomes e valores não secretos):
+
+```bash
+docker compose exec auth printenv | grep -E '^GOTRUE_(SITE_URL|URI_ALLOW_LIST|DISABLE_SIGNUP|MAILER_TEMPLATES_INVITE|MAILER_OTP_EXP|PASSWORD_MIN_LENGTH)='
+docker compose exec auth wget -qO- http://templates-server/invite.html | grep -c 'token_hash'
+```
+
+**Saída esperada:** `GOTRUE_SITE_URL=https://<domínio>` (o do painel), `GOTRUE_URI_ALLOW_LIST` com
+`https://<domínio>/auth/confirm`, `GOTRUE_DISABLE_SIGNUP=true`, o modelo em `http://templates-server/invite.html`,
+`3600` e `12`; a segunda linha imprime `1`. **Se falhar:** variável ausente → o nome no `docker-compose.yml` não
+bate com o do `.env`, ou o contêiner não foi recriado; `wget` sem resposta → o `templates-server` não subiu
+(`docker compose logs templates-server`). Teste final: convide um e-mail seu pelo painel (passo 9) e confira que
+chega "Criar minha senha" em português e que o link começa com `https://<domínio>/auth/confirm`.
+
+Os itens 7–9 (Data API, Realtime, Storage) também têm equivalentes próprios na instalação self-hosted e não são
+cobertos aqui; o `verificar.sh` confere a Data API. No `.env.production-bootstrap`, `SUPABASE_URL` é o endereço do
+Supabase (`https://supabase.<empresa>.com.br`), a chave de serviço é a `SERVICE_ROLE_KEY` do `.env` do Supabase e
+`DATABASE_URL` aponta para o Postgres da instalação.
+
 Depois, 🔑 peça ao humano para colar **direto no `.env.production-bootstrap`** (não no chat):
 
 ```
@@ -280,7 +354,8 @@ A conexão com essas URLs é conferida pelo script no passo 7.
 
 ## Passo 4 — Restaurante, dono e dados de demonstração
 
-**Pré-condição:** passos 1–3; Site URL e template de convite configurados (o convite sai agora).
+**Pré-condição:** passos 1–3; Site URL e template de convite configurados (o convite sai agora; no self-hosted, pela
+variante self-hosted do passo 1).
 
 ⚠️ **O convite vale 1 hora** ("Email OTP Expiration" = 3600 no passo 1) e o painel só funciona depois do passo 5.
 🔑 **Avise o humano já:** o dono **não** deve abrir o e-mail antes de você dizer que o passo 5 terminou (painel
@@ -563,6 +638,31 @@ hora: 🔑 o humano usa um e-mail de membro da organização ou configura SMTP p
 do worker e reenvie; `erro|outro_restaurante` → o e-mail já é de outro restaurante: pare e relate; convite parado em
 "Enviando o convite…" por mais de 1 minuto → o worker não está rodando (passo 8). Link expirado → **Reenviar
 convite** no painel.
+
+**Convite chega em inglês ou o link abre `forbidden` / `otp_expired`** (a pessoa aparece na Equipe, mas não
+consegue criar a senha): o Auth está sem a Site URL do painel e sem o modelo do convite. No supabase.com, refaça
+os itens 5–6 do passo 1; no self-hosted, siga a **variante self-hosted** do passo 1. Reenviar antes de corrigir
+só manda outro link quebrado. Cada reenvio invalida o link anterior, então vale só o e-mail mais recente.
+Antivírus de link (Gmail, Outlook) pode abrir o link antes da pessoa e gastá-lo.
+
+**Destravar uma pessoa sem esperar a correção** (🔑 o humano roda; nada de e-mail sai, ninguém gasta o link antes):
+
+```bash
+( set -a; . ./.env.production-bootstrap; set +a
+  K="$SUPABASE_SERVICE_ROLE_KEY"; H=(-H "apikey: $K" -H 'content-type: application/json')
+  case "$K" in sb_secret_*) ;; *) H+=(-H "Authorization: Bearer $K");; esac
+  curl -s -X POST "$SUPABASE_URL/auth/v1/admin/generate_link" "${H[@]}" \
+    -d '{"type":"invite","email":"<email-da-pessoa>"}' | jq -r '.hashed_token // .error_code // .code' )
+```
+
+A saída é o `hashed_token`. Monte o link
+`https://<domínio>/auth/confirm?token_hash=<hashed_token>&type=invite&next=/definir-senha` e mande à pessoa por
+um canal direto (ex.: WhatsApp). O link vale 1 hora e serve uma vez só; não toque em **Reenviar convite** depois de
+gerá-lo, senão ele perde a validade. Se a saída for `email_exists`, a conta já foi confirmada (o link original foi
+gasto, por exemplo pelo antivírus) e o convite não serve mais. Nesse caso, o humano define uma senha provisória
+(≥ 12 caracteres) em `PUT $SUPABASE_URL/auth/v1/admin/users/<user_id>` com `{"password":"…"}` (mesmos cabeçalhos;
+o `user_id` está em Authentication → Users), entrega por canal seguro e a pessoa entra pelo login normal e cadastra
+o TOTP.
 
 **Mensagem de "pronto" para devolver ao humano** (preencha; sem segredos):
 
